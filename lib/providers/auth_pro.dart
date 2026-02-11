@@ -10,6 +10,7 @@ import '../auth/login_screen.dart';
 import '../models/auth_models.dart';
 import '../services/api_routes.dart';
 import '../services/api_service.dart';
+import '../services/call_device_service.dart';
 import '../services/helpers.dart';
 import '../widgets/loaders.dart';
 import '../widgets/toasts.dart';
@@ -43,6 +44,7 @@ class AuthPro extends ChangeNotifier {
         prefs.setInt("customer_id", user!.customerId);
         debugPrint("Customer Client ID: ${user!.custClientId}");
         debugPrint("Customer ID: ${user!.customerId}");
+        await CallDeviceService.bootstrap(forceRegister: true);
         notifyListeners();
         showToast(message: "Login successful");
         return true;
@@ -83,6 +85,7 @@ class AuthPro extends ChangeNotifier {
         await prefs.setString("role_name", user.roleName);
         await prefs.setString("user", jsonEncode(user.toJson()));
         await prefs.setInt("cust_client_id", user.custClientId);
+        await CallDeviceService.bootstrap(forceRegister: true);
         notifyListeners();
         _navigateByRole(user.roleName, context);
       } else {

@@ -26,6 +26,7 @@ class ApiRoutes {
       'twilio/clients-with-contacts';
   static const String twilioStaff = 'twilio/staff';
   static const String twilioAccessToken = 'chat/voice/token';
+  static const String registerDevice = 'calls/register-device';
   static const String callFromNumbers = 'chat/call-from-numbers';
   static String userTwilioNumbers(int userId) =>
       'chat/users/$userId/twilio-numbers';
