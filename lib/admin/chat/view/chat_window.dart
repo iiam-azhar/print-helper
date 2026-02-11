@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:print_helper/admin/chat/view/chat_profile.dart';
 import 'package:print_helper/admin/chat/view/groupchat/edit_group.dart';
 import 'package:print_helper/providers/auth_pro.dart';
@@ -91,6 +93,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<bool> _ensureCallPermissions() async {
     try {
+      if (Platform.isAndroid) {
+        await Permission.bluetoothConnect.request();
+      }
       final readNumbers = await TwilioVoice.instance
           .requestReadPhoneNumbersPermission();
       final readState = await TwilioVoice.instance

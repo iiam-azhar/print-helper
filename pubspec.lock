@@ -342,14 +342,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.1"
-  flutter_callkit_incoming:
-    dependency: "direct main"
-    description:
-      name: flutter_callkit_incoming
-      sha256: "3589deb8b71e43f2d520a9c8a5240243f611062a8b246cdca4b1fda01fbbf9b8"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.0.0"
   flutter_colorpicker:
     dependency: "direct main"
     description:
@@ -613,14 +605,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.0.5"
-  json_annotation:
-    dependency: transitive
-    description:
-      name: json_annotation
-      sha256: "805fa86df56383000f640384b282ce0cb8431f1a7a2396de92fb66186d8c57df"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.10.0"
   just_audio:
     dependency: "direct main"
     description:

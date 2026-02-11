@@ -20,7 +20,6 @@
         "firebase_core",
         "firebase_messaging",
         "flutter",
-        "flutter_callkit_incoming",
         "flutter_colorpicker",
         "flutter_local_notifications",
         "flutter_screenutil",
@@ -100,14 +99,6 @@
         "plugin_platform_interface",
         "web",
         "web_callkit"
-      ]
-    },
-    {
-      "name": "flutter_callkit_incoming",
-      "version": "3.0.0",
-      "dependencies": [
-        "flutter",
-        "json_annotation"
       ]
     },
     {
@@ -663,13 +654,6 @@
       "version": "0.0.0",
       "dependencies": [
         "flutter"
-      ]
-    },
-    {
-      "name": "json_annotation",
-      "version": "4.10.0",
-      "dependencies": [
-        "meta"
       ]
     },
     {
