@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../constants/strings.dart';
+import 'console_util.dart';
 
 class Frmtr {
   Frmtr(String createdAt);
@@ -62,7 +63,7 @@ String formatDateTime(String? raw) {
     if (hour == 0) hour = 12;
     return "$date\n$hour:$minute$ampm";
   } catch (e) {
-    debugPrint("formatDateTime ERROR: $e");
+    printData(title: "formatDateTime ERROR:", data: e, e: true);
     return "";
   }
 }
@@ -80,7 +81,7 @@ String frmtDateTime(String? raw) {
     if (hour == 0) hour = 12;
     return "$date - $hour:$minute$ampm";
   } catch (e) {
-    debugPrint("formatDateTime ERROR: $e");
+    printData(title: "formatDateTime ERROR:", data: e, e: true);
     return "";
   }
 }

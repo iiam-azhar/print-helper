@@ -67,8 +67,8 @@ class EditCustomerState extends State<EditCustomer> {
   void initState() {
     super.initState();
     contactForms.add(ContactFormModel());
-    debugPrint("customerId: ${widget.customerId}");
-    debugPrint("clientId: ${widget.clientId}");
+    printData(title: "customerId:", data: widget.customerId);
+    printData(title: "clientId:", data: widget.clientId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeData();
     });
@@ -154,8 +154,9 @@ class EditCustomerState extends State<EditCustomer> {
       contactForms.add(form);
     }
     if (contactForms.isEmpty) contactForms.add(ContactFormModel());
-    debugPrint(
-      "CONTACT IDS AFTER FILL: ${contactForms.map((e) => e.existingId).toList()}",
+    printData(
+      title: "CONTACT IDS AFTER FILL:",
+      data: contactForms.map((e) => e.existingId).toList(),
     );
   }
 

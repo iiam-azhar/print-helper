@@ -32,12 +32,6 @@
       "languageVersion": "3.0"
     },
     {
-      "name": "badges",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/badges-3.1.2",
-      "packageUri": "lib/",
-      "languageVersion": "3.0"
-    },
-    {
       "name": "boolean_selector",
       "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/boolean_selector-2.1.2",
       "packageUri": "lib/",
@@ -60,12 +54,6 @@
       "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/cached_network_image_web-1.3.1",
       "packageUri": "lib/",
       "languageVersion": "3.0"
-    },
-    {
-      "name": "carousel_slider",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/carousel_slider-5.1.1",
-      "packageUri": "lib/",
-      "languageVersion": "2.12"
     },
     {
       "name": "characters",
@@ -180,30 +168,6 @@
       "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/file_picker-10.3.7",
       "packageUri": "lib/",
       "languageVersion": "3.4"
-    },
-    {
-      "name": "file_selector_linux",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_linux-0.9.4",
-      "packageUri": "lib/",
-      "languageVersion": "3.8"
-    },
-    {
-      "name": "file_selector_macos",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_macos-0.9.5",
-      "packageUri": "lib/",
-      "languageVersion": "3.9"
-    },
-    {
-      "name": "file_selector_platform_interface",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_platform_interface-2.7.0",
-      "packageUri": "lib/",
-      "languageVersion": "3.7"
-    },
-    {
-      "name": "file_selector_windows",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_windows-0.9.3+5",
-      "packageUri": "lib/",
-      "languageVersion": "3.8"
     },
     {
       "name": "firebase_core",
@@ -392,54 +356,6 @@
       "languageVersion": "3.4"
     },
     {
-      "name": "image_picker",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker-1.2.1",
-      "packageUri": "lib/",
-      "languageVersion": "3.7"
-    },
-    {
-      "name": "image_picker_android",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_android-0.8.13+10",
-      "packageUri": "lib/",
-      "languageVersion": "3.9"
-    },
-    {
-      "name": "image_picker_for_web",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_for_web-3.1.1",
-      "packageUri": "lib/",
-      "languageVersion": "3.8"
-    },
-    {
-      "name": "image_picker_ios",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_ios-0.8.13+2",
-      "packageUri": "lib/",
-      "languageVersion": "3.9"
-    },
-    {
-      "name": "image_picker_linux",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_linux-0.2.2",
-      "packageUri": "lib/",
-      "languageVersion": "3.6"
-    },
-    {
-      "name": "image_picker_macos",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_macos-0.2.2+1",
-      "packageUri": "lib/",
-      "languageVersion": "3.9"
-    },
-    {
-      "name": "image_picker_platform_interface",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_platform_interface-2.11.1",
-      "packageUri": "lib/",
-      "languageVersion": "3.7"
-    },
-    {
-      "name": "image_picker_windows",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_windows-0.2.2",
-      "packageUri": "lib/",
-      "languageVersion": "3.6"
-    },
-    {
       "name": "internet_connection_checker",
       "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/internet_connection_checker-3.0.1",
       "packageUri": "lib/",
@@ -534,12 +450,6 @@
       "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/meta-1.17.0",
       "packageUri": "lib/",
       "languageVersion": "3.5"
-    },
-    {
-      "name": "mime",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/mime-2.0.0",
-      "packageUri": "lib/",
-      "languageVersion": "3.2"
     },
     {
       "name": "nested",
@@ -650,12 +560,6 @@
       "languageVersion": "3.8"
     },
     {
-      "name": "photo_view",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/photo_view-0.15.0",
-      "packageUri": "lib/",
-      "languageVersion": "2.12"
-    },
-    {
       "name": "pinenacl",
       "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/pinenacl-0.6.0",
       "packageUri": "lib/",
@@ -734,18 +638,6 @@
       "languageVersion": "2.12"
     },
     {
-      "name": "share_plus",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/share_plus-12.0.1",
-      "packageUri": "lib/",
-      "languageVersion": "3.4"
-    },
-    {
-      "name": "share_plus_platform_interface",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/share_plus_platform_interface-6.1.0",
-      "packageUri": "lib/",
-      "languageVersion": "2.18"
-    },
-    {
       "name": "shared_preferences",
       "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/shared_preferences-2.5.3",
       "packageUri": "lib/",
@@ -798,12 +690,6 @@
       "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/simple_print-0.0.1+2",
       "packageUri": "lib/",
       "languageVersion": "3.4"
-    },
-    {
-      "name": "skeletonizer",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/skeletonizer-2.1.1",
-      "packageUri": "lib/",
-      "languageVersion": "3.0"
     },
     {
       "name": "sky_engine",
@@ -900,12 +786,6 @@
       "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/timezone-0.10.1",
       "packageUri": "lib/",
       "languageVersion": "2.19"
-    },
-    {
-      "name": "torn_ticket",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/torn_ticket-0.1.0",
-      "packageUri": "lib/",
-      "languageVersion": "3.0"
     },
     {
       "name": "twilio_voice",
@@ -1020,30 +900,6 @@
       "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/web_socket_channel-2.4.0",
       "packageUri": "lib/",
       "languageVersion": "2.15"
-    },
-    {
-      "name": "webview_flutter",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter-4.13.0",
-      "packageUri": "lib/",
-      "languageVersion": "3.6"
-    },
-    {
-      "name": "webview_flutter_android",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter_android-4.10.9",
-      "packageUri": "lib/",
-      "languageVersion": "3.9"
-    },
-    {
-      "name": "webview_flutter_platform_interface",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter_platform_interface-2.14.0",
-      "packageUri": "lib/",
-      "languageVersion": "3.6"
-    },
-    {
-      "name": "webview_flutter_wkwebview",
-      "rootUri": "file:///C:/Users/Asus/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter_wkwebview-3.23.4",
-      "packageUri": "lib/",
-      "languageVersion": "3.9"
     },
     {
       "name": "win32",

@@ -10,6 +10,7 @@ import '../../../utils/textstyle_util.dart';
 import '../../../widgets/image_widget.dart';
 import '../../chat/view/chat_list.dart';
 import '../../drawer/drawer.dart';
+import '../../../utils/console_util.dart';
 
 class CustBottomBar extends StatefulWidget {
   final int pageNum;
@@ -41,7 +42,7 @@ class _CustBottomBarState extends State<CustBottomBar>
   @override
   Widget build(BuildContext context) {
     final pro = getAuthPro(context);
-    debugPrint(pro.custClientId.toString());
+    printData(title: "Cust Client ID:", data: pro.custClientId);
     return Scaffold(
       key: _scaffoldKey,
       drawer: CustomDrawer(

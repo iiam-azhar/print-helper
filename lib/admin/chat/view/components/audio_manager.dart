@@ -1,6 +1,7 @@
 import 'package:just_audio/just_audio.dart';
-import 'package:flutter/foundation.dart';
+
 import 'package:print_helper/admin/chat/view/components/audio_cache.dart';
+import '../../../../utils/console_util.dart';
 
 class VoiceAudioManager {
   // Singleton Pattern
@@ -49,7 +50,7 @@ class VoiceAudioManager {
       await _player.setFilePath(file.path);
       await _player.play();
     } catch (e) {
-      debugPrint("Audio Play Error: $e");
+      printData(title: "Audio Play Error:", data: e, e: true);
       _currentPath = null;
     }
   }
@@ -65,7 +66,7 @@ class VoiceAudioManager {
       }
     } catch (e) {
       // Suppress errors like "codec is released already"
-      debugPrint("Stop error (suppressed): $e");
+      printData(title: "Stop error (suppressed):", data: e, e: true);
     }
     _currentPath = null;
   }
@@ -75,7 +76,7 @@ class VoiceAudioManager {
       _player.dispose();
     } catch (e) {
       // Suppress codec release errors
-      debugPrint("Dispose error (suppressed): $e");
+      printData(title: "Dispose error (suppressed):", data: e, e: true);
     }
   }
 }

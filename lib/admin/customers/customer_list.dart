@@ -18,6 +18,7 @@ import '../../constants/paths.dart';
 import '../../widgets/loaders.dart';
 import '../../widgets/toasts.dart';
 import '../filter/filter_screen.dart';
+import '../../utils/console_util.dart';
 
 class CustomersScreen extends StatefulWidget {
   final bool isFromAdmin;
@@ -42,7 +43,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   @override
   void initState() {
     super.initState();
-    debugPrint("isFromClient: ${widget.id}");
+    printData(title: "isFromClient:", data: widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final pro = Provider.of<CustomerPro>(context, listen: false);
       pro.getCustomers(ctx: context, clientId: widget.id);
@@ -304,7 +305,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               ImageWidget(image: Paths.customers, width: 28),
               Spacers.sbw12(),
               TextWidget(
-                text: "Customers (${prov.customers.length})",
+                text: "Customers (${prov.totalCustomers})",
                 fontWeight: FontWeight.w700,
                 fontSize: 17,
                 color: const Color(0xFF414345),

@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'package:flutter/widgets.dart';
+
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import '../../../utils/console_util.dart';
 
 class VoiceRecorderService {
   final AudioRecorder _audioRecorder = AudioRecorder();
@@ -19,7 +20,7 @@ class VoiceRecorderService {
         );
       }
     } catch (e) {
-      debugPrint("Error starting record: $e");
+      printData(title: "Error starting record:", data: e, e: true);
     }
   }
 
@@ -28,7 +29,7 @@ class VoiceRecorderService {
       final path = await _audioRecorder.stop();
       return path;
     } catch (e) {
-      debugPrint("Error stopping record: $e");
+      printData(title: "Error stopping record:", data: e, e: true);
       return null;
     }
   }

@@ -11,6 +11,7 @@ import '../../widgets/loaders.dart';
 import '../../constants/colors.dart';
 import '../../constants/paths.dart';
 import 'twilio_settings.dart';
+import '../../utils/console_util.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -81,6 +82,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: Consumer<SettingsPro>(
         builder: (context, pro, _) {
           if (pro.loading) return Center(child: showLoader());
+          if (pro.loading) return Center(child: showLoader());
+
+          List<SettingsSection> filteredSections = [];
+
+          // Debug prints
+          printData(title: "Active Tab:", data: _activeTab);
+          printData(title: "Total Sections:", data: pro.sections.length);
+          for (var s in pro.sections) {
+            printData(title: "Section Title:", data: s.title);
+          }
+
+          if (_activeTab == 0) {
+            // Accounts Tab
+            filteredSections = pro.sections.where((s) {
+              final title = s.title.toLowerCase();
+              return title.contains("account") ||
+                  title.contains("client company") ||
+                  title.contains("customer company");
+            }).toList();
+          } else if (_activeTab == 2) {
+            // Other Tab
+            filteredSections = pro.sections.where((s) {
+              final title = s.title.toLowerCase();
+              return title.contains("language") ||
+                  title.contains("ranks") ||
+                  title.contains("skills");
+            }).toList();
+          }
+          printData(
+            title: "Filtered Sections for Tab $_activeTab:",
+            data: filteredSections.length,
+          );
+
           return SafeArea(
             child: Column(
               children: [
@@ -95,15 +129,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: Colors.white,
                     child: _activeTab == 1
                         ? const TwilioCredentials()
+                        : _activeTab == 2
+                        ? Center(
+                            child: TextWidget(
+                              text: "Coming Soon",
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
                         : ListView.builder(
                             padding: EdgeInsets.only(
                               left: 12.w,
                               right: 12.w,
                               top: 10.h,
                             ),
-                            itemCount: pro.sections.length,
+                            itemCount: filteredSections.length,
                             itemBuilder: (context, si) {
-                              final section = pro.sections[si];
+                              final section = filteredSections[si];
                               return _buildSection(section, pro);
                             },
                           ),

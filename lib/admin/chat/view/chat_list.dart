@@ -11,7 +11,9 @@ import 'package:print_helper/widgets/image_widget.dart';
 import 'package:print_helper/widgets/loaders.dart';
 import 'package:print_helper/widgets/text_widget.dart';
 import 'package:provider/provider.dart';
+import 'package:print_helper/admin/chat/models/chat_models.dart';
 import '../../../constants/paths.dart';
+
 import '../../../widgets/spacers.dart';
 
 class ChatList extends StatefulWidget {
@@ -22,6 +24,9 @@ class ChatList extends StatefulWidget {
 }
 
 class _ChatListState extends State<ChatList> {
+  final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -37,13 +42,23 @@ class _ChatListState extends State<ChatList> {
     });
   }
 
-  // @override
-  // void dispose() {
-  //   WidgetsBinding.instance.addPostFrameCallback((_) async {
-  //     getChatPro(context).dispose();
-  //   });
-  //   super.dispose();
-  // }
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    getChatPro(context).clearUserSearch();
+  }
+
+  void _unfocusSearch() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocusNode.unfocus();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +126,7 @@ class _ChatListState extends State<ChatList> {
         ),
       );
     }
+    final currentUserId = getAuthPro(context).user?.id;
     return RefreshIndicator(
       onRefresh: () async {
         await pro.loadConversations();
@@ -128,7 +144,8 @@ class _ChatListState extends State<ChatList> {
           final isDeletedUser = participant?.id == null;
           return GestureDetector(
             onTap: () async {
-              navTo(
+              _clearSearch();
+              await navTo(
                 context: context,
                 page: ChatScreen(
                   conversationId: chat.id,
@@ -139,6 +156,8 @@ class _ChatListState extends State<ChatList> {
                       : 0,
                 ),
               );
+              if (!mounted) return;
+              _unfocusSearch();
               final chatPro = getChatPro(context);
               chatPro.markConversAsRead(chat.id);
             },
@@ -232,13 +251,16 @@ class _ChatListState extends State<ChatList> {
                 children: [
                   Expanded(
                     flex: 2,
-                    child: TextWidget(
-                      text: chat.latestMessage?.message ?? "No messages yet",
-                      color: Colors.black54,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 13,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: _buildLatestMessageSubtitle(
+                      chat.latestMessage,
+                      isSelfCaller:
+                          chat.latestMessage?.userId != null &&
+                          chat.latestMessage!.userId == currentUserId,
+                      calleeFallback:
+                          chat.type == 'private' && chat.participants.isNotEmpty
+                          ? '${chat.participants.first.name} ${chat.participants.first.lastName}'
+                                .trim()
+                          : null,
                     ),
                   ),
                   if (chat.unreadCount > 0)
@@ -353,6 +375,8 @@ class _ChatListState extends State<ChatList> {
           Spacers.sbw10(),
           Expanded(
             child: TextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
               onChanged: pro.onSearchGlobalChanged,
               decoration: const InputDecoration(
                 hintText: "Find People or Groups",
@@ -399,10 +423,10 @@ class _ChatListState extends State<ChatList> {
             fontWeight: FontWeight.w600,
             fontSize: 12,
           ),
-          onTap: () {
-            pro.clearUserSearch();
+          onTap: () async {
+            _clearSearch();
             final existingId = pro.findPrivateConversationWithUser(user.id);
-            navTo(
+            await navTo(
               context: context,
               page: ChatScreen(
                 conversationId: existingId,
@@ -410,9 +434,110 @@ class _ChatListState extends State<ChatList> {
                 receiverUserId: user.id,
               ),
             );
+            if (!mounted) return;
+            _unfocusSearch();
           },
         );
       },
+    );
+  }
+
+  Widget _buildLatestMessageSubtitle(
+    ChatLatestMessage? msg, {
+    String? calleeFallback,
+    bool isSelfCaller = false,
+  }) {
+    if (msg == null) {
+      return TextWidget(
+        text: 'No messages yet',
+        color: Colors.black54,
+        fontWeight: FontWeight.w500,
+        fontSize: 13,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    final isCallMsg = msg.type == 'voice' || msg.type == 'call';
+
+    if (isCallMsg) {
+      final isMissed =
+          msg.callOutcome == 'missed' ||
+          msg.callOutcome == 'no-answer' ||
+          (msg.callOutcome == null && msg.type == 'call');
+
+      // Caller: 'You' if current user, else sender's name
+      final callerName = isSelfCaller
+          ? 'You'
+          : (msg.userName != null
+                ? '${msg.userName}${msg.userLastName != null && msg.userLastName!.isNotEmpty ? ' ${msg.userLastName}' : ''}'
+                : 'Unknown');
+
+      // Callee: first entry in toUsers
+      final toUser = msg.toUsers?.isNotEmpty == true
+          ? msg.toUsers!.first
+          : null;
+      final calleeName = toUser != null
+          ? (toUser['name']?.toString() ?? 'Unknown')
+          : calleeFallback;
+
+      final chipColor = isMissed
+          ? const Color(0xFFFFF0F0)
+          : const Color(0xFFEDFBF0);
+      final iconColor = isMissed ? Colors.red : Colors.green;
+      final textColor = isMissed ? Colors.red : Colors.green;
+
+      final label = calleeName != null
+          ? '$callerName → $calleeName'
+          : callerName;
+
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          constraints: BoxConstraints(maxWidth: 220.w),
+          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+          decoration: BoxDecoration(
+            color: chipColor,
+            borderRadius: BorderRadius.circular(20.r),
+            border: Border.all(
+              color: iconColor.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isMissed ? Icons.phone_missed : Icons.phone_forwarded,
+                size: 11.sp,
+                color: iconColor,
+              ),
+              SizedBox(width: 4.w),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 11.sp,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return TextWidget(
+      text: msg.message.isEmpty ? 'No messages yet' : msg.message,
+      color: Colors.black54,
+      fontWeight: FontWeight.w500,
+      fontSize: 13,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }

@@ -248,6 +248,7 @@ class _FilterSheetState extends State<FilterSheet> {
               value: value,
               visualDensity: VisualDensity.compact,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              // ignore: deprecated_member_use
               onChanged: (v) => setState(() => status = v!),
             ),
             TextWidget(text: label, fontSize: 14, fontWeight: FontWeight.w500),
@@ -346,6 +347,6 @@ class _FilterSheetState extends State<FilterSheet> {
     });
     pro.clearAccountFilters(context);
     pro2.clearClientFilters(context);
-    pro3.clearCustFilters(context,);
+    pro3.clearCustFilters(context);
   }
 }

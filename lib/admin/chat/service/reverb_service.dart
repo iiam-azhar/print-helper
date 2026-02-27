@@ -20,6 +20,9 @@ class ReverbSocketService {
   StreamSubscription? _userStatusSub;
   StreamSubscription? _conversationCreatedSub;
   StreamSubscription? _unreadCountUpdatedSub;
+  StreamSubscription? _conversationUpdatedSub;
+  StreamSubscription?
+  _connectionEstablishedSub; // Prevents duplicate listeners on reconnect
 
   bool _isConnected = false;
   final String? currentUserId;
@@ -43,6 +46,8 @@ class ReverbSocketService {
   final void Function(Map<String, dynamic>)?
   onGroupMemberRemoved; // For group member removed
   final void Function(Map<String, dynamic>)?
+  onConversationUpdated; // For group title/image/participants changes
+  final void Function(Map<String, dynamic>)?
   onUnreadCountUpdated; // For total unread counter badges
 
   final VoidCallback onConnected;
@@ -57,6 +62,7 @@ class ReverbSocketService {
     this.onConversationCreated,
     this.onGroupMemberAdded,
     this.onGroupMemberRemoved,
+    this.onConversationUpdated,
     this.onUnreadCountUpdated,
     this.currentUserId,
   });
@@ -85,12 +91,13 @@ class ReverbSocketService {
     _client = PusherChannelsClient.websocket(
       options: options,
       connectionErrorHandler: (err, stack, refresh) {
-        debugPrint("Reverb User Error: $err");
+        printData(title: "Reverb User Error:", data: err, e: true);
         refresh();
       },
     );
-    _client.onConnectionEstablished.listen((_) {
-      debugPrint("✅ Reverb User Channel Connected");
+    _connectionEstablishedSub?.cancel();
+    _connectionEstablishedSub = _client.onConnectionEstablished.listen((_) {
+      printData(title: "✅ Reverb User Channel Connected", data: "");
       final auth =
           EndpointAuthorizableChannelTokenAuthorizationDelegate.forPrivateChannel(
             authorizationEndpoint: authEndpoint,
@@ -150,9 +157,21 @@ class ReverbSocketService {
         if (onGroupMemberRemoved == null || !context.mounted) return;
         final data = _safeJsonDecode(event.data);
         if (data == null) return;
-        logData(title: 'GROUP MEMBER REMOVED:', data: data.toString());
+        logData(title: '➖ GROUP MEMBER REMOVED:', data: data.toString());
         onGroupMemberRemoved!(data);
       });
+
+      // EVENT: conversation.updated
+      // Triggered when a group title, image, or participants change
+      _conversationUpdatedSub = _userChannel!
+          .bind('conversation.updated')
+          .listen((event) {
+            if (onConversationUpdated == null || !context.mounted) return;
+            final data = _safeJsonDecode(event.data);
+            if (data == null) return;
+            logData(title: '🔄 CONVERSATION UPDATED:', data: data.toString());
+            onConversationUpdated!(data);
+          });
 
       // EVENT: message.sent (Global Notification) //external chatlist
       // Optional: You might want to show a top-snackbar notification here
@@ -160,7 +179,7 @@ class ReverbSocketService {
         final data = _safeJsonDecode(event.data);
         if (data != null) {
           logData(title: '📩 MESSAGE SENT:', data: data.toString());
-          debugPrint("📩 MESSAGE RECEIVED: $data");
+          printData(title: "📩 MESSAGE RECEIVED:", data: data);
           onMessageReceived(data);
         }
       });
@@ -192,12 +211,12 @@ class ReverbSocketService {
     _client = PusherChannelsClient.websocket(
       options: options,
       connectionErrorHandler: (err, stack, refresh) {
-        debugPrint("Reverb Chat Error: $err");
+        printData(title: "Reverb Chat Error:", data: err, e: true);
         refresh();
       },
     );
     _client.onConnectionEstablished.listen((_) {
-      debugPrint("✅ Reverb Conversation Channel Connected");
+      printData(title: "✅ Reverb Conversation Channel Connected", data: "");
 
       final auth =
           EndpointAuthorizableChannelTokenAuthorizationDelegate.forPrivateChannel(
@@ -211,14 +230,17 @@ class ReverbSocketService {
       // 1. Message Sent internal chat
       _messageSub = _conversationChannel!.bind("message.sent").listen((event) {
         final data = _safeJsonDecode(event.data);
-        if (data != null) onMessageReceived(data);
+        if (data != null) {
+          printData(title: "📩 REVERB MSG RECEIVED (Convo):", data: data);
+          onMessageReceived(data);
+        }
       });
       // 2. Message Deleted
       _messageDeletedSub = _conversationChannel!.bind("message.deleted").listen(
         (event) {
           final data = _safeJsonDecode(event.data);
           if (data != null && onMessageDeleted != null) {
-            debugPrint("MESSAGE DELETED: $data");
+            printData(title: "MESSAGE DELETED:", data: data);
             onMessageDeleted!(data);
           }
         },
@@ -229,7 +251,7 @@ class ReverbSocketService {
       ) {
         final data = _safeJsonDecode(event.data);
         if (data != null && onMessageStatusUpdated != null) {
-          debugPrint("MESSAGE STATUS UPDATE: $data");
+          printData(title: "MESSAGE STATUS UPDATE:", data: data);
           onMessageStatusUpdated!(data);
         }
       });
@@ -239,7 +261,7 @@ class ReverbSocketService {
       ) {
         final data = _safeJsonDecode(event.data);
         if (data != null && onUserStatusChanged != null) {
-          debugPrint("USER STATUS: $data");
+          printData(title: "USER STATUS:", data: data);
           onUserStatusChanged!(data);
         }
       });
@@ -270,14 +292,15 @@ class ReverbSocketService {
     try {
       return jsonDecode(jsonString);
     } catch (e) {
-      debugPrint("⚠️ JSON Parse Error: $e");
+      printData(title: "⚠️ JSON Parse Error:", data: e, e: true);
       return null;
     }
   }
 
   /// DISCONNECT SOCKET CLEANLY
   void disconnect() {
-    debugPrint("🔌 Disconnecting Reverb socket");
+    printData(title: "🔌 Disconnecting Reverb socket", data: "");
+    _connectionEstablishedSub?.cancel();
     _messageSub?.cancel();
     _typingSub?.cancel();
     _messageDeletedSub?.cancel();
@@ -285,6 +308,7 @@ class ReverbSocketService {
     _userStatusSub?.cancel();
     _conversationCreatedSub?.cancel();
     _unreadCountUpdatedSub?.cancel();
+    _conversationUpdatedSub?.cancel();
     _conversationChannel?.unsubscribe();
     _userChannel?.unsubscribe();
     try {

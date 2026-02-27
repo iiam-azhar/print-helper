@@ -188,8 +188,9 @@ class EditClientState extends State<EditClient> {
       //     controller: TextEditingController(text: p.number),
       //   );
       // }).toList();
-      debugPrint(
-        "CONTACT IDS AFTER FILL: ${contactForms.map((e) => e.existingId).toList()}",
+      printData(
+        title: "CONTACT IDS AFTER FILL:",
+        data: contactForms.map((e) => e.existingId).toList(),
       );
       contactForms.add(form);
     }

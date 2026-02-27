@@ -42,7 +42,7 @@ class _SplashState extends State<Splash> {
             context,
             listen: false,
           ).loadUserFromPrefs();
-          await CallDeviceService.bootstrap(forceRegister: true);
+          await CallDeviceService.bootstrap(forceRegister: false);
           _navigateByRole(role);
         } else {
           navTo(context: context, page: const LoginScreen(), removeUntil: true);

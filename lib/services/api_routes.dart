@@ -25,11 +25,16 @@ class ApiRoutes {
   static const String twilioClientsWithContacts =
       'twilio/clients-with-contacts';
   static const String twilioStaff = 'twilio/staff';
+  static const String twilioCredentials = 'twilio/credentials';
   static const String twilioAccessToken = 'chat/voice/token';
   static const String registerDevice = 'calls/register-device';
   static const String callFromNumbers = 'chat/call-from-numbers';
+  static const String outboundVoiceUrl = 'calls/outbound-voice-url';
+  static String callPopupData(int conversationId) =>
+      'chat/call-popup-data?conversation_id=$conversationId';
   static String userTwilioNumbers(int userId) =>
       'chat/users/$userId/twilio-numbers';
+  static const String initiateCall = 'calls/initiate';
 
   //chat//
   static String serverIp = "production.printhelpers.com";

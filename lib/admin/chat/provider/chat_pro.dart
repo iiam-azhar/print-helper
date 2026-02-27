@@ -30,6 +30,9 @@ class ChatPro extends ChangeNotifier {
   bool isChatScreenOpen = false;
   int? currentActiveConversationId;
   int totalUnreadCount = 0; // Aggregated badge count for nav
+  String? _currentUserId; // Stored on socket init for group-event comparisons
+  final Set<int> _groupRemovalInProgress =
+      {}; // Deduplicates concurrent firings
   final List<ChatConversation> conversations = [];
   final List<ChatMessage> messages = [];
   ReverbSocketService? _chatListSocket; // Keeps global user events (new chats)
@@ -86,6 +89,11 @@ class ChatPro extends ChangeNotifier {
   int twilioNumbersRevision = 0;
   int twilioClientsRevision = 0;
   int twilioStaffRevision = 0;
+
+  // Twilio API Credentials
+  TwilioApiCredentials? twilioApiCredentials;
+  bool isTwilioCredentialsLoading = false;
+
   Future<void> startDummyVoiceRecording() async {
     isRecordingVoice = true;
     notifyListeners();
@@ -103,6 +111,105 @@ class ChatPro extends ChangeNotifier {
     };
   }
 
+  /// Initiate a call via the backend API.
+  /// Returns the call data map on success, or null on failure.
+  Future<Map<String, dynamic>?> initiateCall({
+    required String toNumber,
+    int? toUserId,
+    int? conversationId,
+    bool record = true,
+  }) async {
+    // Print input parameters
+    printData(
+      title: "initiateCall - START",
+      data:
+          "toNumber: $toNumber, toUserId: $toUserId, conversationId: $conversationId, record: $record",
+    );
+
+    try {
+      final headers = await apiHeaders();
+      printData(title: "initiateCall - Headers", data: headers);
+
+      final Map<String, dynamic> body = {
+        "to_number": toNumber,
+        "to_user_id": toUserId,
+        if (conversationId != null) "conversation_id": conversationId,
+        "record": record,
+      };
+      final payload = jsonEncode(body);
+      printData(title: "initiateCall - Payload", data: payload);
+
+      printData(
+        title: "initiateCall - API Call",
+        data: "Calling ${ApiRoutes.initiateCall}",
+      );
+
+      final data = await ApiService().postDataToApi(
+        api: ApiRoutes.initiateCall,
+        headers: headers,
+        payload: payload,
+      );
+
+      printData(title: "initiateCall - Response", data: data);
+
+      if (data is Map<String, dynamic> && data["success"] == true) {
+        printData(title: "initiateCall - SUCCESS", data: data["data"]);
+        return data["data"] as Map<String, dynamic>?;
+      } else {
+        final msg = data is Map ? data["message"] : "Failed to initiate call";
+        printData(
+          title: "initiateCall - FAILED",
+          data: "Message: $msg, Full response: $data",
+          e: true,
+        );
+        showToast(message: msg ?? "Failed to initiate call");
+      }
+    } catch (e) {
+      printData(title: "initiateCall - EXCEPTION", data: e, e: true);
+      showToast(message: "Failed to initiate call");
+    }
+
+    printData(title: "initiateCall - END", data: "Returning null");
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> getOutboundVoiceUrl({
+    required String toNumber,
+    int? conversationId,
+    required bool record,
+    String? toUserId,
+  }) async {
+    try {
+      final headers = await apiHeaders();
+      String url =
+          "${ApiRoutes.baseUrl}calls/outbound-voice-url?"
+          "to_number=$toNumber"
+          "&record=${record ? 1 : 0}";
+      if (conversationId != null) {
+        url += "&conversation_id=$conversationId";
+      }
+      url += "&to_user_id=${toUserId ?? ''}";
+      printData(title: "getOutboundVoiceUrl - URL", data: url);
+      final response = await http.get(Uri.parse(url), headers: headers);
+      printData(title: "getOutboundVoiceUrl - Response", data: response.body);
+      if (response.statusCode != 200) {
+        showToast(message: "Failed to get voice URL: ${response.statusCode}");
+        return null;
+      }
+      final data = jsonDecode(response.body);
+      if (data["success"] == true) {
+        return data["data"];
+      } else {
+        showToast(message: data["message"] ?? "Failed to get voice URL");
+        return null;
+      }
+    } catch (e) {
+      printData(title: "getOutboundVoiceUrl - EXCEPTION", data: e, e: true);
+      showToast(message: "Failed to connect for external call");
+      return null;
+    }
+  }
+
   Future<String?> getTwilioAccessToken({bool forceRefresh = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final cached = prefs.getString("twilio_access_token");
@@ -111,30 +218,31 @@ class ChatPro extends ChangeNotifier {
     }
     try {
       final headers = await apiHeaders();
-      debugPrint(
-        "Twilio access token request: ${ApiRoutes.baseUrl}${ApiRoutes.twilioAccessToken}",
+      printData(
+        title: "Twilio access token request:",
+        data: "${ApiRoutes.baseUrl}${ApiRoutes.twilioAccessToken}",
       );
-      debugPrint("Twilio access token headers: $headers");
+      printData(title: "Twilio access token headers:", data: headers);
       final data = await ApiService().getDataFromApi(
         api: ApiRoutes.twilioAccessToken,
         headers: headers,
         showRes: true,
       );
-      debugPrint("Twilio access token raw response: $data");
+      printData(title: "Twilio access token raw response:", data: data);
       if (data is Map<String, dynamic>) {
         final dynamic payload = data["data"] ?? data;
-        debugPrint("Twilio access token payload: $payload");
+        printData(title: "Twilio access token payload:", data: payload);
         final token = payload is Map<String, dynamic>
             ? (payload["token"] ?? payload["access_token"])
             : null;
-        debugPrint("Twilio access token parsed: $token");
+        printData(title: "Twilio access token parsed:", data: token);
         if (token is String && token.isNotEmpty) {
           await prefs.setString("twilio_access_token", token);
           return token;
         }
       }
     } catch (e) {
-      debugPrint("Twilio access token error: $e");
+      printData(title: "Twilio access token error:", data: e, e: true);
     }
     return null;
   }
@@ -143,11 +251,11 @@ class ChatPro extends ChangeNotifier {
     try {
       final url = Uri.parse("${ApiRoutes.baseUrl}${ApiRoutes.callFromNumbers}");
       final headers = await apiHeaders();
-      debugPrint("call-from-numbers url: $url");
-      debugPrint("call-from-numbers headers: $headers");
+      printData(title: "call-from-numbers url:", data: url);
+      printData(title: "call-from-numbers headers:", data: headers);
       final res = await http.get(url, headers: headers);
-      debugPrint("call-from-numbers status: ${res.statusCode}");
-      debugPrint("call-from-numbers body: ${res.body}");
+      printData(title: "call-from-numbers status:", data: res.statusCode);
+      printData(title: "call-from-numbers body:", data: res.body);
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true && data['data'] != null) {
@@ -158,9 +266,31 @@ class ChatPro extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("fetchCallFromNumbers error: $e");
+      printData(title: "fetchCallFromNumbers error:", data: e, e: true);
     }
     return [];
+  }
+
+  Future<CallPopupData?> fetchCallPopupData(int conversationId) async {
+    try {
+      final url = Uri.parse(
+        "${ApiRoutes.baseUrl}${ApiRoutes.callPopupData(conversationId)}",
+      );
+      final headers = await apiHeaders();
+      printData(title: "call-popup-data url:", data: url);
+      final res = await http.get(url, headers: headers);
+      printData(title: "call-popup-data status:", data: res.statusCode);
+      printData(title: "call-popup-data body:", data: res.body);
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && data['data'] != null) {
+          return CallPopupData.fromJson(data['data'] as Map<String, dynamic>);
+        }
+      }
+    } catch (e) {
+      printData(title: "fetchCallPopupData error:", data: e, e: true);
+    }
+    return null;
   }
 
   Future<List<CallFromNumber>> fetchUserTwilioNumbers(int userId) async {
@@ -169,11 +299,11 @@ class ChatPro extends ChangeNotifier {
         "${ApiRoutes.baseUrl}${ApiRoutes.userTwilioNumbers(userId)}",
       );
       final headers = await apiHeaders();
-      debugPrint("user-twilio-numbers url: $url");
-      debugPrint("user-twilio-numbers headers: $headers");
+      printData(title: "user-twilio-numbers url:", data: url);
+      printData(title: "user-twilio-numbers headers:", data: headers);
       final res = await http.get(url, headers: headers);
-      debugPrint("user-twilio-numbers status: ${res.statusCode}");
-      debugPrint("user-twilio-numbers body: ${res.body}");
+      printData(title: "user-twilio-numbers status:", data: res.statusCode);
+      printData(title: "user-twilio-numbers body:", data: res.body);
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true && data['data'] != null) {
@@ -184,9 +314,75 @@ class ChatPro extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("fetchUserTwilioNumbers error: $e");
+      printData(title: "fetchUserTwilioNumbers error:", data: e, e: true);
     }
     return [];
+  }
+
+  Future<void> fetchTwilioApiCredentials() async {
+    isTwilioCredentialsLoading = true;
+    notifyListeners();
+    try {
+      final headers = await apiHeaders();
+      final res = await ApiService().getDataFromApi(
+        api: ApiRoutes.twilioCredentials,
+        headers: headers,
+      );
+      printData(title: "fetchTwilioApiCredentials response:", data: res);
+      if (res is Map<String, dynamic> && res['success'] == true) {
+        twilioApiCredentials = TwilioApiCredentials.fromJson(res['data']);
+      }
+    } catch (e) {
+      printData(title: "fetchTwilioApiCredentials error:", data: e, e: true);
+    } finally {
+      isTwilioCredentialsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateTwilioApiCredentials({
+    required int id,
+    required String accountSid,
+    required String apiKeySid,
+    required String apiKeySecret,
+    required String twimlAppSid,
+  }) async {
+    try {
+      final headers = await apiHeaders();
+      final payload = jsonEncode({
+        "id": id,
+        "account_sid": accountSid,
+        "api_key_sid": apiKeySid,
+        "api_key_secret": apiKeySecret,
+        "twiml_app_sid": twimlAppSid,
+      });
+
+      printData(title: "updateTwilioApiCredentials payload:", data: payload);
+
+      final res = await ApiService().postDataToApi(
+        api: ApiRoutes.twilioCredentials,
+        headers: headers,
+        payload: payload,
+      );
+
+      printData(title: "updateTwilioApiCredentials response:", data: res);
+
+      if (res is Map<String, dynamic> && res['success'] == true) {
+        showToast(message: res['message'] ?? "Credentials saved successfully");
+        // Update local model
+        if (res['data'] != null) {
+          twilioApiCredentials = TwilioApiCredentials.fromJson(res['data']);
+          notifyListeners();
+        }
+        return true;
+      } else {
+        showToast(message: res['message'] ?? "Failed to save credentials");
+      }
+    } catch (e) {
+      printData(title: "updateTwilioApiCredentials error:", data: e, e: true);
+      showToast(message: "An error occurred while saving");
+    }
+    return false;
   }
 
   /// ---------------- INIT CHAT LIST SOCKET ----------------
@@ -194,16 +390,15 @@ class ChatPro extends ChangeNotifier {
     required String userId,
     required dynamic context,
   }) async {
-    // if (_socketInitialized) return;
-    // _socketInitialized = true;
     if (_chatListSocket != null) return;
+    _currentUserId = userId; // store for group-event comparisons
     final headers = await apiHeaders();
     _chatListSocket = ReverbSocketService(
       onConnected: () {
-        debugPrint("✅ Chat list socket connected");
+        printData(title: "✅ Chat list socket connected", data: "");
       },
       onMessageReceived: (data) {
-        debugPrint("📩 CHAT LIST DATA: $data");
+        printData(title: "📩 CHAT LIST DATA:", data: data);
         _handleRealtimeChatListMessage(data, userId);
       },
       onTypingReceived: (isTyping) {
@@ -226,6 +421,9 @@ class ChatPro extends ChangeNotifier {
       onGroupMemberRemoved: (data) {
         _handleGroupMemberRemoved(data);
       },
+      onConversationUpdated: (data) {
+        _handleConversationUpdated(data);
+      },
       onUnreadCountUpdated: (data) {
         _handleUnreadCountUpdated(data);
       },
@@ -234,7 +432,7 @@ class ChatPro extends ChangeNotifier {
       host: ApiRoutes.socketHost,
       port: ApiRoutes.socketPort,
       appKey: ApiRoutes.appKey,
-      userId: userId, // ✅ USER ID
+      userId: userId,
       authEndpoint: Uri.parse("${ApiRoutes.baseUrl}broadcasting/auth"),
       headers: headers,
       context: context,
@@ -251,7 +449,7 @@ class ChatPro extends ChangeNotifier {
     _conversationSocket = ReverbSocketService(
       currentUserId: currentUserId.toString(),
       onConnected: () {
-        debugPrint("✅ Conversation socket connected");
+        printData(title: "✅ Conversation socket connected", data: "");
       },
       onMessageReceived: (data) {
         _handleRealtimeConversationMessage(data, currentUserId, conversationId);
@@ -291,7 +489,7 @@ class ChatPro extends ChangeNotifier {
 
   void disconnectConversationSocket() {
     if (_conversationSocket != null) {
-      debugPrint("🔌 Disconnecting Conversation Socket...");
+      printData(title: "🔌 Disconnecting Conversation Socket...", data: "");
       _conversationSocket!.disconnect();
       _conversationSocket = null;
       isOtherUserTyping = false;
@@ -341,8 +539,9 @@ class ChatPro extends ChangeNotifier {
     }
     final msg = ChatMessage.fromJson(payload, currentUserId);
 
-    /// Prevent duplicate self-message
-    if (msg.senderId == currentUserId) return;
+    /// Prevent duplicate self-message (but allow backend-generated call messages)
+    final isCallMessage = msg.type == 'call' || msg.isCallRecording;
+    if (msg.senderId == currentUserId && !isCallMessage) return;
 
     /// Check if message already exists
     final existingIndex = messages.indexWhere((m) => m.id == msg.id);
@@ -364,7 +563,11 @@ class ChatPro extends ChangeNotifier {
         );
       }
     }
-    debugPrint("📩 Message received. ChatScreenOpen: $isChatScreenOpen");
+    printData(
+      title: "📩 Message received. ChatScreenOpen:",
+      data: isChatScreenOpen,
+    );
+    printData(title: "📩 Message received Payload:", data: payload);
 
     /// If chat screen is open, mark as read
     if (isChatScreenOpen) {
@@ -429,7 +632,7 @@ class ChatPro extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint("Error parsing new conversation: $e");
+      printData(title: "Error parsing new conversation", data: e, e: true);
     }
   }
 
@@ -438,27 +641,170 @@ class ChatPro extends ChangeNotifier {
     try {
       final conversationId = data['conversation_id'];
       if (conversationId == null) return;
-      debugPrint("Member added to group $conversationId");
-      // Fetch updated conversation details
+      printData(title: "Member added to group", data: conversationId);
+
+      // If the event payload contains the full conversation, use it directly
+      // to avoid an API race condition with message.sent
+      if (data['conversation'] != null) {
+        try {
+          final newConvo = ChatConversation.fromJson(data['conversation']);
+          final index = conversations.indexWhere((c) => c.id == newConvo.id);
+          if (index != -1) {
+            final existing = conversations[index];
+            // Preserve existing latestMessage if it was already set by message.sent
+            final merged = ChatConversation(
+              id: newConvo.id,
+              type: newConvo.type,
+              title: newConvo.title,
+              participants: newConvo.participants,
+              latestMessage: existing.latestMessage ?? newConvo.latestMessage,
+              unreadCount: newConvo.unreadCount,
+              updatedAt: newConvo.updatedAt,
+              isDefault: newConvo.isDefault,
+              image: newConvo.image,
+            );
+            conversations[index] = merged;
+          } else {
+            conversations.insert(0, newConvo);
+          }
+          notifyListeners();
+          return;
+        } catch (e) {
+          printData(
+            title: "Error parsing group.member.added conversation",
+            data: e,
+            e: true,
+          );
+        }
+      }
+
+      // Fallback: fetch from API if no conversation in payload
+      // Add a short delay so that message.sent can process first
+      await Future.delayed(const Duration(milliseconds: 500));
       await _updateSingleConversation(conversationId);
       notifyListeners();
     } catch (e) {
-      debugPrint("Error handling group member added: $e");
+      printData(title: "Error handling group member added:", data: e, e: true);
     }
   }
 
   // 7. ✅ Handle Group Member Removed
   void _handleGroupMemberRemoved(Map<String, dynamic> data) async {
     try {
-      final conversationId = data['conversation_id'];
-      final removedUserId = data['user_id'];
+      final rawId = data['conversation_id'];
+      if (rawId == null) return;
+      final conversationId = int.tryParse(rawId.toString());
       if (conversationId == null) return;
-      debugPrint("Member $removedUserId removed from group $conversationId");
-      // Fetch updated conversation details
+
+      // Deduplicate: drop if we're already processing this conversation_id
+      if (_groupRemovalInProgress.contains(conversationId)) {
+        printData(
+          title: "➖ GROUP MEMBER REMOVED (duplicate, skipping)",
+          data: conversationId,
+        );
+        return;
+      }
+      _groupRemovalInProgress.add(conversationId);
+
+      // Note: backend does not send user_id in the payload.
+      // We always call the API; a 403/404 response means the current
+      // user was removed, and _updateSingleConversation handles that.
+      final removedUserId = data['user_id']?.toString();
+      printData(
+        title: "➖ Group member removed",
+        data:
+            "removedUserId=$removedUserId currentUserId=$_currentUserId convoId=$conversationId",
+      );
+
+      // Fast-path only when the backend does include user_id
+      if (removedUserId != null &&
+          _currentUserId != null &&
+          removedUserId == _currentUserId) {
+        final index = conversations.indexWhere(
+          (c) => c.id.toString() == conversationId.toString(),
+        );
+        if (index != -1) {
+          conversations.removeAt(index);
+          printData(
+            title: "🗑️ Removed conversation (current user removed)",
+            data: conversationId,
+          );
+        }
+        notifyListeners();
+        _groupRemovalInProgress.remove(conversationId);
+        return;
+      }
+
+      // Fallback: let the API tell us (403 = removed, 200 = just update metadata)
       await _updateSingleConversation(conversationId);
       notifyListeners();
     } catch (e) {
-      debugPrint("Error handling group member removed: $e");
+      printData(
+        title: "Error handling group member removed:",
+        data: e,
+        e: true,
+      );
+    } finally {
+      final rawId = data['conversation_id'];
+      final conversationId = int.tryParse(rawId?.toString() ?? '');
+      if (conversationId != null)
+        _groupRemovalInProgress.remove(conversationId);
+    }
+  }
+
+  // 8. ✅ Handle Conversation Updated (title / image / participants)
+  void _handleConversationUpdated(Map<String, dynamic> data) async {
+    try {
+      final conversationId = data['conversation_id'];
+      if (conversationId == null) return;
+
+      printData(
+        title: "🔄 Conversation updated",
+        data: "convoId=$conversationId",
+      );
+
+      // If the full conversation object is embedded, use it directly
+      if (data['conversation'] != null) {
+        try {
+          final updatedConvo = ChatConversation.fromJson(data['conversation']);
+          final index = conversations.indexWhere(
+            (c) => c.id == updatedConvo.id,
+          );
+          if (index != -1) {
+            final existing = conversations[index];
+            conversations[index] = ChatConversation(
+              id: updatedConvo.id,
+              type: updatedConvo.type,
+              title: updatedConvo.title,
+              participants: updatedConvo.participants,
+              latestMessage:
+                  existing.latestMessage ?? updatedConvo.latestMessage,
+              unreadCount: existing.unreadCount,
+              updatedAt: updatedConvo.updatedAt,
+              isDefault: updatedConvo.isDefault,
+              image: updatedConvo.image,
+            );
+          }
+          notifyListeners();
+          return;
+        } catch (e) {
+          printData(
+            title: "Error parsing conversation.updated payload",
+            data: e,
+            e: true,
+          );
+        }
+      }
+
+      // Fallback: fetch from API
+      await _updateSingleConversation(conversationId);
+      notifyListeners();
+    } catch (e) {
+      printData(
+        title: "Error handling conversation updated:",
+        data: e,
+        e: true,
+      );
     }
   }
 
@@ -469,46 +815,79 @@ class ChatPro extends ChangeNotifier {
         Uri.parse("${ApiRoutes.baseUrl}chat/conversations/$conversationId"),
         headers: await apiHeaders(),
       );
-      debugPrint("_updateSingleConversation response: ${res.statusCode}");
+      printData(
+        title: "_updateSingleConversation response:",
+        data: res.statusCode,
+      );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        debugPrint("_updateSingleConversation data: $data");
+        printData(title: "_updateSingleConversation data:", data: data);
         if (data['success'] == true && data['data'] != null) {
           final updatedConvo = ChatConversation.fromJson(data['data']);
           // Find and replace the conversation in the list
           final index = conversations.indexWhere((c) => c.id == conversationId);
           if (index != -1) {
-            conversations[index] = updatedConvo;
-            debugPrint("Updated conversation $conversationId in list");
+            final existing = conversations[index];
+            // Preserve existing latestMessage if API doesn't return one
+            final merged = updatedConvo.latestMessage != null
+                ? updatedConvo
+                : ChatConversation(
+                    id: updatedConvo.id,
+                    type: updatedConvo.type,
+                    title: updatedConvo.title,
+                    participants: updatedConvo.participants,
+                    latestMessage: existing.latestMessage,
+                    unreadCount: updatedConvo.unreadCount,
+                    updatedAt: updatedConvo.updatedAt,
+                    isDefault: updatedConvo.isDefault,
+                    image: updatedConvo.image,
+                  );
+            conversations[index] = merged;
+            printData(
+              title: "Updated conversation in list",
+              data: conversationId,
+            );
           } else {
             // If not found, add to top (new conversation)
             conversations.insert(0, updatedConvo);
-            debugPrint("Added new conversation $conversationId to list");
+            printData(
+              title: "Added new conversation to list",
+              data: conversationId,
+            );
           }
         } else if (data['success'] == false) {
           // If backend returns success=false, user might have been removed
-          debugPrint(
-            "Backend returned success=false for conversation $conversationId",
+          printData(
+            title: "Backend returned success=false for conversation",
+            data: conversationId,
+            e: true,
           );
           final index = conversations.indexWhere((c) => c.id == conversationId);
           if (index != -1) {
             conversations.removeAt(index);
-            debugPrint(
-              "Removed conversation $conversationId from list (no access)",
+            printData(
+              title: "Removed conversation from list (no access)",
+              data: conversationId,
             );
           }
         }
       } else if (res.statusCode == 403 || res.statusCode == 404) {
         // User no longer has access to this conversation (removed from group)
-        debugPrint("User removed from conversation $conversationId");
+        printData(
+          title: "User removed from conversation",
+          data: conversationId,
+        );
         final index = conversations.indexWhere((c) => c.id == conversationId);
         if (index != -1) {
           conversations.removeAt(index);
-          debugPrint("Removed conversation $conversationId from list");
+          printData(
+            title: "Removed conversation from list",
+            data: conversationId,
+          );
         }
       }
     } catch (e) {
-      debugPrint("_updateSingleConversation error: $e");
+      printData(title: "_updateSingleConversation error:", data: e, e: true);
     }
   }
 
@@ -576,7 +955,54 @@ class ChatPro extends ChangeNotifier {
       (c) => c.id.toString() == conversationId.toString(),
     );
 
-    if (convoIndex == -1) return;
+    printData(
+      title: "_handleRealtimeChatListMessage",
+      data:
+          "type=${data['type']} convoId=$conversationId convoIndex=$convoIndex totalConvos=${conversations.length}",
+    );
+
+    if (convoIndex == -1) {
+      // If the conversation is not in the list but the payload provides it, add it
+      if (data['conversation'] != null) {
+        try {
+          final newChat = ChatConversation.fromJson(data['conversation']);
+          final latestMessage = ChatLatestMessage.fromJson(data);
+
+          final updatedNewChat = ChatConversation(
+            id: newChat.id,
+            type: newChat.type,
+            title: newChat.title,
+            participants: newChat.participants,
+            latestMessage: latestMessage,
+            unreadCount: senderId.toString() == currentUserId ? 0 : 1,
+            updatedAt: DateTime.now(),
+            isDefault: newChat.isDefault,
+            image: newChat.image,
+          );
+
+          conversations.insert(0, updatedNewChat);
+
+          if (senderId.toString() != currentUserId) {
+            totalUnreadCount = totalUnreadCount + 1;
+            NotificationService.instance.showChatNotification(
+              title: "New message from ${latestMessage.userName ?? 'User'}",
+              body: latestMessage.message,
+              id: latestMessage.id,
+            );
+          }
+
+          _recomputeTotalUnreadFromList();
+          notifyListeners();
+        } catch (e) {
+          printData(
+            title: "Error adding unknown conversation from chat list message",
+            data: e,
+            e: true,
+          );
+        }
+      }
+      return;
+    }
 
     final oldConversation = conversations[convoIndex];
     final latestMessage = ChatLatestMessage.fromJson(data);
@@ -649,7 +1075,7 @@ class ChatPro extends ChangeNotifier {
       }
       final decoded = jsonDecode(res.body);
       totalUnreadCount = decoded['total_unread_count'] ?? 0;
-      debugPrint("totalUnreadCount: $totalUnreadCount");
+      printData(title: "totalUnreadCount:", data: totalUnreadCount);
       final List list = decoded['data'] ?? [];
 
       conversations
@@ -665,7 +1091,7 @@ class ChatPro extends ChangeNotifier {
 
       _recomputeTotalUnreadFromList();
     } catch (e) {
-      debugPrint("loadConversations error: $e");
+      printData(title: "loadConversations error:", data: e, e: true);
     } finally {
       Loaders.hide();
       notifyListeners();
@@ -680,7 +1106,7 @@ class ChatPro extends ChangeNotifier {
       totalUnreadCount = parsed;
       notifyListeners();
     } catch (e) {
-      debugPrint("_handleUnreadCountUpdated error: $e");
+      printData(title: "_handleUnreadCountUpdated error", data: e, e: true);
     }
   }
 
@@ -708,7 +1134,7 @@ class ChatPro extends ChangeNotifier {
         ),
         headers: await apiHeaders(),
       );
-      debugPrint("uri: ${res.request!.url}");
+      printData(title: "Uri", data: res.request!.url);
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body);
         // Try to read last_page from API meta if caller didn't provide it
@@ -724,12 +1150,14 @@ class ChatPro extends ChangeNotifier {
         _currentPage++;
         // check if more pages exist
         _hasMore = _currentPage <= metaLastPage;
-        debugPrint(
-          'currentPage $_currentPage lastPage $metaLastPage hasMore $_hasMore',
+        printData(
+          title: "Pagination",
+          data:
+              'currentPage $_currentPage lastPage $metaLastPage hasMore $_hasMore',
         );
       }
     } catch (e) {
-      debugPrint("fetchMessages error: $e");
+      printData(title: "fetchMessages error", data: e, e: true);
     } finally {
       _isLoadingMore = false;
       if (!loadMore) Loaders.hide();
@@ -766,8 +1194,8 @@ class ChatPro extends ChangeNotifier {
         ),
         headers: await apiHeaders(),
       );
-      debugPrint("Search URI: ${res.request!.url}");
-      debugPrint("Search Response: ${res.body}");
+      printData(title: "Search URI", data: res.request!.url);
+      printData(title: "Search Response", data: res.body);
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body);
         if (decoded['success'] == true) {
@@ -780,11 +1208,11 @@ class ChatPro extends ChangeNotifier {
           searchTotalResults = meta?['total'] ?? data.length;
           searchCurrentPage = meta?['current_page'] ?? 1;
           searchLastPage = meta?['last_page'] ?? 1;
-          debugPrint("Search found: $searchTotalResults results");
+          printData(title: "Search found", data: "$searchTotalResults results");
         }
       }
     } catch (e) {
-      debugPrint("searchMessages error: $e");
+      printData(title: "searchMessages error", data: e, e: true);
     } finally {
       notifyListeners();
     }
@@ -931,8 +1359,9 @@ class ChatPro extends ChangeNotifier {
         headers: await apiHeaders(),
         body: jsonEncode(body),
       );
+      printData(title: "📤 MESSAGE SENT (API):", data: body);
     } catch (e) {
-      debugPrint("sendMessage error: $e");
+      printData(title: "sendMessage error", data: e, e: true);
     }
   }
 
@@ -962,8 +1391,8 @@ class ChatPro extends ChangeNotifier {
         headers: await apiHeaders(),
         body: jsonEncode({"is_typing": isTyping ? "true" : "false"}),
       );
-      debugPrint("Typing status sent: $isTyping");
-      debugPrint("uri: ${res.request!.url}");
+      printData(title: "Typing status sent", data: isTyping);
+      printData(title: "Uri", data: res.request!.url);
 
       if (res.statusCode != 200) {
         throw Exception("HTTP ${res.statusCode}");
@@ -990,12 +1419,16 @@ class ChatPro extends ChangeNotifier {
           _recomputeTotalUnreadFromList();
           notifyListeners();
         }
-        debugPrint("Conversation $conversationId marked as read");
+        printData(title: "Marked as read", data: conversationId);
       } else {
-        debugPrint("Failed to mark as read (${res.statusCode}): ${res.body}");
+        printData(
+          title: "Failed to mark as read",
+          data: "${res.statusCode}: ${res.body}",
+          e: true,
+        );
       }
     } catch (e) {
-      debugPrint(" markConversationAsRead error: $e");
+      printData(title: "markConversationAsRead error", data: e, e: true);
     }
   }
 
@@ -1034,6 +1467,32 @@ class ChatPro extends ChangeNotifier {
       final response = await http.Response.fromStream(streamedResponse);
       final data = jsonDecode(response.body);
       if (data['success'] == true) {
+        // ✅ Immediately inject the new group conversation into the chat list
+        // so it appears live without waiting for a Reverb event
+        try {
+          final raw = data['data'];
+          if (raw != null) {
+            final newConvo = ChatConversation.fromJson(
+              raw is Map<String, dynamic>
+                  ? raw
+                  : raw['conversation'] as Map<String, dynamic>,
+            );
+            final existingIndex = conversations.indexWhere(
+              (c) => c.id == newConvo.id,
+            );
+            if (existingIndex == -1) {
+              conversations.insert(0, newConvo);
+            } else {
+              conversations[existingIndex] = newConvo;
+            }
+          }
+        } catch (e) {
+          printData(
+            title: "createGroup - parse new conversation error",
+            data: e,
+            e: true,
+          );
+        }
         clearGroupCreationState();
         return true;
       } else {
@@ -1042,7 +1501,7 @@ class ChatPro extends ChangeNotifier {
       }
     } catch (e) {
       errorMessage = 'Network error';
-      debugPrint('createGroup error: $e');
+      printData(title: "createGroup error", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -1062,7 +1521,7 @@ class ChatPro extends ChangeNotifier {
       final url = Uri.parse(
         '${ApiRoutes.baseUrl}chat/conversations/$conversationId/update',
       );
-      debugPrint("URL: $url");
+      printData(title: "URL", data: url);
       final request = http.MultipartRequest('POST', url);
       final headers = await apiHeaders();
       request.headers.addAll(headers);
@@ -1070,7 +1529,7 @@ class ChatPro extends ChangeNotifier {
       for (int i = 0; i < userIds.length; i++) {
         request.fields['user_ids[$i]'] = userIds[i].toString();
       }
-      debugPrint("request.fields: ${request.fields}");
+      printData(title: "request.fields", data: request.fields);
       if (image != null) {
         request.files.add(
           await http.MultipartFile.fromPath('image', image.path),
@@ -1079,7 +1538,7 @@ class ChatPro extends ChangeNotifier {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
       final data = jsonDecode(response.body);
-      debugPrint("data: $data");
+      printData(title: "data", data: data);
       if (data['success'] == true) {
         // If API returns updated group data, update in-memory state
         try {
@@ -1122,7 +1581,7 @@ class ChatPro extends ChangeNotifier {
           }
         } catch (e) {
           showToast(message: data['message'] ?? 'Failed to update group');
-          debugPrint('updateGroup: failed to apply returned data: $e');
+          printData(title: "updateGroup error", data: e, e: true);
         }
         clearGroupCreationState();
         notifyListeners();
@@ -1134,7 +1593,7 @@ class ChatPro extends ChangeNotifier {
       }
     } catch (e) {
       errorMessage = 'Network error';
-      debugPrint('updateGroup error: $e');
+      printData(title: "updateGroup error", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -1151,9 +1610,9 @@ class ChatPro extends ChangeNotifier {
         Uri.parse("${ApiRoutes.baseUrl}chat/conversations/$conversationId"),
         headers: await apiHeaders(),
       );
-      debugPrint("uri: ${res.request!.url}");
+      printData(title: "Uri", data: res.request!.url);
       final data = jsonDecode(res.body);
-      debugPrint("data: $data");
+      printData(title: "data", data: data);
 
       if (data['success'] == true && data['data'] != null) {
         currentGroup = GroupDetail.fromJson(data['data']);
@@ -1170,6 +1629,39 @@ class ChatPro extends ChangeNotifier {
               ),
             ),
           );
+
+        // Update the conversation in the list so the ChatWindow header reflects changes
+        final index = conversations.indexWhere((c) => c.id == conversationId);
+        if (index != -1) {
+          final existing = conversations[index];
+          final updatedParticipants = currentGroup!.participants
+              .map(
+                (p) => ChatParticipant(
+                  id: p.id,
+                  name: p.name,
+                  lastName: p.lastName,
+                  username:
+                      p.name, // Fallback since it's not in GroupParticipant
+                  image: p.image,
+                  isOnline: p.isOnline,
+                  phoneNumbers: [], // Fallback
+                ),
+              )
+              .toList();
+
+          conversations[index] = ChatConversation(
+            id: existing.id,
+            type: existing.type,
+            title: currentGroup!.title, // Updated title
+            participants: updatedParticipants, // Updated participants
+            latestMessage: existing.latestMessage,
+            unreadCount: existing.unreadCount,
+            updatedAt: existing.updatedAt,
+            isDefault: existing.isDefault,
+            image: currentGroup!.image ?? '', // Updated image
+          );
+        }
+
         notifyListeners();
         return currentGroup;
       }
@@ -1190,11 +1682,11 @@ class ChatPro extends ChangeNotifier {
       final url = Uri.parse(
         '${ApiRoutes.baseUrl}chat/users/search?query=$query&include_groups=$includeGroups',
       );
-      debugPrint("URL: $url");
+      printData(title: "URL", data: url);
       final response = await http.get(url, headers: await apiHeaders());
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        debugPrint("data: $data");
+        printData(title: "data", data: data);
         if (data['success'] == true) {
           searchResults = (data['data'] as List)
               .map((e) => SearchUsers.fromJson(e))
@@ -1229,9 +1721,9 @@ class ChatPro extends ChangeNotifier {
               "${ApiRoutes.baseUrl}chat/users/$id?conversationId=$conversationId",
             )
           : Uri.parse("${ApiRoutes.baseUrl}chat/users/$id");
-      debugPrint("Fetching profile from: $uri");
+      printData(title: "Fetching profile from", data: uri);
       final res = await http.get(uri, headers: await apiHeaders());
-      debugPrint("uri: ${res.request!.url}");
+      printData(title: "Uri", data: res.request!.url);
       if (res.statusCode == 200) {
         final jsonResponse = json.decode(res.body);
         final profileResponse = ProfileResponse.fromJson(jsonResponse);
@@ -1329,7 +1821,7 @@ class ChatPro extends ChangeNotifier {
     try {
       final url = Uri.parse('${ApiRoutes.baseUrl}chat/conversations');
       final request = http.MultipartRequest('POST', url);
-      debugPrint('urlcreateConvId: $url');
+      printData(title: "urlcreateConvId", data: url);
       final headers = await apiHeaders();
       request.headers.addAll(headers);
       request.fields['type'] = type;
@@ -1344,12 +1836,12 @@ class ChatPro extends ChangeNotifier {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
       final data = jsonDecode(response.body);
-      debugPrint('datacreateConvId: $data');
+      printData(title: "datacreateConvId", data: data);
       if (data['success'] == true) {
         final convData = data['data'];
         final conv = ChatConversation.fromJson(convData);
         conversations.insert(0, conv);
-        debugPrint("CONVvvvvvvvvvvvvvvvvvvv ID: ${conv.id}");
+        printData(title: "CONV ID", data: conv.id);
         return conv.id;
       } else {
         errorMessage = data['message'] ?? 'Failed to create';
@@ -1357,7 +1849,7 @@ class ChatPro extends ChangeNotifier {
       }
     } catch (e) {
       errorMessage = 'Network error';
-      debugPrint('create error: $e');
+      printData(title: "create error", data: e, e: true);
       return null;
     } finally {
       Loaders.hide();
@@ -1456,21 +1948,24 @@ class ChatPro extends ChangeNotifier {
           contentType: MediaType('audio', 'mpeg'),
         ),
       );
-      debugPrint("Forwarding voice message...");
+      printData(title: "Forwarding voice message", data: "");
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-      debugPrint("Forward voice response: ${response.statusCode}");
-      debugPrint("Forward voice response body: ${response.body}");
+      printData(title: "Forward voice response", data: response.statusCode);
+      printData(title: "Forward voice response body", data: response.body);
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        debugPrint("Forward voice data received: $data");
+        printData(title: "Forward voice data received", data: data);
         if (data['success'] == true && data['data'] != null) {
           // Replace temp message with server response
           final realMessage = ChatMessage.fromJson(data['data'], currentUserId);
-          debugPrint("Real message audioUrl: ${realMessage.audioUrl}");
-          debugPrint("Real message type: ${realMessage.type}");
-          debugPrint("Real message duration: ${realMessage.audioDuration}");
-          debugPrint("Real message: ${data['data']}");
+          printData(title: "Real message audioUrl", data: realMessage.audioUrl);
+          printData(title: "Real message type", data: realMessage.type);
+          printData(
+            title: "Real message duration",
+            data: realMessage.audioDuration,
+          );
+          printData(title: "Real message value", data: data['data']);
           final msgIndex = messages.indexWhere((m) => m.id == tempMessage.id);
           if (msgIndex != -1) {
             messages[msgIndex] = realMessage;
@@ -1484,7 +1979,7 @@ class ChatPro extends ChangeNotifier {
         messages.removeWhere((m) => m.id == tempMessage.id);
       }
     } catch (e) {
-      debugPrint('Forward voice error: $e');
+      printData(title: "Forward voice error", data: e, e: true);
       messages.removeWhere((m) => m.id == tempMessage.id);
       showToast(message: "Error forwarding voice message");
     } finally {
@@ -1504,7 +1999,7 @@ class ChatPro extends ChangeNotifier {
       isRecordingVoice = true;
       notifyListeners();
     } catch (e) {
-      debugPrint("Error starting recorder: $e");
+      printData(title: "Error starting recorder", data: e, e: true);
       isRecordingVoice = false;
       notifyListeners();
     }
@@ -1533,7 +2028,7 @@ class ChatPro extends ChangeNotifier {
         );
       }
     } catch (e) {
-      debugPrint("Error stopping recorder: $e");
+      printData(title: "Error stopping recorder", data: e, e: true);
       isRecordingVoice = false;
       notifyListeners();
     }
@@ -1546,7 +2041,7 @@ class ChatPro extends ChangeNotifier {
       await _voiceRecorder.stop();
       // Optional: Delete the file here if your service saves it
     } catch (e) {
-      debugPrint("Error canceling recorder: $e");
+      printData(title: "Error canceling recorder", data: e, e: true);
     } finally {
       isRecordingVoice = false;
       notifyListeners();
@@ -1585,7 +2080,11 @@ class ChatPro extends ChangeNotifier {
     try {
       final fileOnDisk = File(filePath);
       if (!await fileOnDisk.exists()) {
-        debugPrint("Error: Voice file not found at $filePath");
+        printData(
+          title: "Error: Voice file not found",
+          data: filePath,
+          e: true,
+        );
         // Remove the temp message if file missing
         messages.removeWhere((m) => m.id == tempId);
         notifyListeners();
@@ -1606,20 +2105,23 @@ class ChatPro extends ChangeNotifier {
         contentType: MediaType('audio', 'mp4'),
       );
       request.files.add(multipartFile);
-      debugPrint("SENDING VOICE MESSAGE...");
+      printData(title: "SENDING VOICE MESSAGE", data: "");
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-      debugPrint("SERVER RESPONSE: ${response.statusCode}");
+      printData(title: "SERVER RESPONSE", data: response.statusCode);
       if (response.statusCode == 200 || response.statusCode == 201) {
         // 3. Success!
         // Ideally, parse the response to get the REAL server ID and remote URL.
         final data = jsonDecode(response.body);
-        debugPrint("Voice upload response: $data");
+        printData(title: "Voice upload response", data: data);
         if (data['success'] == true && data['data'] != null) {
           // Parse the real message from server
           final realMessage = ChatMessage.fromJson(data['data'], currentUserId);
-          debugPrint("Uploaded voice audioUrl: ${realMessage.audioUrl}");
-          debugPrint("Uploaded voice type: ${realMessage.type}");
+          printData(
+            title: "Uploaded voice audioUrl",
+            data: realMessage.audioUrl,
+          );
+          printData(title: "Uploaded voice type", data: realMessage.type);
           // Find the temp message index
           final index = messages.indexWhere((m) => m.id == tempId);
           if (index != -1) {
@@ -1635,12 +2137,12 @@ class ChatPro extends ChangeNotifier {
         }
       } else {
         // 4. Upload Failed: Remove the temp message so user knows it failed
-        debugPrint("Upload failed");
+        printData(title: "Upload failed", data: "", e: true);
         messages.removeWhere((m) => m.id == tempId);
         showToast(message: "Failed to send voice note");
       }
     } catch (e) {
-      debugPrint('Voice send exception: $e');
+      printData(title: "Voice send exception", data: e, e: true);
       // Remove temp message on error
       messages.removeWhere((m) => m.id == tempId);
     }
@@ -1659,13 +2161,16 @@ class ChatPro extends ChangeNotifier {
     }
     try {
       final url = Uri.parse("${ApiRoutes.baseUrl}chat/messages/$messageId");
-      debugPrint("Edit mesg url: $url");
+      printData(title: "Edit mesg url", data: url);
       final res = await http.put(
         url,
         headers: await apiHeaders(),
         body: jsonEncode({"message": newMessage}),
       );
-      debugPrint("Edit response: ${res.statusCode} - ${res.body}");
+      printData(
+        title: "Edit response",
+        data: "${res.statusCode} - ${res.body}",
+      );
       if (res.statusCode == 200) {
         showToast(message: "Message edited successfully");
       } else {
@@ -1677,10 +2182,10 @@ class ChatPro extends ChangeNotifier {
           }
         } catch (_) {}
         showToast(message: backendMsg);
-        debugPrint("Failed to edit message");
+        printData(title: "Failed to edit message", data: "", e: true);
       }
     } catch (e) {
-      debugPrint("editMessage error: $e");
+      printData(title: "editMessage error", data: e, e: true);
     } finally {
       Loaders.hide();
     }
@@ -1701,7 +2206,7 @@ class ChatPro extends ChangeNotifier {
     try {
       final url = Uri.parse("${ApiRoutes.baseUrl}chat/messages/$messageId");
       final res = await http.delete(url, headers: await apiHeaders());
-      debugPrint("Delete response: ${res.statusCode}");
+      printData(title: "Delete response", data: res.statusCode);
       if (res.statusCode == 200 || res.statusCode == 204) {
         showToast(message: "Message deleted successfully");
       } else {
@@ -1712,7 +2217,7 @@ class ChatPro extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("deleteMessage error: $e");
+      printData(title: "deleteMessage error", data: e, e: true);
       // Revert on error
       if (deletedMessage != null && index != -1) {
         messages.insert(index, deletedMessage);
@@ -1724,15 +2229,30 @@ class ChatPro extends ChangeNotifier {
   }
 
   /// ---------------- FETCH TWILIO NUMBERS ----------------
-  Future<void> fetchTwilioNumbers() async {
+  Future<void> fetchTwilioNumbers({
+    String? phone,
+    String? client,
+    String? contact,
+    String? account,
+  }) async {
     isTwilioLoading = true;
     twilioHasError = false;
     notifyListeners();
     try {
-      final res = await http.get(
-        Uri.parse("${ApiRoutes.baseUrl}${ApiRoutes.twilioNumbers}"),
-        headers: await apiHeaders(),
-      );
+      final Map<String, String> queryParams = {};
+      if (phone != null && phone.isNotEmpty) queryParams['phone'] = phone;
+      if (client != null && client.isNotEmpty) queryParams['client'] = client;
+      if (contact != null && contact.isNotEmpty) {
+        queryParams['contact'] = contact;
+      }
+      if (account != null && account.isNotEmpty) {
+        queryParams['account'] = account;
+      }
+      final uri = Uri.parse(
+        "${ApiRoutes.baseUrl}${ApiRoutes.twilioNumbers}",
+      ).replace(queryParameters: queryParams);
+
+      final res = await http.get(uri, headers: await apiHeaders());
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true && data['data'] != null) {
@@ -1759,7 +2279,7 @@ class ChatPro extends ChangeNotifier {
       twilioHasError = true;
       isTwilioLoading = false;
       showToast(message: 'Failed to fetch Twilio numbers');
-      debugPrint('Error fetching Twilio numbers: $e');
+      printData(title: "Error fetching Twilio numbers", data: e, e: true);
     }
     notifyListeners();
   }
@@ -1800,7 +2320,7 @@ class ChatPro extends ChangeNotifier {
       twilioClientsHasError = true;
       isTwilioClientsLoading = false;
       showToast(message: 'Failed to fetch clients');
-      debugPrint('Error fetching Twilio clients: $e');
+      printData(title: "Error fetching Twilio clients", data: e, e: true);
     }
     notifyListeners();
   }
@@ -1810,23 +2330,21 @@ class ChatPro extends ChangeNotifier {
     isTwilioStaffLoading = true;
     twilioStaffHasError = false;
     notifyListeners();
-
     try {
       final res = await http.get(
         Uri.parse("${ApiRoutes.baseUrl}${ApiRoutes.twilioStaff}"),
         headers: await apiHeaders(),
       );
-
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        debugPrint("data: $data");
+        printData(title: "data", data: data);
         if (data['success'] == true && data['data'] != null) {
           final List<dynamic> staffData = data['data']['staff'] ?? [];
           twilioStaff = staffData
               .map((json) => AssignedAccount.fromJson(json))
               .toList();
           twilioStaffRevision++;
-          debugPrint("twilioStaff: $twilioStaff");
+          printData(title: "twilioStaff", data: twilioStaff);
           isTwilioStaffLoading = false;
           twilioStaffHasError = false;
         } else {
@@ -1843,9 +2361,33 @@ class ChatPro extends ChangeNotifier {
       twilioStaffHasError = true;
       isTwilioStaffLoading = false;
       showToast(message: 'Failed to fetch staff');
-      debugPrint('Error fetching twilio staff: $e');
+      printData(title: "Error fetching twilio staff", data: e, e: true);
     }
     notifyListeners();
+  }
+
+  Future<List<AssignedAccount>> fetchStaffByClient({int? clientId}) async {
+    try {
+      var uri = Uri.parse("${ApiRoutes.baseUrl}${ApiRoutes.twilioStaff}");
+      if (clientId != null) {
+        uri = uri.replace(queryParameters: {"client_id": clientId.toString()});
+      }
+
+      final res = await http.get(uri, headers: await apiHeaders());
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && data['data'] != null) {
+          final List<dynamic> staffData = data['data']['staff'] ?? [];
+          return staffData
+              .map((json) => AssignedAccount.fromJson(json))
+              .toList();
+        }
+      }
+    } catch (e) {
+      printData(title: "Error fetching staff by client", data: e, e: true);
+    }
+    return [];
   }
 
   /// ---------------- UPDATE TWILIO NUMBER ASSIGNMENTS ----------------
@@ -1859,31 +2401,31 @@ class ChatPro extends ChangeNotifier {
       final url = Uri.parse(
         "${ApiRoutes.baseUrl}${ApiRoutes.twilioNumbers}/$numberId",
       );
-      debugPrint('updating Twilio number: $url');
+      printData(title: "updating Twilio number", data: url);
       final payload = {
         "client_id": clientId,
         "contact_ids": contactIds,
         "account_ids": accountIds,
       };
-      debugPrint('updating Twilio payload: $payload');
+      printData(title: "updating Twilio payload", data: payload);
 
       final res = await http.put(
         url,
         headers: await apiHeaders(),
         body: jsonEncode(payload),
       );
-      debugPrint('updating Twilio body: ${res.body}');
+      printData(title: "updating Twilio body", data: res.body);
 
       if (res.statusCode == 200 || res.statusCode == 204) {
         return true;
       }
 
       final data = jsonDecode(res.body);
-      debugPrint('updating Twilio number: $data');
+      printData(title: "updating Twilio number", data: data);
       showToast(message: data['message'] ?? 'Failed to update number');
       return false;
     } catch (e) {
-      debugPrint('Error updating Twilio number: $e');
+      printData(title: "Error updating Twilio number", data: e, e: true);
       showToast(message: 'Failed to update number');
       return false;
     }

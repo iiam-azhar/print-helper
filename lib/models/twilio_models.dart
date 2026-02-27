@@ -195,3 +195,37 @@ class TwilioContact {
     'clientId': clientId,
   };
 }
+
+class TwilioApiCredentials {
+  final int id;
+  final String accountSid;
+  final String apiKeySid;
+  final String apiKeySecret;
+  final String twimlAppSid;
+
+  TwilioApiCredentials({
+    required this.id,
+    required this.accountSid,
+    required this.apiKeySid,
+    required this.apiKeySecret,
+    required this.twimlAppSid,
+  });
+
+  factory TwilioApiCredentials.fromJson(Map<String, dynamic> json) {
+    return TwilioApiCredentials(
+      id: json['id'] ?? 0,
+      accountSid: json['account_sid'] ?? '',
+      apiKeySid: json['api_key_sid'] ?? '',
+      apiKeySecret: json['api_key_secret'] ?? '',
+      twimlAppSid: json['twiml_app_sid'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'account_sid': accountSid,
+    'api_key_sid': apiKeySid,
+    'api_key_secret': apiKeySecret,
+    'twiml_app_sid': twimlAppSid,
+  };
+}

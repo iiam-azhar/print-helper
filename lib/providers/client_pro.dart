@@ -37,7 +37,7 @@ class ClientPro extends ChangeNotifier {
       _selectedClient = _clients.firstWhere((c) => c.id == clientId);
       notifyListeners();
     } catch (e) {
-      debugPrint("Client with id $clientId not found");
+      printData(title: "Client not found with id", data: clientId, e: true);
     }
   }
 
@@ -57,7 +57,7 @@ class ClientPro extends ChangeNotifier {
           .toList();
       notifyListeners();
     } catch (e) {
-      debugPrint("State API Error: $e");
+      printData(title: "State API Error:", data: e, e: true);
     } finally {
       Loaders.hide();
     }
@@ -76,7 +76,7 @@ class ClientPro extends ChangeNotifier {
       staffList = list.map((e) => StaffModel.fromJson(e)).toList();
       notifyListeners();
     } catch (e) {
-      debugPrint("Staff API error: $e");
+      printData(title: "Staff API error:", data: e, e: true);
     } finally {
       Loaders.hide();
     }
@@ -100,6 +100,7 @@ class ClientPro extends ChangeNotifier {
       isLoadingMore = true;
     } else {
       clientsLoad = true;
+      Loaders.show();
       currentPage = 1;
       _clients.clear();
     }
@@ -131,6 +132,7 @@ class ClientPro extends ChangeNotifier {
       printData(title: "Client Pagination Error", data: "$e\n$st", e: true);
     }
     clientsLoad = false;
+    Loaders.hide();
     isLoadingMore = false;
     notifyListeners();
   }
@@ -232,15 +234,15 @@ class ClientPro extends ChangeNotifier {
       }
       final streamedRes = await request.send();
       final res = await http.Response.fromStream(streamedRes);
-      debugPrint("STATUS: ${res.statusCode}");
-      debugPrint("BODY: ${res.body}");
+      printData(title: "STATUS:", data: res.statusCode);
+      printData(title: "BODY:", data: res.body);
       if (res.statusCode == 200 || res.statusCode == 201) {
         await getClients(ctx: context);
         return true;
       }
       return false;
     } catch (e) {
-      debugPrint("CLIENT CREATE ERROR: $e");
+      printData(title: "CLIENT CREATE ERROR:", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -285,8 +287,8 @@ class ClientPro extends ChangeNotifier {
       request.fields["city"] = city;
       request.fields["zipcode"] = zipcode;
       request.fields["status"] = status.toString();
-      debugPrint("company_type => $companyType");
-      debugPrint("client_rank => $clientRank");
+      printData(title: "company_type =>", data: companyType);
+      printData(title: "client_rank =>", data: clientRank);
       request.fields["company_type"] = '$companyType';
       request.fields["client_rank"] = '$clientRank';
       request.fields["branding_primary_color"] = brandingPrimary;
@@ -302,9 +304,12 @@ class ClientPro extends ChangeNotifier {
         final c = contacts[i];
         if (c.existingId != null) {
           request.fields["contacts[$i][id]"] = c.existingId.toString();
-          debugPrint("Contact $i → Sending existing ID: ${c.existingId}");
+          printData(
+            title: "Contact $i → Sending existing ID:",
+            data: c.existingId,
+          );
         } else {
-          debugPrint("Contact $i → New Contact (no ID)");
+          printData(title: "Contact $i →", data: "New Contact (no ID)");
         }
         request.fields["contacts[$i][name]"] = c.firstName.text.trim();
         request.fields["contacts[$i][last_name]"] = c.lastName.text.trim();
@@ -335,7 +340,10 @@ class ClientPro extends ChangeNotifier {
           }
         }
         if (c.image != null) {
-          debugPrint("Contact $i → Uploading new image: ${c.image!.path}");
+          printData(
+            title: "Contact $i → Uploading new image:",
+            data: c.image!.path,
+          );
           request.files.add(
             await http.MultipartFile.fromPath(
               "contacts[$i][image]",
@@ -343,7 +351,7 @@ class ClientPro extends ChangeNotifier {
             ),
           );
         } else {
-          debugPrint("Contact $i → No new image uploaded");
+          printData(title: "Contact $i →", data: "No new image uploaded");
         }
       }
       if (clientImage != null) {
@@ -361,8 +369,8 @@ class ClientPro extends ChangeNotifier {
       }
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
-      debugPrint("UPDATE CLIENT STATUS: ${response.statusCode}");
-      debugPrint("UPDATE CLIENT BODY: ${response.body}");
+      printData(title: "UPDATE CLIENT STATUS:", data: response.statusCode);
+      printData(title: "UPDATE CLIENT BODY:", data: response.body);
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
         if (body["success"] == true || body["success"] == "true") {
@@ -373,7 +381,7 @@ class ClientPro extends ChangeNotifier {
       }
       return false;
     } catch (e, st) {
-      debugPrint("UPDATE CLIENT ERROR: $e\n$st");
+      printData(title: "UPDATE CLIENT ERROR:", data: "$e\n$st", e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -388,7 +396,7 @@ class ClientPro extends ChangeNotifier {
       final url = Uri.parse(
         "${ApiRoutes.baseUrl}${ApiRoutes.clients}/$clientId",
       );
-      debugPrint("CLIENT URL: $url");
+      printData(title: "CLIENT URL:", data: url);
       final response = await http.get(
         url,
         headers: {
@@ -396,17 +404,17 @@ class ClientPro extends ChangeNotifier {
           "Accept": "application/json",
         },
       );
-      debugPrint("STATUS CODE: ${response.statusCode}");
+      printData(title: "STATUS CODE:", data: response.statusCode);
       if (response.statusCode == 200) {
         final jsonBody = jsonDecode(response.body);
-        debugPrint("CLIENT BODY: $jsonBody");
+        printData(title: "CLIENT BODY:", data: jsonBody);
         return EditClientModel.fromJson(jsonBody['data']);
       } else {
-        debugPrint("Client Fetch Error: ${response.body}");
+        printData(title: "Client Fetch Error:", data: response.body, e: true);
         return null;
       }
     } catch (e, st) {
-      debugPrint("ERROR in getClientDetails: $e $st");
+      printData(title: "ERROR in getClientDetails:", data: "$e $st", e: true);
       return null;
     } finally {
       Loaders.hide();
@@ -439,7 +447,7 @@ class ClientPro extends ChangeNotifier {
         showToast(message: response["message"] ?? "Status update failed");
       }
     } catch (e) {
-      debugPrint("TOGGLE ERROR: $e");
+      printData(title: "TOGGLE ERROR:", data: e, e: true);
     } finally {
       Loaders.hide();
     }
@@ -478,7 +486,7 @@ class ClientPro extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint("Toggle Contact Error: $e");
+      printData(title: "Toggle Contact Error:", data: e, e: true);
     } finally {
       Loaders.hide();
     }
@@ -501,7 +509,7 @@ class ClientPro extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      debugPrint("DELETE ERROR: $e");
+      printData(title: "DELETE ERROR:", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();

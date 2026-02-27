@@ -5,16 +5,19 @@ import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:print_helper/admin/chat/view/components/audio_cache.dart';
 import 'package:print_helper/admin/chat/view/components/audio_manager.dart';
+import 'package:print_helper/admin/chat/view/components/waveform_cache.dart';
 import 'package:print_helper/widgets/toasts.dart';
 import 'package:print_helper/widgets/loaders.dart';
 
 import '../../../../widgets/spacers.dart';
+import '../../../../utils/console_util.dart';
 
 class VoiceMessageBubbleUI extends StatefulWidget {
   final String path;
   final int duration;
   final bool isMe;
-  final bool isUploading; 
+  final bool isUploading;
+  final List<double>? voiceWaveform;
 
   const VoiceMessageBubbleUI({
     super.key,
@@ -22,6 +25,7 @@ class VoiceMessageBubbleUI extends StatefulWidget {
     required this.duration,
     required this.isMe,
     this.isUploading = false,
+    this.voiceWaveform,
   });
 
   @override
@@ -37,6 +41,7 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
   bool _isMePlaying = false; // Is THIS specific bubble playing?
   Duration _currentPosition = Duration.zero;
   bool _isReady = false;
+  List<double>? _localWaveform;
 
   // 2. Override wantKeepAlive
   @override
@@ -45,6 +50,7 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
   @override
   void initState() {
     super.initState();
+    _localWaveform = widget.voiceWaveform;
     _waveController = PlayerController();
     _initWaveform();
     _listenToGlobalPlayer();
@@ -54,22 +60,44 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
   // ... inside _VoiceMessageBubbleUIState
 
   Future<void> _initWaveform() async {
+    if (_localWaveform != null && _localWaveform!.isNotEmpty) {
+      if (mounted) setState(() => _isReady = true);
+      return; // Skip extraction since we already have the waveform
+    }
+
     try {
+      final cachedWaveform = await WaveformCache.getWaveform(widget.path);
+      if (cachedWaveform != null && cachedWaveform.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _localWaveform = cachedWaveform;
+            _isReady = true;
+          });
+        }
+        return;
+      }
+
       final file = await AudioCacheService.getCachedAudio(widget.path);
       // Safety check before starting heavy async work
       if (!mounted) return;
-      await _waveController.preparePlayer(
-        path: file.path,
-        shouldExtractWaveform: true
-        ,
-        noOfSamples: 50,
-        volume: 1.0,
-      );
+
+      final extractedWaveform = await _waveController.waveformExtraction
+          .extractWaveformData(path: file.path, noOfSamples: 50);
+
+      if (extractedWaveform.isNotEmpty) {
+        await WaveformCache.saveWaveform(widget.path, extractedWaveform);
+      }
+
       if (mounted) {
-        setState(() => _isReady = true);
+        setState(() {
+          _localWaveform = extractedWaveform.isNotEmpty
+              ? extractedWaveform
+              : null;
+          _isReady = true;
+        });
       }
     } catch (e) {
-      debugPrint("Waveform error: $e");
+      printData(title: "Waveform error:", data: e, e: true);
       if (mounted) {
         setState(() => _isReady = false);
       }
@@ -104,41 +132,48 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
         // Handle Completion (Fix for "Codec Released" crash)
         if (state.processingState == ProcessingState.completed && isMyFile) {
           try {
-            // Do NOT use stopPlayer(). Use pausePlayer() + seekTo(0)
-            // This stops the animation but keeps the codec alive for dispose()
-            _waveController.pausePlayer();
-            _waveController.seekTo(0);
+            if (_localWaveform == null || _localWaveform!.isEmpty) {
+              _waveController.pausePlayer();
+              _waveController.seekTo(0);
+            }
           } catch (e) {
-            debugPrint("Error on completion: $e");
+            printData(title: "Error on completion:", data: e, e: true);
           }
           if (mounted) {
-            setState(() => _isMePlaying = false);
+            setState(() {
+              _isMePlaying = false;
+              _currentPosition = Duration.zero;
+            });
           }
           return;
         }
         // Handle Play/Pause
         if (isPlaying && !_isMePlaying) {
           try {
-            _waveController.startPlayer(); // Removed finishMode
+            if (_localWaveform == null || _localWaveform!.isEmpty) {
+              _waveController.startPlayer();
+            }
             if (mounted) {
               setState(() => _isMePlaying = true);
             }
           } catch (e) {
-            debugPrint("Error starting player: $e");
+            printData(title: "Error starting player:", data: e, e: true);
           }
         } else if (!isPlaying && _isMePlaying) {
           try {
-            _waveController.pausePlayer();
+            if (_localWaveform == null || _localWaveform!.isEmpty) {
+              _waveController.pausePlayer();
+            }
             if (mounted) {
               setState(() => _isMePlaying = false);
             }
           } catch (e) {
-            debugPrint("Error pausing player: $e");
+            printData(title: "Error pausing player:", data: e, e: true);
           }
         }
       },
       onError: (e) {
-        debugPrint("PlayerState stream error: $e");
+        printData(title: "PlayerState stream error:", data: e, e: true);
       },
     );
 
@@ -148,17 +183,26 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
         // Only update position if it's MY file
         if (VoiceAudioManager.instance.currentPath == widget.path) {
           try {
-            _waveController.seekTo(pos.inMilliseconds);
+            if (_localWaveform == null || _localWaveform!.isEmpty) {
+              _waveController.seekTo(pos.inMilliseconds);
+            }
             if (mounted) {
-              setState(() => _currentPosition = pos);
+              setState(() {
+                // If the manager reset the position to zero, ensure the visual resets completely
+                if (pos.inMilliseconds <= 100 && !_isMePlaying) {
+                  _currentPosition = Duration.zero;
+                } else {
+                  _currentPosition = pos;
+                }
+              });
             }
           } catch (e) {
-            debugPrint("Error seeking position: $e");
+            printData(title: "Error seeking position:", data: e, e: true);
           }
         }
       },
       onError: (e) {
-        debugPrint("Position stream error: $e");
+        printData(title: "Position stream error:", data: e, e: true);
       },
     );
   }
@@ -174,7 +218,7 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
         await manager.play(widget.path);
       }
     } catch (e) {
-      debugPrint("Toggle error: $e");
+      printData(title: "Toggle error:", data: e, e: true);
     }
   }
 
@@ -184,14 +228,14 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
       final file = await AudioCacheService.downloadAudioToDevice(widget.path);
       Loaders.hide();
       if (file != null) {
-        debugPrint("Downloaded to: ${file.path}");
+        printData(title: "Downloaded to:", data: file.path);
         showToast(message: "Saved to: Download/printhelper/voice record");
       } else {
         showToast(message: "Failed to download voice message");
       }
     } catch (e) {
       Loaders.hide();
-      debugPrint("Download error: $e");
+      printData(title: "Download error:", data: e, e: true);
       showToast(message: "Error: ${e.toString()}");
     }
   }
@@ -243,17 +287,28 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
               Spacers.sbw8(),
               SizedBox(
                 width: 150.w,
-                height: 32, 
-                child: AudioFileWaveforms(
-                  playerController: _waveController,
-                  size: const Size(120, 32),
-                  waveformType: WaveformType.fitWidth,
-                  playerWaveStyle:  PlayerWaveStyle(
-                    fixedWaveColor: Colors.black,
-                    liveWaveColor: Colors.blueAccent,
-                    spacing: 4,
-                  ),
-                ),
+                height: 32,
+                child: _localWaveform != null && _localWaveform!.isNotEmpty
+                    ? CustomPaint(
+                        painter: _StaticWaveformPainter(
+                          waveform: _localWaveform!,
+                          progress: widget.duration > 0
+                              ? (_currentPosition.inMilliseconds /
+                                        (widget.duration * 1000))
+                                    .clamp(0.0, 1.0)
+                              : 0.0,
+                        ),
+                      )
+                    : AudioFileWaveforms(
+                        playerController: _waveController,
+                        size: const Size(120, 32),
+                        waveformType: WaveformType.fitWidth,
+                        playerWaveStyle: PlayerWaveStyle(
+                          fixedWaveColor: Colors.black,
+                          liveWaveColor: Colors.blueAccent,
+                          spacing: 4,
+                        ),
+                      ),
               ),
               IconButton(
                 onPressed: _isReady ? _downloadVoice : null,
@@ -276,5 +331,55 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
         ],
       ),
     );
+  }
+}
+
+class _StaticWaveformPainter extends CustomPainter {
+  final List<double> waveform;
+  final double progress;
+
+  _StaticWaveformPainter({required this.waveform, required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (waveform.isEmpty) return;
+
+    final activePaint = Paint()
+      ..color = Colors.blueAccent
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+
+    final inactivePaint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+
+    final spacing = size.width / waveform.length;
+    double maxVal = waveform.reduce((a, b) => a > b ? a : b);
+    if (maxVal == 0) maxVal = 1;
+
+    for (int i = 0; i < waveform.length; i++) {
+      final x = i * spacing + (spacing / 2);
+      final normalizedHeight = (waveform[i] / maxVal) * size.height;
+      final barHeight = normalizedHeight < 2.0 ? 2.0 : normalizedHeight;
+      final yOffset = (size.height - barHeight) / 2;
+
+      final paint =
+          (progress > 0.0 &&
+              progress < 1.0 &&
+              (i / waveform.length) <= progress)
+          ? activePaint
+          : inactivePaint;
+      canvas.drawLine(
+        Offset(x, yOffset),
+        Offset(x, yOffset + barHeight),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StaticWaveformPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.waveform != waveform;
   }
 }

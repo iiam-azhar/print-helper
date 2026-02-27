@@ -26,6 +26,18 @@ class GroupDetail {
   });
 
   factory GroupDetail.fromJson(Map<String, dynamic> json) {
+    final participants = (json['participants'] as List)
+        .map((e) => GroupParticipant.fromJson(e))
+        .toList();
+
+    // Collect admin IDs from top-level array OR from each participant's pivot
+    final topLevelAdminIds = List<int>.from(json['admin_ids'] ?? []);
+    final pivotAdminIds = participants
+        .where((p) => p.isAdmin)
+        .map((p) => p.id)
+        .toList();
+    final allAdminIds = {...topLevelAdminIds, ...pivotAdminIds}.toList();
+
     return GroupDetail(
       id: json['id'],
       title: json['title'],
@@ -33,16 +45,15 @@ class GroupDetail {
       image: json['image'],
       isSystem: json['is_system'] ?? false,
       createdBy: json['created_by'],
-      adminIds: List<int>.from(json['admin_ids'] ?? []),
+      adminIds: allAdminIds,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
-      participants: (json['participants'] as List)
-          .map((e) => GroupParticipant.fromJson(e))
-          .toList(),
+      participants: participants,
       participantsCount: json['participants_count'] ?? 0,
     );
   }
 }
+
 class GroupParticipant {
   final int id;
   final String name;
@@ -57,6 +68,9 @@ class GroupParticipant {
   final bool isOnline;
   final DateTime? lastSeenAt;
 
+  /// True if the API marks this participant as an admin via pivot data
+  final bool isAdmin;
+
   GroupParticipant({
     required this.id,
     required this.name,
@@ -70,9 +84,20 @@ class GroupParticipant {
     required this.role,
     required this.isOnline,
     this.lastSeenAt,
+    this.isAdmin = false,
   });
 
   factory GroupParticipant.fromJson(Map<String, dynamic> json) {
+    // Check pivot object for admin role (Laravel pivot table pattern)
+    final pivot = json['pivot'] as Map<String, dynamic>?;
+    final pivotRole = pivot?['role']?.toString() ?? '';
+    final pivotIsAdmin = pivot?['is_admin'];
+    final isAdmin =
+        pivotRole == 'admin' ||
+        pivotIsAdmin == true ||
+        pivotIsAdmin == 1 ||
+        pivotIsAdmin == '1';
+
     return GroupParticipant(
       id: json['id'],
       name: json['name'],
@@ -88,6 +113,7 @@ class GroupParticipant {
       lastSeenAt: json['last_seen_at'] != null
           ? DateTime.parse(json['last_seen_at'])
           : null,
+      isAdmin: isAdmin,
     );
   }
 

@@ -14,6 +14,7 @@ import '../services/call_device_service.dart';
 import '../services/helpers.dart';
 import '../widgets/loaders.dart';
 import '../widgets/toasts.dart';
+import '../utils/console_util.dart';
 
 class AuthPro extends ChangeNotifier {
   Map<String, String> get headers => {'Content-type': 'application/json'};
@@ -31,7 +32,7 @@ class AuthPro extends ChangeNotifier {
         api: ApiRoutes.login,
         payload: {"username": email, "password": password},
       );
-      debugPrint("LOGIN RESPONSE: $data");
+      printData(title: "LOGIN RESPONSE:", data: data);
       if (data["success"] == true) {
         final loginModel = LoginResponseModel.fromJson(data);
         await saveUserData(loginModel);
@@ -42,8 +43,8 @@ class AuthPro extends ChangeNotifier {
         prefs.setString("role_name", loginModel.user.roleName);
         prefs.setString("cust_client_id", user!.custClientId.toString());
         prefs.setInt("customer_id", user!.customerId);
-        debugPrint("Customer Client ID: ${user!.custClientId}");
-        debugPrint("Customer ID: ${user!.customerId}");
+        printData(title: "Customer Client ID:", data: user!.custClientId);
+        printData(title: "Customer ID:", data: user!.customerId);
         await CallDeviceService.bootstrap(forceRegister: true);
         notifyListeners();
         showToast(message: "Login successful");
@@ -53,7 +54,7 @@ class AuthPro extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      debugPrint("LOGIN ERROR: $e");
+      printData(title: "LOGIN ERROR:", data: e, e: true);
       showToast(message: "Something went wrong");
       return false;
     } finally {
@@ -73,13 +74,13 @@ class AuthPro extends ChangeNotifier {
         api: "${ApiRoutes.switchUser}/$userId",
         headers: {"Authorization": "Bearer $token"},
       );
-      debugPrint("SWITCH USER RESPONSE: $data");
+      printData(title: "SWITCH USER RESPONSE:", data: data);
       if (data["success"] == true) {
         final user = UserModel.fromJson(data["data"]["user"]);
         final token = data["data"]["token"];
         this.user = user;
         this.token = token;
-        debugPrint("USER clientId: ${user.custClientId}");
+        printData(title: "USER clientId:", data: user.custClientId);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString("token", token);
         await prefs.setString("role_name", user.roleName);
@@ -92,7 +93,7 @@ class AuthPro extends ChangeNotifier {
         showToast(message: data["message"] ?? "Switch failed");
       }
     } catch (e) {
-      debugPrint("SWITCH USER ERROR: $e");
+      printData(title: "SWITCH USER ERROR:", data: e, e: true);
       showToast(message: "Something went wrong");
     } finally {
       Loaders.hide();
@@ -183,7 +184,7 @@ class AuthPro extends ChangeNotifier {
         showToast(message: data["message"]);
       }
     } catch (e) {
-      debugPrint("LOGOUT API ERROR: $e");
+      printData(title: "LOGOUT API ERROR:", data: e, e: true);
     }
     Loaders.hide();
     await prefs.remove("token");
@@ -210,7 +211,7 @@ class AuthPro extends ChangeNotifier {
         api: 'auth/forgot-password',
         payload: {"email": email},
       );
-      debugPrint('forgetPassword response: $data');
+      printData(title: "forgetPassword response:", data: data);
       final bool isSuccess =
           data['success'] == true ||
           data['message'] == "OTP has been sent to your email address.";
@@ -223,7 +224,7 @@ class AuthPro extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      debugPrint('FromForgetPassword error: $e');
+      printData(title: "FromForgetPassword error:", data: e, e: true);
       showToast(message: 'Something went wrong');
       return false;
     } finally {
@@ -248,7 +249,7 @@ class AuthPro extends ChangeNotifier {
         api: 'auth/verify-otp?',
         payload: {"email": email, "otp": otp},
       );
-      debugPrint('validateOtpApi Response: $data');
+      printData(title: "validateOtpApi Response:", data: data);
       if (data['message'] ==
               "OTP verified successfully. You can now reset your password." &&
           data['success'] == true) {
@@ -258,7 +259,7 @@ class AuthPro extends ChangeNotifier {
         showToast(message: data["message"]);
       }
     } catch (e) {
-      debugPrint('validateOtpApi Error: $e');
+      printData(title: "validateOtpApi Error:", data: e, e: true);
       showToast(message: "Something went wrong, please try again");
     } finally {
       validateOtp = false;
@@ -284,7 +285,7 @@ class AuthPro extends ChangeNotifier {
           "password_confirmation": password,
         },
       );
-      debugPrint('resetPass Response: $data');
+      printData(title: "resetPass Response:", data: data);
       if (data['message'] == "Password has been reset successfully." &&
           data['success'] == true) {
         isVerify = true;
@@ -292,7 +293,7 @@ class AuthPro extends ChangeNotifier {
         showToast(message: data["message"]);
       }
     } catch (e) {
-      debugPrint('resetPass Error: $e');
+      printData(title: "resetPass Error:", data: e, e: true);
       showToast(message: "Something went wrong, please try again");
     } finally {
       Loaders.hide();

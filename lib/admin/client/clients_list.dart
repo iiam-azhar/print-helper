@@ -82,10 +82,10 @@ class _ClientScreenState extends State<ClientScreen> {
           SafeArea(
             child: Consumer<ClientPro>(
               builder: (context, provider, _) {
-                if (provider.clientsLoad) {
-                  return Center(child: showLoader());
-                }
-                if (provider.clients.isEmpty) {
+                // if (provider.clientsLoad) {
+                //   return Center(child: showLoader());
+                // }
+                if (provider.clients.isEmpty && !provider.clientsLoad) {
                   return Center(
                     child: TextWidget(
                       text: "No clients found.",
@@ -538,7 +538,7 @@ class _ClientScreenState extends State<ClientScreen> {
             Spacers.sbw8(),
             Expanded(
               child: TextWidget(
-                text: "1212 Projects  •  34 Files",
+                text: "0 Projects  •  0 Files",
                 fontWeight: FontWeight.w500,
                 fontSize: 12,
               ),

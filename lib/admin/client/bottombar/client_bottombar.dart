@@ -31,7 +31,6 @@ class _ClientBottomBarState extends State<ClientBottomBar>
     pageNum = widget.pageNum;
     WidgetsBinding.instance.addPostFrameCallback((_) async {});
   }
-
   void _onItemTapped(int index) {
     if (index == 4) {
       _scaffoldKey.currentState?.openDrawer();

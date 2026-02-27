@@ -10,14 +10,17 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:print_helper/admin/chat/view/chat_profile.dart';
 import 'package:print_helper/admin/chat/view/groupchat/edit_group.dart';
 import 'package:print_helper/providers/auth_pro.dart';
+import 'package:print_helper/screens/call_screen.dart' as cs;
 import 'package:print_helper/services/helpers.dart';
 import 'package:print_helper/widgets/image_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:twilio_voice/twilio_voice.dart';
+import 'package:print_helper/services/call_device_service.dart';
 
 import '../../../constants/colors.dart';
 import '../../../constants/paths.dart';
+import '../../../utils/console_util.dart';
 import '../models/chat_models.dart';
 import '../provider/chat_pro.dart';
 import '../../../widgets/loaders.dart';
@@ -28,6 +31,7 @@ import '../../../widgets/typing_dots.dart';
 import 'components/mesg_forward_sheet.dart';
 import 'components/mesg_options_dialog.dart';
 import 'components/voice_mesg_bubble.dart';
+import 'components/dialpad_dialog.dart';
 
 class ChatScreen extends StatefulWidget {
   final int? conversationId;
@@ -47,7 +51,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   Timer? _recordTimer;
   Duration _recordDuration = Duration.zero;
-  double _cancelSliderOffset = 0.0;
+  // double _cancelSliderOffset = 0.0;
   ChatMessage? _editingMessage;
   final _messageCtrl = TextEditingController();
   final _searchCtrl = TextEditingController();
@@ -115,14 +119,15 @@ class _ChatScreenState extends State<ChatScreen> {
       return granted;
     } catch (e) {
       showToast(message: "Unable to request call permissions");
-      debugPrint("Call permissions error: $e");
+      printData(title: "Call permissions error:", data: e, e: true);
       return false;
     }
   }
 
   Future<bool> _ensureTwilioTokens() async {
     final chatPro = getChatPro(context);
-    final accessToken = await chatPro.getTwilioAccessToken();
+    // Always force-refresh so we never use an expired token (error 20104)
+    final accessToken = await chatPro.getTwilioAccessToken(forceRefresh: true);
     if (accessToken == null || accessToken.isEmpty) {
       showToast(message: "Twilio access token is missing");
       return false;
@@ -143,50 +148,143 @@ class _ChatScreenState extends State<ChatScreen> {
       return true;
     } catch (e) {
       showToast(message: "Failed to register Twilio tokens");
-      debugPrint("Twilio setTokens error: $e");
+      printData(title: "Twilio setTokens error:", data: e, e: true);
       return false;
     }
   }
 
-  Future<void> _placeVoiceCall({String? fromNumber, String? toNumber}) async {
-    if (widget.conversationId == null) return;
-    final authPro = getAuthPro(context);
+  Future<void> _placeVoiceCall({
+    String? fromNumber,
+    String? toNumber,
+    bool isInternal = false,
+    int? targetUserId,
+  }) async {
+    printData(
+      title: "_placeVoiceCall - START",
+      data:
+          "fromNumber: $fromNumber, toNumber: $toNumber, isInternal: $isInternal",
+    );
+    if (!CallDeviceService.callEnabled) {
+      showToast(message: "Call feature is disabled in this build");
+      return;
+    }
     final hasPermissions = await _ensureCallPermissions();
     if (!hasPermissions) return;
     final hasTokens = await _ensureTwilioTokens();
     if (!hasTokens) return;
-    try {
-      await TwilioVoice.instance.registerPhoneAccount();
-      final enabled = await TwilioVoice.instance.isPhoneAccountEnabled();
-      if (!enabled) {
-        showToast(message: "Enable the calling account to place calls");
-        await TwilioVoice.instance.openPhoneAccountSettings();
-        return;
+    if (!mounted) return;
+    // We only use the outbound-voice API for BOTH internal (Twilio-to-Twilio) and external.
+    // The only difference is that for external calls, the to_user_id is null.
+    if (toNumber == null || toNumber.isEmpty) {
+      showToast(message: "Phone number is required to place a call.");
+      return;
+    }
+    final String? finalToUserId = isInternal ? targetUserId?.toString() : null;
+    final success = await CallDeviceService.placeExternalCall(
+      toNumber: toNumber,
+      conversationId: widget.conversationId,
+      record: true,
+      toUserId: finalToUserId,
+      fromNumber: fromNumber,
+    );
+    if (!mounted) return;
+    if (success) {
+      if (CallDeviceService.expectingBridgeLeg) {
+        showToast(message: "Connecting... Please wait.");
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => cs.CallScreen(
+              callerName: toNumber,
+              callerNumber: toNumber,
+              isIncoming: false,
+            ),
+          ),
+        );
+      } else {
+        printData(
+          title: "_placeVoiceCall",
+          data: "Direct outbound call started",
+        );
       }
-
-      final extras = <String, dynamic>{
-        "conversation_id": widget.conversationId.toString(),
-        if (fromNumber != null && fromNumber.isNotEmpty)
-          "from_number": fromNumber,
-      };
-
-      await TwilioVoice.instance.call.place(
-        from: fromNumber ?? authPro.user!.id.toString(),
-        to: toNumber ?? widget.receiverUserId.toString(),
-        extraOptions: {
-          ...extras,
-          if (toNumber != null && toNumber.isNotEmpty) "to_number": toNumber,
-        },
-      );
-    } catch (e) {
+    } else {
       showToast(message: "Failed to place call");
-      debugPrint("Twilio call error: $e");
     }
   }
 
+  void _showDialPad(String fromNumber) {
+    showDialog(
+      context: context,
+      builder: (context) => DialPadDialog(
+        fromNumber: fromNumber,
+        onCall: (toNumber) {
+          _placeVoiceCall(fromNumber: fromNumber, toNumber: toNumber);
+        },
+      ),
+    );
+  }
+
+  Future<CallPopupData?> _buildNewCallPopupData() async {
+    final pro = getChatPro(context);
+
+    // Run both API requests at the same time
+    final results = await Future.wait([
+      pro.fetchCallFromNumbers(),
+      pro.fetchUserTwilioNumbers(widget.receiverUserId),
+    ]);
+
+    final fromNumbers = results[0];
+    final targetTwilioNumbers = results[1];
+
+    List<CallFromNumber> targetNumbers = [];
+    targetNumbers.addAll(targetTwilioNumbers);
+
+    if (pro.userProfile != null) {
+      final profile = pro.userProfile!;
+      if (profile.phone.isNotEmpty &&
+          !targetNumbers.any((n) => n.number == profile.phone)) {
+        targetNumbers.add(
+          CallFromNumber(
+            number: profile.phone,
+            label: 'Mobile',
+            isTwilio: false,
+            type: 'mobile',
+          ),
+        );
+      }
+      for (String phone in profile.phones) {
+        if (phone.isNotEmpty && !targetNumbers.any((n) => n.number == phone)) {
+          targetNumbers.add(
+            CallFromNumber(
+              number: phone,
+              label: 'Other',
+              isTwilio: false,
+              type: 'mobile',
+            ),
+          );
+        }
+      }
+    }
+
+    return CallPopupData(
+      conversationId: 0,
+      type: 'private',
+      callFromNumbers: fromNumbers,
+      targets: [
+        CallTarget(
+          user: CallTargetUser(
+            id: widget.receiverUserId,
+            name: widget.title,
+            isOnline: false,
+            image: pro.userProfile?.image,
+          ),
+          numbers: targetNumbers,
+        ),
+      ],
+    );
+  }
+
   void _showCallFromSheet() {
-    String? selectedNumber;
-    String? selectedToNumber;
+    String? selectedFromNumber;
     final media = MediaQuery.of(context);
     final rect = RelativeRect.fromLTRB(
       0,
@@ -194,6 +292,15 @@ class _ChatScreenState extends State<ChatScreen> {
       0,
       0,
     );
+
+    // Create the future strictly once before opening the menu
+    final Future<CallPopupData?> popupDataFuture = widget.conversationId != null
+        ? getChatPro(
+            context,
+            listen: false,
+          ).fetchCallPopupData(widget.conversationId!)
+        : _buildNewCallPopupData();
+
     showMenu<void>(
       context: context,
       position: rect,
@@ -211,15 +318,15 @@ class _ChatScreenState extends State<ChatScreen> {
           enabled: false,
           padding: EdgeInsets.zero,
           child: StatefulBuilder(
-            builder: (context, setStateSheet) {
+            builder: (ctx, setStateSheet) {
               return Container(
                 padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 16.h),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16.r),
                 ),
-                child: FutureBuilder<List<CallFromNumber>>(
-                  future: getChatPro(context).fetchCallFromNumbers(),
+                child: FutureBuilder<CallPopupData?>(
+                  future: popupDataFuture,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return SizedBox(
@@ -227,20 +334,40 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: Center(child: showLoader()),
                       );
                     }
-                    final numbers = snapshot.data ?? [];
-                    if (selectedNumber == null && numbers.isNotEmpty) {
+                    final popupData = snapshot.data;
+                    if (popupData == null) {
+                      return Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24.h),
+                        child: const Center(
+                          child: TextWidget(
+                            text: "Failed to load call data.",
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      );
+                    }
+
+                    final fromNumbers = popupData.callFromNumbers;
+                    final targets = popupData.targets;
+
+                    // Auto-select the first "from" number
+                    if (selectedFromNumber == null && fromNumbers.isNotEmpty) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (selectedNumber == null) {
+                        if (selectedFromNumber == null) {
                           setStateSheet(
-                            () => selectedNumber = numbers.first.number,
+                            () => selectedFromNumber = fromNumbers.first.number,
                           );
                         }
                       });
                     }
+
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // ── Header ──
                         Row(
                           children: [
                             ImageWidget(image: Paths.call, width: 18),
@@ -252,11 +379,31 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                             const Spacer(),
                             IconButton(
+                              onPressed: () {
+                                if (selectedFromNumber == null) {
+                                  showToast(
+                                    message:
+                                        "Select a 'Call From' number first",
+                                  );
+                                  return;
+                                }
+                                Navigator.pop(context);
+                                _showDialPad(selectedFromNumber!);
+                              },
+                              icon: const Icon(
+                                Icons.dialpad,
+                                size: 20,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            IconButton(
                               onPressed: () => Navigator.pop(context),
                               icon: const Icon(Icons.close, size: 20),
                             ),
                           ],
                         ),
+
+                        // ── Call From Dropdown ──
                         Spacers.sb5(),
                         const TextWidget(
                           text: "Call From",
@@ -264,13 +411,12 @@ class _ChatScreenState extends State<ChatScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                         Spacers.sb8(),
-                        if (numbers.isEmpty)
+                        if (fromNumbers.isEmpty)
                           Padding(
                             padding: EdgeInsets.symmetric(vertical: 18.h),
                             child: const Center(
                               child: TextWidget(
-                                text:
-                                    "No Twilio numbers are assigned to this user.",
+                                text: "No Twilio numbers are assigned to you.",
                                 color: Colors.grey,
                                 fontWeight: FontWeight.w500,
                                 fontSize: 12,
@@ -278,157 +424,35 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           )
                         else
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 12.w,
-                                  vertical: 6.h,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10.r),
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                  color: Colors.white,
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    value: selectedNumber,
-                                    isExpanded: true,
-                                    borderRadius: BorderRadius.circular(14.r),
-                                    isDense: true,
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: 5.h,
-                                    ),
-                                    icon: const Icon(Icons.arrow_drop_down),
-                                    selectedItemBuilder: (context) {
-                                      return numbers.map((item) {
-                                        final display =
-                                            item.display ?? item.number;
-                                        final label = item.label.isNotEmpty
-                                            ? item.label
-                                            : "Twilio Line";
-                                        return Row(
-                                          children: [
-                                            ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(30.r),
-                                              child: ImageWidget(
-                                                image:
-                                                    item.logo
-                                                            .toString()
-                                                            .isEmpty ||
-                                                        item.logo == null
-                                                    ? Paths.other
-                                                    : item.logo.toString(),
-                                                fit: BoxFit.cover,
-                                                width: 24,
-                                                height: 24,
-                                              ),
-                                            ),
-                                            Spacers.sbw8(),
-                                            Expanded(
-                                              child: TextWidget(
-                                                text: "$label - $display",
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      }).toList();
-                                    },
-                                    items: numbers.map((item) {
-                                      final display =
-                                          item.display ?? item.number;
-                                      final contextLabel =
-                                          (item.context != null &&
-                                              item.context!.isNotEmpty)
-                                          ? "${item.context}"
-                                          : "";
-                                      return DropdownMenuItem<String>(
-                                        value: item.number,
-                                        child: Row(
-                                          children: [
-                                            ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(30.r),
-                                              child: ImageWidget(
-                                                image:
-                                                    item.logo
-                                                            .toString()
-                                                            .isEmpty ||
-                                                        item.logo == null
-                                                    ? Paths.other
-                                                    : item.logo.toString(),
-                                                fit: BoxFit.cover,
-                                                width: 24,
-                                                height: 24,
-                                              ),
-                                            ),
-                                            Spacers.sbw8(),
-                                            Expanded(
-                                              child: TextWidget(
-                                                text:
-                                                    "$contextLabel - $display",
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }).toList(),
-                                    onChanged: (value) {
-                                      setStateSheet(
-                                        () => selectedNumber = value,
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                              Spacers.sb12(),
-                              const TextWidget(
-                                text: "Select a number to call",
-                                color: Colors.grey,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              Spacers.sb8(),
-                              FutureBuilder<List<CallFromNumber>>(
-                                future: getChatPro(
-                                  context,
-                                ).fetchUserTwilioNumbers(widget.receiverUserId),
-                                builder: (context, toSnapshot) {
-                                  if (toSnapshot.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return SizedBox(
-                                      height: 90.h,
-                                      child: Center(child: showLoader()),
-                                    );
-                                  }
-                                  final toNumbers = toSnapshot.data ?? [];
-                                  if (toNumbers.isEmpty) {
-                                    return const TextWidget(
-                                      text:
-                                          "No Twilio numbers are assigned to this user.",
-                                      color: Colors.grey,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    );
-                                  }
-                                  return Column(
-                                    children: toNumbers.map((item) {
-                                      return GestureDetector(
-                                        onTap: () {
-                                          setStateSheet(
-                                            () =>
-                                                selectedToNumber = item.number,
-                                          );
-                                          if (selectedNumber == null ||
-                                              selectedNumber!.isEmpty) {
+                          _buildFromDropdown(
+                            fromNumbers,
+                            selectedFromNumber,
+                            (val) =>
+                                setStateSheet(() => selectedFromNumber = val),
+                          ),
+                        if (fromNumbers.isNotEmpty) ...[
+                          Spacers.sb12(),
+                          const TextWidget(
+                            text: "Select a number to call",
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          Spacers.sb8(),
+                          // ── Target Numbers (scrollable) ──
+                          ConstrainedBox(
+                            constraints: BoxConstraints(maxHeight: 300.h),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                children: targets.map((target) {
+                                  return _buildTargetSection(
+                                    target: target,
+                                    isGroup: popupData.type == 'group',
+                                    selectedFromNumber: selectedFromNumber,
+                                    onCallPressed:
+                                        (toNumber, isInternal, targetUserId) {
+                                          if (selectedFromNumber == null ||
+                                              selectedFromNumber!.isEmpty) {
                                             showToast(
                                               message:
                                                   "Select a call from number",
@@ -436,62 +460,25 @@ class _ChatScreenState extends State<ChatScreen> {
                                             return;
                                           }
                                           Navigator.pop(context);
-                                          debugPrint(
-                                            "Call from: $selectedNumber | Call to: ${item.number}",
+                                          printData(
+                                            title:
+                                                "Call from: $selectedFromNumber | Call to: $toNumber",
+                                            data:
+                                                "Internal: $isInternal | Target: $targetUserId",
                                           );
                                           _placeVoiceCall(
-                                            fromNumber: selectedNumber,
-                                            toNumber: item.number,
+                                            fromNumber: selectedFromNumber,
+                                            toNumber: toNumber,
+                                            isInternal: isInternal,
+                                            targetUserId: targetUserId,
                                           );
                                         },
-                                        child: Container(
-                                          margin: EdgeInsets.only(bottom: 6.h),
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: 10.w,
-                                            vertical: 5.h,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.primary,
-                                            borderRadius: BorderRadius.circular(
-                                              12.r,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(30.r),
-                                                child: ImageWidget(
-                                                  image:
-                                                      item.logo
-                                                              .toString()
-                                                              .isEmpty ||
-                                                          item.logo == null
-                                                      ? Paths.other
-                                                      : item.logo.toString(),
-                                                  fit: BoxFit.cover,
-                                                  width: 24,
-                                                  height: 24,
-                                                ),
-                                              ),
-                                              Spacers.sbw8(),
-                                              TextWidget(
-                                                text:
-                                                    item.display ?? item.number,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
                                   );
-                                },
+                                }).toList(),
                               ),
-                            ],
+                            ),
                           ),
+                        ],
                       ],
                     );
                   },
@@ -501,6 +488,207 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Dropdown for selecting the "Call From" number
+  Widget _buildFromDropdown(
+    List<CallFromNumber> numbers,
+    String? selectedValue,
+    ValueChanged<String?> onChanged,
+  ) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10.r),
+        border: Border.all(color: Colors.grey.shade300),
+        color: Colors.white,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: selectedValue,
+          isExpanded: true,
+          borderRadius: BorderRadius.circular(14.r),
+          isDense: true,
+          padding: EdgeInsets.symmetric(vertical: 5.h),
+          icon: const Icon(Icons.arrow_drop_down),
+          selectedItemBuilder: (context) {
+            return numbers.map((item) {
+              final label = (item.context != null && item.context!.isNotEmpty)
+                  ? item.context!
+                  : item.label.isNotEmpty
+                  ? item.label
+                  : "Twilio Line";
+              return Row(
+                children: [
+                  _numberLogo(item.logo),
+                  Spacers.sbw8(),
+                  Expanded(
+                    child: TextWidget(
+                      text: "$label - ${_formatPhone(item.number)}",
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              );
+            }).toList();
+          },
+          items: numbers.map((item) {
+            final contextLabel =
+                (item.context != null && item.context!.isNotEmpty)
+                ? "${item.context}"
+                : "";
+            return DropdownMenuItem<String>(
+              value: item.number,
+              child: Row(
+                children: [
+                  _numberLogo(item.logo),
+                  Spacers.sbw8(),
+                  Expanded(
+                    child: TextWidget(
+                      text: "$contextLabel - ${_formatPhone(item.number)}",
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  /// Builds a target section — avatar + name on left, numbers on right
+  Widget _buildTargetSection({
+    required CallTarget target,
+    required bool isGroup,
+    required String? selectedFromNumber,
+    required void Function(String toNumber, bool isInternal, int targetUserId)
+    onCallPressed,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 10.h),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Avatar + Name (left side)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20.r),
+            child: ImageWidget(
+              image:
+                  (target.user.image != null && target.user.image!.isNotEmpty)
+                  ? target.user.image!
+                  : Paths.user,
+              fit: BoxFit.cover,
+              width: 36,
+              height: 36,
+            ),
+          ),
+          Spacers.sbw8(),
+          SizedBox(
+            width: 65.w,
+            child: TextWidget(
+              text: target.user.fullName,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Spacers.sbw8(),
+          // Number pills (right side)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: target.numbers.isEmpty
+                  ? [
+                      TextWidget(
+                        text: "No numbers",
+                        color: Colors.grey,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ]
+                  : target.numbers.map((item) {
+                      return Padding(
+                        padding: EdgeInsets.only(bottom: 4.h),
+                        child: GestureDetector(
+                          onTap: () => onCallPressed(
+                            item.number,
+                            item.isTwilio,
+                            target.user.id,
+                          ),
+                          child: Container(
+                            width: 200,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 12.w,
+                              vertical: 6.h,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(10.r),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (item.isTwilio)
+                                  _numberLogo(item.logo)
+                                else
+                                  ImageWidget(
+                                    image: item.type == 'landline'
+                                        ? Paths.landPhone
+                                        : item.type == 'mobile'
+                                        ? Paths.call2
+                                        : Paths.other,
+                                    width: 20,
+                                    height: 20,
+                                  ),
+                                Spacers.sbw8(),
+                                TextWidget(
+                                  text: _formatPhone(item.number),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Formats a phone number to (XXX) XXX-XXXX
+  String _formatPhone(String number) {
+    final digits = number.replaceAll(RegExp(r'[^0-9]'), '');
+    // Handle 11-digit with leading 1
+    final local = digits.length == 11 && digits.startsWith('1')
+        ? digits.substring(1)
+        : digits;
+    if (local.length == 10) {
+      return '(${local.substring(0, 3)}) ${local.substring(3, 6)}-${local.substring(6)}';
+    }
+    return number; // Return as-is if not a standard US number
+  }
+
+  /// Circular logo widget for a number
+  Widget _numberLogo(String? logo) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(30.r),
+      child: ImageWidget(
+        image: (logo != null && logo.isNotEmpty) ? logo : Paths.other,
+        fit: BoxFit.cover,
+        width: 24,
+        height: 24,
+      ),
     );
   }
 
@@ -514,9 +702,9 @@ class _ChatScreenState extends State<ChatScreen> {
       pro.reset();
       // NEW CHAT (no conversation yet)
       if (widget.conversationId == null) {
+        pro.fetchUserProfile(widget.receiverUserId.toString());
         return; // Do NOT fetch messages or init socket
       }
-
       // Fetch user profile for online/last seen status
       final convo = pro.conversations.firstWhere(
         (c) => c.id == widget.conversationId,
@@ -639,23 +827,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _startRecordTimer() {
     _recordTimer?.cancel();
-    setState(() {
-      _recordDuration = Duration.zero;
-      _cancelSliderOffset = 0.0;
-    });
+    _recordDuration = Duration.zero;
     _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _recordDuration = Duration(seconds: timer.tick);
-      });
+      if (mounted)
+        setState(() => _recordDuration += const Duration(seconds: 1));
     });
   }
 
   void _stopRecordTimer() {
     _recordTimer?.cancel();
-    setState(() {
-      _recordDuration = Duration.zero;
-      _cancelSliderOffset = 0.0;
-    });
+    if (mounted) {
+      setState(() {
+        _recordDuration = Duration.zero;
+      });
+    }
   }
 
   String _formatDuration(Duration d) {
@@ -793,7 +978,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                         ),
-                      _channelSelector(),
+                      // _channelSelector(),
                       _inputBar(),
                       if (_showEmojiPicker)
                         SizedBox(
@@ -1019,48 +1204,19 @@ class _ChatScreenState extends State<ChatScreen> {
         Spacers.sbw12(),
         GestureDetector(
           key: const ValueKey('mic_btn'),
-          onLongPress: () {
+          onTap: () {
             if (_isChatDisabled) return;
-            if (widget.conversationId == null) {
-              return; // Prevent recording if no chat exists yet
-            }
-            context
-                .read<ChatPro>()
-                .startVoiceRecording(); // Changed from startDummy
-            _startRecordTimer();
-          },
-          onLongPressMoveUpdate: (details) {
-            // HANDLING SLIDE TO CANCEL
-            if (details.offsetFromOrigin.dx < 0) {
-              // Check direction (usually left on RTL, right on LTR)
-              // Adjust logic based on your swipe direction preference
-              // Your original code used dx > 0 for right swipe
-              setState(() {
-                _cancelSliderOffset = details.offsetFromOrigin.dx;
-              });
-            }
-            // Example: If dragged more than 150px
-            if (details.offsetFromOrigin.dx.abs() > 150) {
-              context.read<ChatPro>().cancelRecording(); // Cancel logic
-              _stopRecordTimer();
-            }
-          },
-          onLongPressEnd: (details) {
-            if (_isChatDisabled) return;
+            if (widget.conversationId == null) return;
+
             final pro = context.read<ChatPro>();
             final auth = context.read<AuthPro>();
-            // 1. Check if cancelled via slider
-            if (_cancelSliderOffset.abs() > 150) {
-              pro.cancelRecording();
-            }
-            // 2. Check if recording was too short (optional usability fix)
-            else if (_recordDuration.inSeconds < 1) {
-              showToast(message: "Message too short");
-              pro.cancelRecording();
-            }
-            // 3. SEND MESSAGE
-            else {
-              if (widget.conversationId != null && auth.user != null) {
+
+            if (isRecording) {
+              // If it's already recording, tapping the mic again will send it
+              if (_recordDuration.inSeconds < 1) {
+                showToast(message: "Message too short");
+                pro.cancelRecording();
+              } else if (auth.user != null) {
                 pro.stopRecordingAndSend(
                   conversationId: widget.conversationId!,
                   currentUserId: auth.user!.id,
@@ -1068,8 +1224,12 @@ class _ChatScreenState extends State<ChatScreen> {
               } else {
                 pro.cancelRecording();
               }
+              _stopRecordTimer();
+            } else {
+              // If not recording, tapping the mic starts it
+              pro.startVoiceRecording();
+              _startRecordTimer();
             }
-            _stopRecordTimer();
           },
           child: AnimatedScale(
             scale: isRecording ? 1.2 : 1.0,
@@ -1084,30 +1244,65 @@ class _ChatScreenState extends State<ChatScreen> {
         Spacers.sbw12(),
         if (isRecording)
           Expanded(
-            child: Opacity(
-              opacity: (_cancelSliderOffset > 50) ? 0.5 : 1.0,
-              child: Row(
-                children: [
-                  TextWidget(
-                    text: "Slide right to cancel",
-                    color: Colors.grey,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    context.read<ChatPro>().cancelRecording();
+                    _stopRecordTimer();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const TextWidget(
+                      text: "Cancel",
+                      color: Colors.red,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  const SizedBox(width: 4),
-                  Transform.translate(
-                    offset: Offset(
-                      _cancelSliderOffset > 0 ? _cancelSliderOffset : 0,
-                      0,
+                ),
+                Spacers.sbw8(),
+                GestureDetector(
+                  onTap: () {
+                    final pro = context.read<ChatPro>();
+                    final auth = context.read<AuthPro>();
+                    if (_recordDuration.inSeconds < 1) {
+                      showToast(message: "Message too short");
+                      pro.cancelRecording();
+                    } else if (widget.conversationId != null &&
+                        auth.user != null) {
+                      pro.stopRecordingAndSend(
+                        conversationId: widget.conversationId!,
+                        currentUserId: auth.user!.id,
+                      );
+                    } else {
+                      pro.cancelRecording();
+                    }
+                    _stopRecordTimer();
+                  },
+                  child: Container(
+                    height: 35,
+                    width: 35,
+                    decoration: const BoxDecoration(
+                      color: Color(0xffFFC107),
+                      shape: BoxShape.circle,
                     ),
                     child: const Icon(
-                      Icons.arrow_forward_ios,
-                      size: 12,
-                      color: Colors.grey,
+                      Icons.send,
+                      size: 20,
+                      color: Colors.white,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           )
         else ...[
@@ -1250,7 +1445,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _initScrollToBottom();
   }
 
-  Widget _channelSelector() {
+  Widget channelSelector() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -1441,7 +1636,14 @@ class _ChatScreenState extends State<ChatScreen> {
                 heightFactor: .98,
                 child: EditChatGroup(conversationId: convo.id),
               ),
-            );
+            ).then((_) {
+              if (mounted) {
+                getChatPro(
+                  context,
+                  listen: false,
+                ).getGroupDetails(widget.conversationId!);
+              }
+            });
           } else {
             navTo(
               context: context,
@@ -1705,6 +1907,16 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _bubble(ChatMessage msg, {String? highlightQuery}) {
+    // ── Call-type message bubble ──
+    if (msg.type == 'call') {
+      return _callBubble(msg);
+    }
+
+    // ── Call recording bubble (voice msg with is_call_recording) ──
+    if (msg.isCallRecording && msg.audioUrl != null) {
+      return _callRecordingBubble(msg);
+    }
+
     return Container(
       margin: EdgeInsets.only(bottom: 10.h),
       padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
@@ -1732,6 +1944,7 @@ class _ChatScreenState extends State<ChatScreen> {
               path: msg.audioUrl!,
               duration: msg.audioDuration ?? 0,
               isMe: msg.isMe,
+              voiceWaveform: msg.voiceWaveform,
               isUploading:
                   msg.audioUrl!.startsWith('/data') ||
                   msg.audioUrl!.startsWith('file://') ||
@@ -1757,6 +1970,190 @@ class _ChatScreenState extends State<ChatScreen> {
   String formatMessageTime(String dateTime) {
     final dt = DateTime.parse(dateTime);
     return DateFormat("dd/MM/yyyy • h:mma").format(dt).toLowerCase();
+  }
+
+  /// Special bubble for call-type messages
+  Widget _callBubble(ChatMessage msg) {
+    final isMissed = msg.isMissedCall == true;
+    // Build the title — use user name from message
+    String callerLabel;
+    if (msg.isMe) {
+      callerLabel = "You";
+    } else {
+      callerLabel = msg.senderName ?? 'Unknown';
+    }
+    final title = isMissed
+        ? "Missed Called From $callerLabel"
+        : "Called From $callerLabel";
+    // Format phone numbers
+    final from = msg.callFromNumber != null
+        ? _formatPhone(msg.callFromNumber!)
+        : '—';
+    final to = msg.callToNumber != null ? _formatPhone(msg.callToNumber!) : '—';
+    // Date/time
+    final dateStr = DateFormat(
+      'MM/dd/yyyy • h:mma',
+    ).format(msg.createdAt).toLowerCase();
+    final bgColor = isMissed
+        ? const Color(0xffFFDDDD)
+        : const Color(0xffD4EDDA);
+    return Container(
+      margin: EdgeInsets.only(bottom: 10.h),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title row with icon
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ImageWidget(
+                image: isMissed ? Paths.close : Paths.call3,
+                width: isMissed ? 18 : 22,
+              ),
+              SizedBox(width: 6.w),
+              Expanded(
+                child: TextWidget(
+                  text: title,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8.h),
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10.r),
+            ),
+            child: Column(
+              children: [
+                TextWidget(
+                  text: "From: $from  •  To: $to",
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black54,
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 3.h),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextWidget(
+                    text: dateStr,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.black45,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Call recording bubble (voice message with is_call_recording)
+  Widget _callRecordingBubble(ChatMessage msg) {
+    // Build title based on direction
+    final toNames = _toUserNames(msg);
+    String title;
+    if (msg.isMe) {
+      title = "You Called $toNames";
+    } else {
+      final senderName = msg.senderName ?? 'Unknown';
+      title = "$senderName Called You";
+    }
+
+    // Format phone numbers
+    final from = msg.callFromNumber != null
+        ? _formatPhone(msg.callFromNumber!)
+        : '—';
+    final to = msg.callToNumber != null ? _formatPhone(msg.callToNumber!) : '—';
+
+    // Date/time
+    final dateStr = DateFormat(
+      'MM/dd/yyyy • h:mma',
+    ).format(msg.createdAt).toLowerCase();
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 10.h),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+      decoration: BoxDecoration(
+        color: msg.isMe ? Colors.white : AppColors.primary,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title (bold italic)
+          Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13.sp,
+              fontWeight: FontWeight.w700,
+              fontStyle: FontStyle.italic,
+              color: Colors.black,
+            ),
+          ),
+          SizedBox(height: 8.h),
+
+          // Audio player
+          VoiceMessageBubbleUI(
+            path: msg.audioUrl!,
+            duration: msg.audioDuration ?? 0,
+            isMe: msg.isMe,
+            voiceWaveform: msg.voiceWaveform,
+            isUploading: false,
+          ),
+
+          SizedBox(height: 6.h),
+
+          // From / To line
+          TextWidget(
+            text: "From: $from  •  To: $to",
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: Colors.black54,
+          ),
+          SizedBox(height: 2.h),
+
+          // Date row
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextWidget(
+              text: dateStr,
+              fontSize: 10,
+              fontWeight: FontWeight.w400,
+              color: Colors.black45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Extracts "to user" names from call attachments
+  String _toUserNames(ChatMessage msg) {
+    if (msg.toUsers != null && msg.toUsers!.isNotEmpty) {
+      return msg.toUsers!.map((u) => u['name'] ?? 'Unknown').join(', ');
+    }
+    return msg.message.replaceAll('Missed Call To ', '');
   }
 
   Widget _metaRow(ChatMessage msg) {

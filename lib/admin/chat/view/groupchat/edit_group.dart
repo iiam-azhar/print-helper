@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -33,10 +33,8 @@ class EditChatGroupState extends State<EditChatGroup> {
   final _groupNameCntrler = TextEditingController();
   GroupDetail? group;
   bool isInitialLoading = true;
-  bool _isExpanded = true;
   bool pickingFile = false;
   File? selectedImage;
-  bool formSubmitted = false;
 
   @override
   void initState() {
@@ -47,6 +45,8 @@ class EditChatGroupState extends State<EditChatGroup> {
       if (!mounted || result == null) return;
       group = result;
       _groupNameCntrler.text = result.title;
+      // Pre-populate selectedUsers from current participants
+      chatPro.clearGroupCreationState();
       setState(() {
         isInitialLoading = false;
       });
@@ -63,7 +63,6 @@ class EditChatGroupState extends State<EditChatGroup> {
   Future<void> pickImage() async {
     if (pickingFile) return;
     pickingFile = true;
-
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: false,
@@ -88,19 +87,23 @@ class EditChatGroupState extends State<EditChatGroup> {
       return;
     }
 
-    if (chatPro.selectedUsers.length < 2) {
-      showToast(message: "Select at least 2 members");
+    // Build member list: existing participants + any newly selected users
+    final existingIds =
+        group?.participants.map((e) => e.id).toList() ?? <int>[];
+    final newIds = chatPro.selectedUsers.map((e) => e.id).toList();
+    final allIds = {...existingIds, ...newIds}.toList();
+
+    if (allIds.length < 2) {
+      showToast(message: "A group must have at least 2 members");
       return;
     }
-
-    final userIds = chatPro.selectedUsers.map((e) => e.id).toList();
 
     FocusScope.of(context).unfocus();
 
     final success = await chatPro.updateGroup(
       conversationId: widget.conversationId,
       title: _groupNameCntrler.text.trim(),
-      userIds: userIds,
+      userIds: allIds,
       image: selectedImage,
     );
     if (!mounted) return;
@@ -119,37 +122,49 @@ class EditChatGroupState extends State<EditChatGroup> {
         child: Container(
           margin: EdgeInsets.only(top: 40.h),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFFF5F5F5),
             borderRadius: BorderRadius.vertical(top: Radius.circular(30.r)),
-            border: Border.all(color: Colors.grey.shade200),
           ),
           child: SafeArea(
             top: true,
             child: Column(
               children: [
                 _header(context),
-                Divider(thickness: 2.w, color: const Color(0x5F9E9E9E)),
                 Expanded(
                   child: isInitialLoading
                       ? Center(child: showLoader())
                       : SingleChildScrollView(
+                          padding: EdgeInsets.symmetric(horizontal: 16.w),
                           child: Form(
                             key: _formKey,
                             child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Spacers.sb10(),
-                                profileImage(),
+                                Spacers.sb20(),
+                                _profileImageSection(),
+                                Spacers.sb20(),
+                                _buildLabel("Group Name"),
+                                Spacers.sb8(),
+                                _groupNameField(),
                                 Spacers.sb15(),
-                                _formBody(),
+                                _buildLabel("Add Members"),
+                                Spacers.sb8(),
+                                _searchField(),
+                                Spacers.sb8(),
+                                Consumer<ChatPro>(
+                                  builder: (context, pro, _) {
+                                    return _buildSearchArea(pro);
+                                  },
+                                ),
+                                Spacers.sb15(),
+                                if (group != null) _buildMemberList(),
                                 Spacers.sb25(),
-                                scrollUp(context),
                               ],
                             ),
                           ),
                         ),
                 ),
-
-                _cancelSaveBtn(context),
+                _bottomButtons(context),
               ],
             ),
           ),
@@ -158,180 +173,397 @@ class EditChatGroupState extends State<EditChatGroup> {
     );
   }
 
-  Widget _cancelSaveBtn(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.all(8.0.w),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Spacers.sbw15(),
-              Expanded(
-                child: CustomButton(
-                  height: 40,
-                  margin: EdgeInsets.symmetric(horizontal: 25),
-                  textColor: AppColors.black,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  showBorder: true,
-                  buttonColor: Colors.white,
-                  stadium: false,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  title: 'Cancel',
-                  onTap: () {
-                    context.read<ChatPro>().clearGroupCreationState();
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ),
-              Expanded(
-                child: CustomButton(
-                  height: 40,
-                  margin: EdgeInsets.symmetric(horizontal: 25),
-                  title: 'Save Changes',
-                  onTap: () => _onSave(),
-                  buttonColor: AppColors.btnClr,
-                  textColor: AppColors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  stadium: false,
-                  borderRadius: 18,
-                ),
-              ),
-              Spacers.sbw15(),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  // ─── Header ────────────────────────────────────────────────────────────────
 
-  Widget _formBody() {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.w),
-      child: Column(
+  Widget _header(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30.r)),
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 14.h),
+      child: Row(
         children: [
-          _buildLabel("Group Name"),
-          Spacers.sb8(),
-          TextField(
-            decoration: _inputDecoration("Enter group name"),
-            controller: _groupNameCntrler,
+          Expanded(
+            child: TextWidget(
+              text: "Edit Group",
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: Colors.black,
+            ),
           ),
-          Spacers.sb8(),
-          _buildLabel("Add Members"),
-          Spacers.sb8(),
-          Consumer<ChatPro>(
-            builder: (context, pro, child) {
-              return Column(
-                children: [
-                  if (pro.selectedUsers.isNotEmpty) ...[
-                    _buildSelectedUsersChips(pro),
-                    Spacers.sb10(),
-                  ],
-                  TextField(
-                    controller: _searchCntrler,
-                    onChanged: pro.onSearchChanged,
-                    decoration: _inputDecoration("Search users").copyWith(
-                      suffixIcon: _searchCntrler.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () {
-                                _searchCntrler.clear();
-                                pro.onSearchChanged('');
-                              },
-                            )
-                          : null,
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.only(top: 10.h),
-                    constraints: BoxConstraints(
-                      minHeight: 120.h,
-                      maxHeight: 300.h,
-                    ),
-                    width: double.infinity,
-                    child: _buildSearchResultsList(pro),
-                  ),
-                ],
-              );
+          GestureDetector(
+            onTap: () {
+              context.read<ChatPro>().clearGroupCreationState();
+              Navigator.of(context).pop();
             },
+            child: Container(
+              padding: EdgeInsets.all(4.w),
+              child: Icon(Icons.close, size: 24.sp, color: Colors.black87),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSelectedUsersChips(ChatPro pro) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey),
-        borderRadius: BorderRadius.circular(12.r),
-      ),
+  // ─── Profile Image ──────────────────────────────────────────────────────────
+
+  Widget _profileImageSection() {
+    return Center(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Stack(
+            clipBehavior: Clip.none,
             children: [
-              TextWidget(
-                text: "Selected Members (${pro.selectedUsers.length})",
-                color: Colors.grey,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+              GestureDetector(
+                onTap: pickImage,
+                child: Container(
+                  width: 100.w,
+                  height: 100.w,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.grey.shade300,
+                    border: Border.all(color: Colors.grey.shade300, width: 2),
+                    image: _avatarImage(),
+                  ),
+                ),
               ),
-              InkWell(
-                onTap: () => setState(() => _isExpanded = !_isExpanded),
-                child: Icon(
-                  _isExpanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: GestureDetector(
+                  onTap: pickImage,
+                  child: Container(
+                    width: 30.w,
+                    height: 30.w,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFCC00),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.camera_alt,
+                      size: 16.sp,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-          if (_isExpanded) ...[
-            Spacers.sb10(),
-            Wrap(
-              spacing: 8.0,
-              runSpacing: 8.0,
-              children: pro.selectedUsers.map((user) {
-                return Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 12.w,
-                    vertical: 8.h,
+          Spacers.sb8(),
+          GestureDetector(
+            onTap: pickImage,
+            child: TextWidget(
+              text: "Add group photo",
+              fontSize: 13,
+              color: Colors.blueGrey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  DecorationImage? _avatarImage() {
+    if (selectedImage != null) {
+      return DecorationImage(
+        image: FileImage(selectedImage!),
+        fit: BoxFit.cover,
+      );
+    }
+    if (group?.image != null && group!.image!.isNotEmpty) {
+      return DecorationImage(
+        image: NetworkImage(group!.image!),
+        fit: BoxFit.cover,
+      );
+    }
+    return DecorationImage(image: AssetImage(Paths.user), fit: BoxFit.contain);
+  }
+
+  // ─── Group Name Field ───────────────────────────────────────────────────────
+
+  Widget _groupNameField() {
+    return TextField(
+      controller: _groupNameCntrler,
+      decoration: _inputDecoration("Enter group name"),
+      style: TextStyle(fontSize: 14.sp, color: Colors.black87),
+    );
+  }
+
+  // ─── Search Field ───────────────────────────────────────────────────────────
+
+  Widget _searchField() {
+    return Consumer<ChatPro>(
+      builder: (context, pro, _) {
+        return TextField(
+          controller: _searchCntrler,
+          onChanged: pro.onSearchChanged,
+          decoration: _inputDecoration("Search users").copyWith(
+            suffixIcon: _searchCntrler.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () {
+                      _searchCntrler.clear();
+                      pro.onSearchChanged('');
+                    },
+                  )
+                : null,
+          ),
+          style: TextStyle(fontSize: 14.sp, color: Colors.black87),
+        );
+      },
+    );
+  }
+
+  // ─── Search Results / Placeholder ──────────────────────────────────────────
+
+  Widget _buildSearchArea(ChatPro pro) {
+    // Show nothing when not searching
+    if (_searchCntrler.text.isEmpty && pro.searchResults.isEmpty) {
+      return _placeholderCard("Start typing to find users");
+    }
+
+    if (pro.isLoading) {
+      return _placeholderCard(null, loading: true);
+    }
+
+    if (pro.searchResults.isEmpty && _searchCntrler.text.isNotEmpty) {
+      return _placeholderCard("No results found");
+    }
+
+    return Container(
+      constraints: BoxConstraints(maxHeight: 260.h),
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        itemCount: pro.searchResults.length,
+        separatorBuilder: (_, __) => Spacers.sb5(),
+        itemBuilder: (context, index) {
+          final user = pro.searchResults[index];
+          final isSelected = pro.selectedUsers.any((u) => u.id == user.id);
+          // Also mark already-in-group members
+          final alreadyInGroup =
+              group?.participants.any((p) => p.id == user.id) ?? false;
+          return GestureDetector(
+            onTap: alreadyInGroup ? null : () => pro.toggleUserSelection(user),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(
+                  color: isSelected ? AppColors.btnClr : Colors.grey.shade300,
+                  width: isSelected ? 1.5 : 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(50.r),
+                    child: ImageWidget(
+                      image: user.image != null && user.image!.isNotEmpty
+                          ? user.image!
+                          : Paths.user,
+                      width: 36,
+                      height: 36,
+                      fit: BoxFit.cover,
+                    ),
                   ),
+                  Spacers.sbw10(),
+                  Expanded(
+                    child: TextWidget(
+                      text: user.fullName,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  if (alreadyInGroup)
+                    TextWidget(
+                      text: "Already added",
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.grey,
+                    )
+                  else if (isSelected)
+                    Container(
+                      padding: EdgeInsets.all(4.w),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.green.shade50,
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        size: 14,
+                        color: Colors.green,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _placeholderCard(String? text, {bool loading = false}) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: 30.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Center(
+        child: loading
+            ? showLoader()
+            : TextWidget(
+                text: text ?? '',
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: Colors.grey.shade500,
+              ),
+      ),
+    );
+  }
+
+  // ─── Current Member List ────────────────────────────────────────────────────
+
+  Widget _buildMemberList() {
+    final participants = group!.participants;
+    if (participants.isEmpty) return const SizedBox.shrink();
+
+    // final chatPro = getChatPro(context);
+    final currentUserId = getAuthPro(context).user?.id;
+    final isCurrentUserAdmin =
+        currentUserId != null && group!.adminIds.contains(currentUserId);
+
+    return Column(
+      children: participants
+          .map(
+            (p) => _memberTile(
+              p,
+              isCurrentUserAdmin: isCurrentUserAdmin,
+              currentUserId: currentUserId,
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _memberTile(
+    GroupParticipant p, {
+    bool isCurrentUserAdmin = false,
+    int? currentUserId,
+  }) {
+    final isAdmin = group!.adminIds.contains(p.id) || p.isAdmin;
+    final isSelf = p.id == currentUserId;
+    final showDelete = isCurrentUserAdmin && !isSelf;
+    final statusText = p.isOnline
+        ? "Online"
+        : p.lastSeenAt != null
+        ? "Last seen ${_formatLastSeen(p.lastSeenAt!)}"
+        : "Offline";
+    return Container(
+      margin: EdgeInsets.only(bottom: 2.h),
+      color: Colors.white,
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+      child: Row(
+        children: [
+          // Avatar with online dot
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(50.r),
+                child: ImageWidget(
+                  image: p.image != null && p.image!.isNotEmpty
+                      ? p.image!
+                      : Paths.user,
+                  width: 44,
+                  height: 44,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 12.w,
+                  height: 12.w,
                   decoration: BoxDecoration(
-                    color: AppColors.btnClr.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(12.r),
-                    border: Border.all(color: Colors.transparent),
+                    shape: BoxShape.circle,
+                    color: p.isOnline ? Colors.green : Colors.grey.shade400,
+                    border: Border.all(color: Colors.white, width: 2),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextWidget(
-                        text: user.fullName,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
-                      ),
-                      Spacers.sbw5(),
-                      GestureDetector(
-                        onTap: () => pro.removeSelectedUser(user),
-                        child: ImageWidget(
-                          image: Paths.delete,
-                          width: 18,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
+                ),
+              ),
+            ],
+          ),
+          Spacers.sbw12(),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextWidget(
+                  text: p.fullName,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+                Spacers.sb2(),
+                TextWidget(
+                  text: statusText,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: p.isOnline ? Colors.green : Colors.grey,
+                ),
+              ],
+            ),
+          ),
+          if (isAdmin)
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFCC00), Color(0xFFFFAA00)],
+                ),
+                borderRadius: BorderRadius.circular(20.r),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFFCC00).withValues(alpha: 0.4),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
-                );
-              }).toList(),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.shield_rounded, size: 13.sp, color: Colors.white),
+                  SizedBox(width: 3.w),
+                  Text(
+                    "Admin",
+                    style: TextStyle(
+                      fontSize: 11.sp,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (showDelete) ...[
+            Spacers.sbw8(),
+            GestureDetector(
+              onTap: () => _confirmRemoveMember(p),
+              child: ImageWidget(image: Paths.delete, width: 22, height: 22),
             ),
           ],
         ],
@@ -339,181 +571,148 @@ class EditChatGroupState extends State<EditChatGroup> {
     );
   }
 
-  Widget _buildSearchResultsList(ChatPro pro) {
-    return pro.searchResults.isEmpty && _searchCntrler.text.isNotEmpty
-        ? Center(
-            heightFactor: 5,
-            child: const TextWidget(
-              text: "No results found",
-              color: Colors.grey,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-            ),
-          )
-        : pro.isLoading
-        ? Center(child: showLoader())
-        : ListView.separated(
-            shrinkWrap: true,
-            padding: EdgeInsets.zero,
-            itemCount: pro.searchResults.length,
-            separatorBuilder: (c, i) => Spacers.sb5(),
-            itemBuilder: (context, index) {
-              final user = pro.searchResults[index];
-              final isSelected = pro.selectedUsers.any((u) => u.id == user.id);
-              return GestureDetector(
-                onTap: () => pro.toggleUserSelection(user),
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 15.w,
-                    vertical: 6.h,
+  Future<void> _confirmRemoveMember(GroupParticipant p) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16.r),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.bg.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(16.r),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  width: 1.5,
+                ),
+              ),
+              padding: EdgeInsets.fromLTRB(24.w, 24.h, 16.w, 8.h),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextWidget(
+                    text: "Remove ${p.fullName} from the group?",
+                    fontSize: 15,
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w500,
                   ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12.r),
-                    border: Border.all(
-                      color: isSelected ? Colors.grey : Colors.grey.shade300,
-                      width: isSelected ? 1.5 : 1,
-                    ),
-                  ),
-                  child: Row(
+                  SizedBox(height: 20.h),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(50.r),
-                        child: ImageWidget(
-                          image: user.image != null && user.image!.isNotEmpty
-                              ? user.image!
-                              : Paths.user,
-                          width: 35,
-                          height: 35,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      Spacers.sbw12(),
-                      Expanded(
-                        child: TextWidget(
-                          text: user.fullName,
-                          fontWeight: FontWeight.w500,
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const TextWidget(
+                          text: "Cancel",
+                          color: Colors.grey,
                           fontSize: 14,
-                          color: Colors.black87,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (isSelected)
-                        Container(
-                          padding: EdgeInsets.all(4.w),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.green.shade50,
-                          ),
-                          child: const Icon(
-                            Icons.check,
-                            size: 14,
-                            color: Colors.green,
-                          ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: TextWidget(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          text: "Remove",
+                          color: Colors.red,
                         ),
+                      ),
                     ],
                   ),
-                ),
-              );
-            },
-          );
-  }
-
-  Widget profileImage() {
-    return Stack(
-      alignment: Alignment.bottomRight,
-      children: [
-        GestureDetector(
-          onTap: pickImage,
-          child: Container(
-            width: 140.w,
-            height: 135.h,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.grey.shade300, width: 2),
-              image: DecorationImage(
-                fit: BoxFit.cover,
-                image: selectedImage != null
-                    ? FileImage(selectedImage!)
-                    : group?.image != null && group!.image!.isNotEmpty
-                    ? NetworkImage(group!.image!)
-                    : const AssetImage(Paths.user) as ImageProvider,
+                ],
               ),
             ),
           ),
         ),
-        Positioned(
-          right: 0,
-          bottom: 0,
-          child: GestureDetector(
-            onTap: pickImage,
-            child: ImageWidget(image: Paths.edit, width: 20),
-          ),
-        ),
-      ],
+      ),
     );
+    if (confirmed != true || !mounted) return;
+
+    // Remove the user from the local group state so it reflects in the UI
+    setState(() {
+      group!.participants.removeWhere((m) => m.id == p.id);
+    });
   }
 
-  Widget _header(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 25.w, vertical: 10.w),
-      child: Column(
+  String _formatLastSeen(DateTime lastSeen) {
+    final now = DateTime.now();
+    final diff = now.difference(lastSeen);
+    if (diff.inMinutes < 1) return "just now";
+    if (diff.inHours < 1) return "${diff.inMinutes}m ago";
+    if (diff.inDays < 1) return "${diff.inHours}h ago";
+    if (diff.inDays < 7) return "${diff.inDays}d ago";
+    return "${(diff.inDays / 7).floor()}w ago";
+  }
+
+  // ─── Bottom Buttons ─────────────────────────────────────────────────────────
+
+  Widget _bottomButtons(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      child: Row(
         children: [
-          Container(
-            width: 45.w,
-            height: 5.h,
-            decoration: BoxDecoration(
-              color: Colors.black12,
-              borderRadius: BorderRadius.circular(10.r),
+          Expanded(
+            child: CustomButton(
+              height: 44,
+              textColor: AppColors.black,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              showBorder: true,
+              buttonColor: Colors.white,
+              stadium: false,
+              borderRadius: 22,
+              borderWidth: 1.5,
+              title: 'Cancel',
+              onTap: () {
+                context.read<ChatPro>().clearGroupCreationState();
+                Navigator.of(context).pop();
+              },
             ),
           ),
-          Spacers.sb10(),
-          Row(
-            children: [
-              ImageWidget(image: Paths.customers, fit: BoxFit.cover, width: 27),
-              Spacers.sbw10(),
-              Expanded(
-                child: TextWidget(
-                  text: "Edit Group",
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  context.read<ChatPro>().clearGroupCreationState();
-                  Navigator.of(context).pop();
-                },
-                child: Icon(
-                  Icons.close,
-                  size: 26.sp,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
+          Spacers.sbw12(),
+          Expanded(
+            child: CustomButton(
+              height: 44,
+              title: 'Update',
+              onTap: _onSave,
+              buttonColor: AppColors.btnClr,
+              textColor: AppColors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              stadium: false,
+              borderRadius: 22,
+            ),
           ),
         ],
       ),
     );
   }
 
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
   Widget _buildLabel(String text) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextWidget(
-        text: text,
-        color: Colors.blueGrey.shade700,
-        fontWeight: FontWeight.w700,
-        fontSize: 14,
-      ),
+    return TextWidget(
+      text: text,
+      color: Colors.black87,
+      fontWeight: FontWeight.w700,
+      fontSize: 14,
     );
   }
 
-  // Helper for Input Decoration
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
+      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14.sp),
       filled: true,
       fillColor: Colors.white,
-      contentPadding: EdgeInsets.symmetric(horizontal: 13.w, vertical: 15.w),
+      contentPadding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12.r),
         borderSide: BorderSide(color: Colors.grey.shade300),
@@ -525,14 +724,6 @@ class EditChatGroupState extends State<EditChatGroup> {
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12.r),
         borderSide: const BorderSide(color: AppColors.grey),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.r),
-        borderSide: const BorderSide(color: Colors.red, width: 1),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.r),
-        borderSide: const BorderSide(color: Colors.red, width: 1),
       ),
     );
   }

@@ -1,6 +1,7 @@
 // edit_account.dart
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import '../../utils/console_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../constants/colors.dart';
@@ -98,7 +99,7 @@ class _EditAccountState extends State<EditAccount> {
             .where((id) => id != -1)
             .toList() ??
         [];
-    debugPrint(acc.staffDetails?.languages.toString());
+    printData(title: "Account Languages:", data: acc.staffDetails?.languages);
     selectedSkillIds =
         acc.staffDetails?.skills
             .map((skillName) {
@@ -141,7 +142,7 @@ class _EditAccountState extends State<EditAccount> {
   Future<void> _onSave(dynamic context) async {
     if (!_formKey.currentState!.validate()) return;
     final pro = getAdminPro(context);
-    debugPrint('selectedLanguageIds: $selectedLanguageIds');
+    printData(title: "selectedLanguageIds:", data: selectedLanguageIds);
     List<Map<String, dynamic>> phones = phoneFields
         .map(
           (p) => {"type": p.type.apiValue, "value": p.controller.text.trim()},
@@ -164,7 +165,7 @@ class _EditAccountState extends State<EditAccount> {
       imagePath: selectedImage?.path,
       context: context,
     );
-    debugPrint("Update API result: $success");
+    printData(title: "Update API result:", data: success);
     if (success) {
       Navigator.pop(context);
       showToast(message: "Account Updated Successfully");

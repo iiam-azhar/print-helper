@@ -11,6 +11,7 @@ import '../services/api_routes.dart';
 import '../services/api_service.dart';
 import '../widgets/loaders.dart';
 import '../widgets/toasts.dart';
+import '../utils/console_util.dart';
 
 class CustomerPro extends ChangeNotifier {
   bool customersLoad = false;
@@ -18,6 +19,7 @@ class CustomerPro extends ChangeNotifier {
 
   int currentPage = 1;
   int lastPage = 1;
+  int totalCustomers = 0;
 
   final List<CustomerModel> _customers = [];
   List<CustomerModel> get customers => _customers;
@@ -48,7 +50,11 @@ class CustomerPro extends ChangeNotifier {
     } else {
       customersLoad = true;
       currentPage = 1;
-      _customers.clear();
+      // DO NOT clear totalCustomers here if you want to keep showing the old count until new data arrives?
+      // Actually, standard behavior is to reset if it's a fresh load, but we might want to keep it to avoid UI flicker.
+      // Let's reset it if it's a completely new filter search, but maybe not on refresh.
+      // For now, let's just leave it or reset it.
+      // _customers.clear(); // Handled below
     }
     notifyListeners();
     try {
@@ -67,7 +73,9 @@ class CustomerPro extends ChangeNotifier {
       );
       if (response["success"] == true) {
         final data = response["data"];
-        customers.clear();
+        if (!loadMore) {
+          customers.clear();
+        }
         _myCustomer = null;
         if (data["client"] != null) {
           _client = ClientModelCust.fromJson(data["client"]);
@@ -76,21 +84,28 @@ class CustomerPro extends ChangeNotifier {
         }
         currentPage = data["meta"]["current_page"];
         lastPage = data["meta"]["last_page"];
+
+        // Parse total safely
+        if (data["meta"]["total"] != null) {
+          totalCustomers = int.tryParse(data["meta"]["total"].toString()) ?? 0;
+        }
+
         List<dynamic> list = data["customers"] ?? [];
         for (var item in list) {
           _customers.add(CustomerModel.fromJson(item));
         }
-        debugPrint("success: ${response["success"]}");
-        debugPrint("data keys: ${response["data"].keys}");
-        debugPrint(
-          "customers length raw: ${(response["data"]["customers"] as List).length}",
+        printData(title: "success:", data: response["success"]);
+        printData(title: "data keys:", data: response["data"].keys);
+        printData(
+          title: "customers length raw:",
+          data: (response["data"]["customers"] as List).length,
         );
         for (var item in list) {
-          debugPrint("item keys: ${(item as Map).keys}");
+          printData(title: "item keys:", data: (item as Map).keys);
         }
       }
     } catch (e, st) {
-      debugPrint("Error loading customers $e\n$st");
+      printData(title: "Error loading customers", data: "$e\n$st", e: true);
     } finally {
       customersLoad = false;
       isLoadingMore = false;
@@ -168,15 +183,15 @@ class CustomerPro extends ChangeNotifier {
       }
       final streamedRes = await request.send();
       final res = await http.Response.fromStream(streamedRes);
-      debugPrint("STATUS: ${res.statusCode}");
-      debugPrint("BODY: ${res.body}");
+      printData(title: "STATUS:", data: res.statusCode);
+      printData(title: "BODY:", data: res.body);
       if (res.statusCode == 200 || res.statusCode == 201) {
         await getCustomers(ctx: context, clientId: clientId);
         return true;
       }
       return false;
     } catch (e) {
-      debugPrint("CLIENT CREATE ERROR: $e");
+      printData(title: "CLIENT CREATE ERROR:", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -203,16 +218,16 @@ class CustomerPro extends ChangeNotifier {
       final uri = Uri.parse(
         '${ApiRoutes.baseUrl}${ApiRoutes.customers}/$custId/update',
       );
-      debugPrint(uri.toString());
+      printData(title: 'URI:', data: uri.toString());
       final request = http.MultipartRequest("POST", uri);
       request.headers.addAll({
         "Accept": "application/json",
         "Authorization": "Bearer $token",
       });
 
-      debugPrint("custId: $custId");
-      debugPrint("clientId: $clientId");
-      debugPrint("companyName: $companyName");
+      printData(title: "custId:", data: custId);
+      printData(title: "clientId:", data: clientId);
+      printData(title: "companyName:", data: companyName);
 
       request.fields["client_id"] = clientId.toString();
       request.fields["company_name"] = companyName;
@@ -268,15 +283,15 @@ class CustomerPro extends ChangeNotifier {
       final streamedRes = await request.send();
       final res = await http.Response.fromStream(streamedRes);
 
-      debugPrint("STATUS: ${res.statusCode}");
-      debugPrint("BODY: ${res.body}");
+      printData(title: "STATUS:", data: res.statusCode);
+      printData(title: "BODY:", data: res.body);
       if (res.statusCode == 200 || res.statusCode == 201) {
         await getCustomers(ctx: context, clientId: clientId);
         return true;
       }
       return false;
     } catch (e) {
-      debugPrint("CLIENT CREATE ERROR: $e");
+      printData(title: "CLIENT CREATE ERROR:", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -291,7 +306,7 @@ class CustomerPro extends ChangeNotifier {
       final url = Uri.parse(
         "${ApiRoutes.baseUrl}${ApiRoutes.customers}/$customerId",
       );
-      debugPrint("CUSTOMER URL: $url");
+      printData(title: "CUSTOMER URL:", data: url);
       final response = await http.get(
         url,
         headers: {
@@ -299,17 +314,21 @@ class CustomerPro extends ChangeNotifier {
           "Accept": "application/json",
         },
       );
-      debugPrint("STATUS CODE: ${response.statusCode}");
+      printData(title: "STATUS CODE:", data: response.statusCode);
       if (response.statusCode == 200) {
         final jsonBody = jsonDecode(response.body);
-        debugPrint("CUSTOMER BODY: $jsonBody");
+        printData(title: "CUSTOMER BODY:", data: jsonBody);
         return EditCustomerModel.fromJson(jsonBody['data']['customer']);
       } else {
-        debugPrint("Customer Fetch Error: ${response.body}");
+        printData(title: "Customer Fetch Error:", data: response.body, e: true);
         return null;
       }
     } catch (e, st) {
-      debugPrint("ERROR in getCustomerDetails: $e\n$st");
+      printData(
+        title: "ERROR in getCustomerDetails:",
+        data: "$e\n$st",
+        e: true,
+      );
       return null;
     } finally {
       Loaders.hide();
@@ -338,7 +357,7 @@ class CustomerPro extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint("Toggle Customer Error: $e");
+      printData(title: "Toggle Customer Error:", data: e, e: true);
     } finally {
       Loaders.hide();
     }
@@ -376,7 +395,7 @@ class CustomerPro extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint("Toggle Contact Error: $e");
+      printData(title: "Toggle Contact Error:", data: e, e: true);
     } finally {
       Loaders.hide();
     }
@@ -398,7 +417,7 @@ class CustomerPro extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      debugPrint("DELETE ERROR: $e");
+      printData(title: "DELETE ERROR:", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -715,7 +734,10 @@ class CustomerPro extends ChangeNotifier {
 
       final int effectiveClientId = loggedClientId ?? clientId;
 
-      debugPrint("getSingleCustomer client_id => $effectiveClientId");
+      printData(
+        title: "getSingleCustomer client_id =>",
+        data: effectiveClientId,
+      );
 
       final uri = Uri.parse(ApiRoutes.customers).replace(
         queryParameters: {
@@ -753,7 +775,7 @@ class CustomerPro extends ChangeNotifier {
         }
       }
     } catch (e, st) {
-      debugPrint("Error loading customers $e\n$st");
+      printData(title: "Error loading customers", data: "$e\n$st", e: true);
     } finally {
       customersLoad = false;
       isLoadingMore = false;

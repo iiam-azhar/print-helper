@@ -226,7 +226,7 @@ class AccountAddContentState extends State<AccountAddContent> {
               title: 'Save',
               onTap: () async {
                 _onSave(context);
-                debugPrint('tap');
+                printData(title: "Tap", data: "Save button tapped");
               },
               buttonColor: AppColors.btnClr,
               textColor: AppColors.white,

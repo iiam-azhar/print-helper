@@ -21,18 +21,18 @@ class ProjectPro extends ChangeNotifier {
       await delayed(millisec: 1000);
       final data = projectsJson;
       if (_isSuccess(data)) {
-        debugPrint('0000');
+        printData(title: '0000', data: '');
         final result = data['projects'] as List<dynamic>?;
-        debugPrint('111111');
+        printData(title: '111111', data: '');
         if (result != null) {
-          debugPrint('2222');
+          printData(title: '2222', data: '');
           _projects.clear();
           _projects.addAll(projectsFromJson(result));
-          debugPrint('3333');
-          debugPrint(_projects.first.id);
+          printData(title: '3333', data: '');
+          printData(title: 'Project ID:', data: _projects.first.id);
         }
       }
-      debugPrint('4444');
+      printData(title: '4444', data: '');
     } catch (e, st) {
       printData(title: "Project Load Error", data: "$e\n$st", e: true);
     } finally {
