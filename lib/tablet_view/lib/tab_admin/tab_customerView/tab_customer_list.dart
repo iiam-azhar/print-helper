@@ -412,7 +412,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
               }
 
               return TextWidget(
-                                            text: "Customers (${pro.totalCustomers})",                fontWeight: FontWeight.w700,
+                text: "Customers (${pro.totalCustomers})",
+                fontWeight: FontWeight.w700,
                 fontSize: 18,
                 color: const Color(0xFF414345),
               );

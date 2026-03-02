@@ -17,8 +17,6 @@ import 'tab_add_account.dart';
 import 'tab_edit_account.dart';
 import '../tab_filter/tab_filter_screen.dart';
 
-
-
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
 
@@ -129,7 +127,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
               ImageWidget(image: Paths.accounts, width: 28),
               Spacers.sbw12(),
               TextWidget(
-                                            text: "Accounts (${provider.totalAccounts})",                fontWeight: FontWeight.bold,
+                text: "Accounts (${provider.totalAccounts})",
+                fontWeight: FontWeight.bold,
                 fontSize: 18,
                 fontFam: MyFontFam.poppins,
                 color: const Color(0XFF414345),

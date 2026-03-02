@@ -55,8 +55,8 @@ class _SideBarState extends State<SideBar> {
           builder: (context, custPro, _) {
             final bool showBrandLoader =
                 (isCustomer &&
-                    (custPro.client == null ||
-                        custPro.client!.brandingPrimaryColor.isEmpty));
+                (custPro.client == null ||
+                    custPro.client!.brandingPrimaryColor.isEmpty));
 
             if (showBrandLoader) {
               // return Container(
@@ -75,9 +75,7 @@ class _SideBarState extends State<SideBar> {
             debugPrint("==== SIDEBAR DEBUG ====");
             debugPrint("ROLE = ${widget.role}");
             debugPrint("selectedClient = ${clipro.selectedClient?.id}");
-            debugPrint(
-              "brandPrimary = ${clipro.selectedClient?.primaryColor}",
-            );
+            debugPrint("brandPrimary = ${clipro.selectedClient?.primaryColor}");
             debugPrint(
               "brandSecondary = ${clipro.selectedClient?.secondaryColor}",
             );
@@ -127,10 +125,8 @@ class _SideBarState extends State<SideBar> {
                 }
                 // CONTACT only when NOT customer
                 else if (isContact) {
-                  final brandPrimeHex =
-                      clipro.selectedClient?.primaryColor;
-                  final brandSecondHex =
-                      clipro.selectedClient?.secondaryColor;
+                  final brandPrimeHex = clipro.selectedClient?.primaryColor;
+                  final brandSecondHex = clipro.selectedClient?.secondaryColor;
 
                   sidebarColor =
                       (brandPrimeHex != null && brandPrimeHex.isNotEmpty)

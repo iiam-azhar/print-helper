@@ -893,7 +893,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final direction = msg.callDirection ?? '';
     final toNumber = msg.callToNumber ?? '';
     final fromNumber = msg.callFromNumber ?? '';
-    
+
     // If no call details, show fallback
     if (direction.isEmpty && toNumber.isEmpty && fromNumber.isEmpty) {
       return Container(

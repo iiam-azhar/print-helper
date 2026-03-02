@@ -108,7 +108,8 @@ class _ClientScreenState extends State<ClientScreen> {
                   ImageWidget(image: Paths.clientprofile, width: 24),
                   Spacers.sbw8(),
                   TextWidget(
-                                                text: "Clients (${pro.totalClients})",                    fontSize: 18,
+                    text: "Clients (${pro.totalClients})",
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ],
