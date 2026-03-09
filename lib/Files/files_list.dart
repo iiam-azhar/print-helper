@@ -1,18 +1,18 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:print_helper/secondPhase/Files/components/fab.dart';
-import 'package:print_helper/secondPhase/Files/components/filter_sheet.dart';
+import 'package:print_helper/Files/components/fab.dart';
+import 'package:print_helper/Files/components/filter_sheet.dart';
 import 'package:print_helper/widgets/image_widget.dart';
 import 'package:provider/provider.dart';
-import '../../constants/colors.dart';
-import '../../constants/paths.dart';
-import '../../models/filefolder_models.dart';
-import '../../providers/files_pro.dart';
-import '../../services/helpers.dart';
-import '../../widgets/custom_prompts.dart';
-import '../../widgets/spacers.dart';
-import '../../widgets/text_widget.dart';
+import '../constants/colors.dart';
+import '../constants/paths.dart';
+import '../models/filefolder_models.dart';
+import '../providers/files_pro.dart';
+import '../services/helpers.dart';
+import '../widgets/custom_prompts.dart';
+import '../widgets/spacers.dart';
+import '../widgets/text_widget.dart';
 import 'components/file_info.dart';
 
 class FilesScreen extends StatefulWidget {

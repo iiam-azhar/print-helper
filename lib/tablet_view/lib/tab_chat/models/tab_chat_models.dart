@@ -158,10 +158,18 @@ class ChatMessage {
   final int? senderId;
   final String message;
 
-  final String type; // text | image | audio | call
+  final String type; // text | image | audio | call | video
   final String? audioUrl; // voice message URL
   final int? audioDuration; // seconds (optional)
   final Map<String, dynamic>? callAttachments; // call-specific data
+
+  // Video-type fields
+  final String? videoUrl; // video message URL
+  final int? videoDuration; // seconds
+  final int? videoSize; // bytes
+  final String? videoMimeType; // video/mp4 etc.
+  final bool
+  isVideoCallRecording; // true when video msg has is_video_call_recording
 
   final DateTime createdAt;
   final bool isMe;
@@ -190,6 +198,11 @@ class ChatMessage {
     this.readAt,
     this.senderName,
     this.senderAvatar,
+    this.videoUrl,
+    this.videoDuration,
+    this.videoSize,
+    this.videoMimeType,
+    this.isVideoCallRecording = false,
   });
   factory ChatMessage.fromJson(Map<String, dynamic> json, int currentUserId) {
     final user = json['user'];
@@ -218,6 +231,11 @@ class ChatMessage {
       callAttachments: json['type'] == 'call' && json['attachments'] is Map
           ? Map<String, dynamic>.from(json['attachments'])
           : null,
+      videoUrl: _extractVideoUrl(json),
+      videoDuration: _extractVideoDuration(json),
+      videoSize: _extractVideoSize(json),
+      videoMimeType: _extractVideoMimeType(json),
+      isVideoCallRecording: _isVideoCallRecording(json),
     );
   }
 
@@ -257,6 +275,107 @@ class ChatMessage {
     return null;
   }
 
+  /// Helper to extract video URL from attachments
+  static String? _extractVideoUrl(Map<String, dynamic> json) {
+    if (json['type'] != 'video') return null;
+
+    if (json['attachments'] is Map) {
+      final attachments = json['attachments'] as Map;
+      if (attachments['video_url'] != null) {
+        return attachments['video_url'];
+      }
+    }
+
+    return null;
+  }
+
+  /// Helper to extract video duration from attachments
+  static int? _extractVideoDuration(Map<String, dynamic> json) {
+    if (json['type'] != 'video') return null;
+
+    if (json['attachments'] is Map) {
+      final attachments = json['attachments'] as Map;
+      if (attachments['duration'] != null) {
+        return int.tryParse(attachments['duration'].toString());
+      }
+    }
+
+    return null;
+  }
+
+  /// Helper to extract video size from attachments
+  static int? _extractVideoSize(Map<String, dynamic> json) {
+    if (json['type'] != 'video') return null;
+
+    if (json['attachments'] is Map) {
+      final attachments = json['attachments'] as Map;
+      if (attachments['size'] != null) {
+        return int.tryParse(attachments['size'].toString());
+      }
+    }
+
+    return null;
+  }
+
+  /// Helper to extract video mime type from attachments
+  static String? _extractVideoMimeType(Map<String, dynamic> json) {
+    if (json['type'] != 'video') return null;
+
+    if (json['attachments'] is Map) {
+      final attachments = json['attachments'] as Map;
+      if (attachments['mime_type'] != null) {
+        return attachments['mime_type'];
+      }
+    }
+
+    return null;
+  }
+
+  /// Whether this is a video call recording
+  static bool _isVideoCallRecording(Map<String, dynamic> json) {
+    if (json['type'] != 'video') return false;
+
+    if (json['attachments'] is Map) {
+      final attachments = json['attachments'] as Map;
+      return attachments['is_video_call_recording'] == true;
+    }
+
+    return false;
+  }
+
+  /// Getter for voice call recording compatibility
+  bool get isCallRecording {
+    if (type != 'voice') return false;
+    if (callAttachments != null &&
+        callAttachments!['is_call_recording'] == true) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Getter to extract to_users from call attachments
+  List<Map<String, dynamic>>? get toUsers {
+    if (type != 'call' || callAttachments == null) return null;
+    if (callAttachments!['to_users'] is List) {
+      return (callAttachments!['to_users'] as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    }
+    return null;
+  }
+
+  /// Getter for call from number
+  String? get callFromNumber {
+    if (type != 'call' || callAttachments == null) return null;
+    return callAttachments!['from_number']?.toString();
+  }
+
+  /// Getter for call to number
+  String? get callToNumber {
+    if (type != 'call' || callAttachments == null) return null;
+    return callAttachments!['to_number']?.toString();
+  }
+
   ChatMessage copyWith({
     String? message,
     bool? isRead,
@@ -281,6 +400,11 @@ class ChatMessage {
       isDelivered: isDelivered ?? this.isDelivered,
       deliveredAt: deliveredAt ?? this.deliveredAt,
       readAt: readAt ?? this.readAt,
+      videoUrl: videoUrl,
+      videoDuration: videoDuration,
+      videoSize: videoSize,
+      videoMimeType: videoMimeType,
+      isVideoCallRecording: isVideoCallRecording,
     );
   }
 }

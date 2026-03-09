@@ -216,16 +216,20 @@ class _ChatListState extends State<ChatList> {
     String messagePreview = chat.latestMessage?.message ?? "No messages yet";
     if (isMyMessage && chat.latestMessage != null) {
       if (chat.latestMessage!.type == 'voice') {
-        messagePreview = "You: 🎤 Voice Message";
+        messagePreview = "You: 🎙️ Voice Message";
       } else if (chat.latestMessage!.type == 'image') {
         messagePreview = "You: 📷 Image";
+      } else if (chat.latestMessage!.type == 'video') {
+        messagePreview = "You: 📹 Video";
       } else {
         messagePreview = "You: ${chat.latestMessage!.message}";
       }
     } else if (chat.latestMessage?.type == 'voice') {
-      messagePreview = "🎤 Voice Message";
+      messagePreview = "🎙️ Voice Message";
     } else if (chat.latestMessage?.type == 'image') {
       messagePreview = "📷 Image";
+    } else if (chat.latestMessage?.type == 'video') {
+      messagePreview = "📹 Video";
     }
     return InkWell(
       onTap: () async {

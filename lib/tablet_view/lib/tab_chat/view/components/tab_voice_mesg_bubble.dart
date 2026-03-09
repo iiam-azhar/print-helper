@@ -189,7 +189,7 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
   Widget build(BuildContext context) {
     super.build(context);
     return Container(
-      padding: EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
       decoration: BoxDecoration(
         color: widget.isMe ? const Color(0xfff1f1f2) : Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -201,6 +201,8 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: widget.isMe ? Colors.grey[300] : Colors.grey[400],
@@ -217,6 +219,12 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
                         ),
                       )
                     : IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 36,
+                          minHeight: 36,
+                        ),
+                        splashRadius: 18,
                         visualDensity: VisualDensity.compact,
                         onPressed: _toggle,
                         icon: Icon(
@@ -237,6 +245,9 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
                 ),
               ),
               IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                splashRadius: 16,
                 onPressed: _isReady ? _downloadVoice : null,
                 icon: Icon(
                   Icons.file_download_outlined,

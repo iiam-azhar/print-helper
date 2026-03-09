@@ -107,29 +107,32 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 return Column(
                   children: [
                     Expanded(
-                      child: ListView(
-                        controller: _scrollController,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        children: [
-                          if (provider.topCustomer != null)
-                            _topPreview(provider),
-                          // _header(provider),
-                          Spacers.sb12(),
-                          ...provider.customers.map(
-                            (c) => _customerCard(c, provider),
+                      child: RefreshIndicator(
+                        onRefresh: _onRefresh,
+                        child: ListView(
+                          controller: _scrollController,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
                           ),
-                          if (provider.isLoadingMore)
-                            Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(12),
-                                child: showLoader(),
-                              ),
+                          children: [
+                            if (provider.topCustomer != null)
+                              _topPreview(provider),
+                            // _header(provider),
+                            Spacers.sb12(),
+                            ...provider.customers.map(
+                              (c) => _customerCard(c, provider),
                             ),
-                          Spacers.sb20(),
-                        ],
+                            if (provider.isLoadingMore)
+                              Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: showLoader(),
+                                ),
+                              ),
+                            Spacers.sb20(),
+                          ],
+                        ),
                       ),
                     ),
                     _buildPagination(provider),
@@ -233,7 +236,33 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         ? Row(
                             children: [
                               IconButton(
-                                onPressed: () {},
+                                onPressed: () async {
+                                  final clPro = Provider.of<ClientPro>(
+                                    context,
+                                    listen: false,
+                                  );
+                                  final authPro = Provider.of<AuthPro>(
+                                    context,
+                                    listen: false,
+                                  );
+
+                                  final clientDetails = await clPro
+                                      .getClientDetails(item.client!.id);
+                                  if (clientDetails != null &&
+                                      clientDetails.contacts.isNotEmpty) {
+                                    final primary = clientDetails.contacts
+                                        .firstWhere(
+                                          (c) => c.isPrimary == 1,
+                                          orElse: () =>
+                                              clientDetails.contacts.first,
+                                        );
+
+                                    await authPro.switchUser(
+                                      userId: primary.id,
+                                      context: context,
+                                    );
+                                  }
+                                },
                                 icon: ImageWidget(
                                   image: Paths.login,
                                   width: 25,
@@ -713,7 +742,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             children: [
               SizedBox(
                 width: 55,
-                height: 33,
+                height: 40,
                 child: FittedBox(
                   child: Switch(
                     value: item.status,
@@ -957,7 +986,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 role == "CONTACT" || role == "STAFF"
                     ? SizedBox(width: 59)
                     : Spacers.sbw20(),
-                _imageButton(Paths.email, 20, () {}),
+                _imageButton(Paths.email, 20, () {
+                  if (c.emails.isNotEmpty) {
+                    tryLaunchUrl(
+                      url: 'mailto:${c.emails.first}',
+                      message: 'Could not open email app',
+                    );
+                  } else {
+                    showToast(message: 'No email address available');
+                  }
+                }),
                 _imageButton(Paths.call, 20, () {}),
                 _imageButton(Paths.chat, 20, () {}),
                 role == "CONTACT" || role == "STAFF"
@@ -1181,5 +1219,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _onRefresh() async {
+    final provider = Provider.of<CustomerPro>(context, listen: false);
+    await provider.getCustomers(ctx: context, page: 1, clientId: widget.id);
   }
 }

@@ -328,7 +328,7 @@ class _SingleCustomerState extends State<SingleCustomer> {
             children: [
               SizedBox(
                 width: 55,
-                height: 33,
+                height: 40,
                 child: FittedBox(
                   child: Switch(
                     value: item.status,

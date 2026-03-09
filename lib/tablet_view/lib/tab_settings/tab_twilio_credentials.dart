@@ -32,7 +32,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
   bool _didSyncSelections = false;
   bool _didUserModify = false;
   String? _lastSyncKey;
-
+  bool _didSyncCredentials = false;
   @override
   void initState() {
     super.initState();
@@ -47,8 +47,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
       chatPro.fetchTwilioNumbers();
       chatPro.fetchTwilioClientsWithContacts();
       chatPro.fetchTwilioStaff();
-      // Note: fetchTwilioCredentials is not available in consolidated ChatPro
-      // Credentials management moved to backend API
+      chatPro.fetchTwilioCredentials();
     });
   }
 
@@ -91,16 +90,23 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
           _syncSelectionsFromApi(chatPro);
         }
         // Credentials sync not available in consolidated ChatPro - using API directly
-        /* Note: Credential synchronization removed - using API directly instead
-        final shouldSyncCredentials = false;
+
+        final shouldSyncCredentials =
+            !_didSyncCredentials &&
+            !chatPro.isTwilioCredentialsLoading &&
+            !chatPro.twilioCredentialsHasError &&
+            (chatPro.twilioAccountSid != null ||
+                chatPro.twilioApiKeySid != null ||
+                chatPro.twilioApiKeySecret != null ||
+                chatPro.twilioTwimlAppSid != null);
         if (shouldSyncCredentials) {
           _didSyncCredentials = true;
-          // _accountSidController.text = chatPro.twilioAccountSid ?? '';
-          // _apiKeySidController.text = chatPro.twilioApiKeySid ?? '';
-          // _apiKeySecretController.text = chatPro.twilioApiKeySecret ?? '';
-          // _twimlAppSidController.text = chatPro.twilioTwimlAppSid ?? '';
+          _accountSidController.text = chatPro.twilioAccountSid ?? '';
+          _apiKeySidController.text = chatPro.twilioApiKeySid ?? '';
+          _apiKeySecretController.text = chatPro.twilioApiKeySecret ?? '';
+          _twimlAppSidController.text = chatPro.twilioTwimlAppSid ?? '';
         }
-        */
+
         return Container(
           decoration: BoxDecoration(color: Colors.white),
           child: Column(
@@ -123,8 +129,8 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                       ),
                     ),
                     Spacers.sbw10(),
+
                     // View Settings button removed - Twilio credentials management not available in consolidated ChatPro
-                    /*
                     GestureDetector(
                       onTap: () {
                         _showTwilioCredentialsDialog();
@@ -151,10 +157,10 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                         ),
                       ),
                     ),
-                    */
+
                     Spacers.sbw10(),
+
                     // Sync button removed - syncTwilioNumbers not available in consolidated ChatPro
-                    /*
                     GestureDetector(
                       onTap: () {
                         if (!chatPro.isTwilioSyncing) {
@@ -181,7 +187,6 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                         ),
                       ),
                     ),
-                    */
                   ],
                 ),
               ),
@@ -227,8 +232,8 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                         Provider.of<ChatPro>(
                           context,
                           listen: false,
-                        ).fetchTwilioNumbers(
-                          // page: 1, // page parameter not supported
+                        ).fetchTwilioNumbersTab(
+                          page: 1,
                           phone: _phoneSearchController.text,
                           client: _companySearchController.text,
                           contact: _contactSearchController.text,
@@ -356,8 +361,8 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                         ),
                       ),
               ),
+
               // Pagination removed - not supported in consolidated ChatPro.fetchTwilioNumbers
-              /* Pagination container commented out
               if (!chatPro.isTwilioLoading &&
                   !chatPro.twilioHasError &&
                   twilioCredentials.isNotEmpty)
@@ -377,7 +382,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                         icon: Icons.keyboard_double_arrow_left,
                         onTap: () {
                           if (chatPro.twilioCurrentPage > 1) {
-                            chatPro.fetchTwilioNumbers(page: 1);
+                            chatPro.fetchTwilioNumbersTab(page: 1);
                           }
                         },
                         enabled: chatPro.twilioCurrentPage > 1,
@@ -388,7 +393,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                         icon: Icons.chevron_left,
                         onTap: () {
                           if (chatPro.twilioCurrentPage > 1) {
-                            chatPro.fetchTwilioNumbers(
+                            chatPro.fetchTwilioNumbersTab(
                               page: chatPro.twilioCurrentPage - 1,
                             );
                           }
@@ -405,7 +410,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                         onTap: () {
                           if (chatPro.twilioCurrentPage <
                               chatPro.twilioLastPage) {
-                            chatPro.fetchTwilioNumbers(
+                            chatPro.fetchTwilioNumbersTab(
                               page: chatPro.twilioCurrentPage + 1,
                             );
                           }
@@ -420,7 +425,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                         onTap: () {
                           if (chatPro.twilioCurrentPage <
                               chatPro.twilioLastPage) {
-                            chatPro.fetchTwilioNumbers(
+                            chatPro.fetchTwilioNumbersTab(
                               page: chatPro.twilioLastPage,
                             );
                           }
@@ -430,7 +435,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                       ),
                     ],
                   ),
-                */
+                ),
             ],
           ),
         );
@@ -523,7 +528,9 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey, width: 0.5)),
+        border: Border(
+          bottom: BorderSide(color: const Color(0x5E9E9E9E), width: 0.5),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -597,7 +604,14 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                 );
               },
               child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 18),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical:
+                      selectedClient != null && selectedClient.id != -1 ||
+                          selectedContacts.isNotEmpty
+                      ? 5
+                      : 14,
+                ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.grey.shade300),
@@ -677,7 +691,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
       ),
       constraints: BoxConstraints(maxWidth: 280, minWidth: 280),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 18),
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.grey.shade300),
@@ -1103,7 +1117,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
   }
 
   //  Pagination methods removed - not supported in consolidated ChatPro
-  /*
+
   List<Widget> _buildPageNumbers(ChatPro chatPro) {
     List<Widget> pageWidgets = [];
     int currentPage = chatPro.twilioCurrentPage;
@@ -1190,7 +1204,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
     final bool isActive = chatPro.twilioCurrentPage == pageNumber;
     return GestureDetector(
       onTap: () {
-        chatPro.fetchTwilioNumbers(page: pageNumber);
+        chatPro.fetchTwilioNumbersTab(page: pageNumber);
       },
       child: Container(
         width: 32,
@@ -1214,14 +1228,10 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
       ),
     );
   }
-  */
 
-  // Disabled methods - Twilio credentials management moved to API
-  /*
   void _showTwilioCredentialsDialog() {
     // This method is disabled - Twilio credentials management not available
     // in consolidated ChatPro. Feature moved to backend API.
-    /*
     final chatPro = Provider.of<ChatPro>(context, listen: false);
     if (!chatPro.isTwilioCredentialsLoading &&
         (chatPro.twilioAccountSid == null &&
@@ -1291,53 +1301,53 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                   _twimlAppSidController,
                   false,
                 ),
-                // // SizedBox(height: 24),
-                // // Row(
-                // //   mainAxisAlignment: MainAxisAlignment.end,
-                // //   children: [
-                // //     GestureDetector(
-                // //       onTap: () => Navigator.pop(context),
-                // //       child: Container(
-                // //         padding: EdgeInsets.symmetric(
-                // //           horizontal: 24,
-                // //           vertical: 5,
-                // //         ),
-                // //         decoration: BoxDecoration(
-                // //           border: Border.all(color: Colors.grey, width: 1),
-                // //           borderRadius: BorderRadius.circular(8),
-                // //         ),
-                // //         child: TextWidget(
-                // //           text: "Cancel",
-                // //           fontWeight: FontWeight.w500,
-                // //           fontSize: 13,
-                // //         ),
-                // //       ),
-                // //     ),
-                // //     SizedBox(width: 12),
-                // //     GestureDetector(
-                // //       onTap: () {
-                // //         Navigator.pop(context);
-                // //       },
-                // //       child: Container(
-                // //         padding: EdgeInsets.symmetric(
-                // //           horizontal: 24,
-                // //           vertical: 5,
-                // //         ),
-                // //         decoration: BoxDecoration(
-                // //           color: Color(0xFFFFC400),
-                // //           borderRadius: BorderRadius.circular(8),
-                // //         ),
-                // //         child: TextWidget(
-                // //           text: "Save",
-                // //           fontWeight: FontWeight.w600,
-                // //           fontSize: 13,
-                // //           color: Colors.black,
-                // //         ),
-                // //       ),
-                // //     ),
-                // //     SizedBox(width: 24),
-                //   ],
-                // ),
+                SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey, width: 1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: TextWidget(
+                          text: "Cancel",
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Color(0xFFFFC400),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: TextWidget(
+                          text: "Save",
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 24),
+                  ],
+                ),
                 SizedBox(height: 10),
               ],
             ),
@@ -1345,7 +1355,6 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
         );
       },
     );
-    */
   }
 
   Widget _buildCredentialField(
@@ -1414,5 +1423,4 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
       ),
     );
   }
-  */
 }

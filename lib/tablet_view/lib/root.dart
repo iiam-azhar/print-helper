@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../splash/splash.dart';
+import 'tab_onboarding/tab_splash.dart';
 import 'tab_chat/view/components/tab_audio_manager.dart';
 import 'tab_constants/colors.dart';
 import 'tab_constants/strings.dart';
@@ -42,7 +42,7 @@ class _MyAppState extends State<MyApp> {
         // localizationsDelegates: context.localizationDelegates,
         // supportedLocales: context.supportedLocales,
         // locale: context.locale,
-        home: Splash(),
+        home: const TabSplash(),
 
         // LoginScreen(),
       ),

@@ -83,23 +83,26 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 return Column(
                   children: [
                     Expanded(
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
+                      child: RefreshIndicator(
+                        onRefresh: _onRefresh,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          itemCount: provider.accounts.length,
+                          itemBuilder: (context, index) {
+                            if (index == provider.accounts.length) {
+                              return Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Center(child: showLoader()),
+                              );
+                            }
+                            final item = provider.accounts[index];
+                            return _accountCard(item, context, provider);
+                          },
                         ),
-                        itemCount: provider.accounts.length,
-                        itemBuilder: (context, index) {
-                          if (index == provider.accounts.length) {
-                            return Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Center(child: showLoader()),
-                            );
-                          }
-                          final item = provider.accounts[index];
-                          return _accountCard(item, context, provider);
-                        },
                       ),
                     ),
                     _buildPagination(provider),
@@ -301,9 +304,42 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     SizedBox(width: 10),
-                    _iconButtonTwo(Paths.email),
-                    _iconButtonTwo(Paths.call),
-                    _iconButtonTwo(Paths.chat),
+                    _iconButtonTwo(
+                      Paths.email,
+                      onTap: () {
+                        if (item.emails.isNotEmpty) {
+                          tryLaunchUrl(
+                            url: 'mailto:${item.emails.first}',
+                            message: 'Could not open email app',
+                          );
+                        } else {
+                          showToast(message: 'No email address available');
+                        }
+                      },
+                    ),
+                    _iconButtonTwo(
+                      Paths.call,
+                      onTap: () {
+                        if (item.phones.isNotEmpty) {
+                          tryLaunchUrl(
+                            url: 'tel:${item.phones.first.number}',
+                            message: 'Could not open dialer',
+                          );
+                        } else {
+                          showToast(message: 'No phone number available');
+                        }
+                      },
+                    ),
+                    _iconButtonTwo(
+                      Paths.chat,
+                      onTap: () {
+                        // For tablet, we typically use the unified chat view
+                        // If there's a specific navigation needed, it should follow tab patterns
+                        // Assuming ChatScreen is available or handled by the parent
+                        showToast(message: 'Opening chat...');
+                        // For now, let's just attempt standard navigation or a placeholder if complex
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -430,7 +466,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   children: [
                     SizedBox(
                       width: 55,
-                      height: 33,
+                      height: 40,
                       child: FittedBox(
                         fit: BoxFit.fill,
                         child: Switch(
@@ -919,11 +955,19 @@ class _AccountsScreenState extends State<AccountsScreen> {
     );
   }
 
-  Widget _iconButtonTwo(String icon) {
-    return Container(
-      padding: EdgeInsets.all(10),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(18)),
-      child: ImageWidget(image: icon, width: 23),
+  Widget _iconButtonTwo(String icon, {required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.all(10),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(18)),
+        child: ImageWidget(image: icon, width: 23),
+      ),
     );
+  }
+
+  Future<void> _onRefresh() async {
+    final provider = Provider.of<AdminPro>(context, listen: false);
+    await provider.getAccounts(ctx: context, page: 1);
   }
 }

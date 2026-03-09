@@ -15,13 +15,13 @@ import '../tab_constants/paths.dart';
 import '../tab_utils/regx.dart';
 import '../tab_widgets/tab_field_widget.dart';
 
-class ForgotPass extends StatefulWidget {
-  const ForgotPass({super.key});
+class TabForgotPass extends StatefulWidget {
+  const TabForgotPass({super.key});
   @override
-  State<ForgotPass> createState() => _ForgotPassState();
+  State<TabForgotPass> createState() => _TabForgotPassState();
 }
 
-class _ForgotPassState extends State<ForgotPass> {
+class _TabForgotPassState extends State<TabForgotPass> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
 

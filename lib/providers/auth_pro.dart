@@ -15,6 +15,8 @@ import '../services/helpers.dart';
 import '../widgets/loaders.dart';
 import '../widgets/toasts.dart';
 import '../utils/console_util.dart';
+import 'package:print_helper/tablet_view/lib/tab_auth/tab_login_screen.dart';
+import 'package:print_helper/tablet_view/lib/tab_sidePanel/dashboard_wrapper.dart';
 
 class AuthPro extends ChangeNotifier {
   Map<String, String> get headers => {'Content-type': 'application/json'};
@@ -135,37 +137,50 @@ class AuthPro extends ChangeNotifier {
   }
 
   void _navigateByRole(String? role, BuildContext context) {
+    bool isTablet = MediaQuery.of(context).size.shortestSide >= 600;
     switch (role) {
       case "ADMIN":
         navTo(
           context: context,
-          page: AdminBottomBar(pageNum: 0),
+          page: isTablet
+              ? DashboardWrapper(role: "ADMIN")
+              : AdminBottomBar(pageNum: 0),
           removeUntil: true,
         );
         break;
       case "CONTACT":
         navTo(
           context: context,
-          page: ClientBottomBar(pageNum: 0),
+          page: isTablet
+              ? DashboardWrapper(role: "CONTACT")
+              : ClientBottomBar(pageNum: 0),
           removeUntil: true,
         );
         break;
       case "STAFF":
         navTo(
           context: context,
-          page: StaffBottomBar(pageNum: 0),
+          page: isTablet
+              ? DashboardWrapper(role: "STAFF")
+              : StaffBottomBar(pageNum: 0),
           removeUntil: true,
         );
         break;
       case "CUSTOMER":
         navTo(
           context: context,
-          page: CustBottomBar(pageNum: 0),
+          page: isTablet
+              ? DashboardWrapper(role: "CUSTOMER")
+              : CustBottomBar(pageNum: 0),
           removeUntil: true,
         );
         break;
       default:
-        navTo(context: context, page: const LoginScreen(), removeUntil: true);
+        navTo(
+          context: context,
+          page: isTablet ? const TabLoginScreen() : const LoginScreen(),
+          removeUntil: true,
+        );
     }
   }
 
@@ -197,7 +212,12 @@ class AuthPro extends ChangeNotifier {
     user = null;
     token = "";
     notifyListeners();
-    navTo(context: context, page: const LoginScreen(), removeUntil: true);
+    bool isTablet = MediaQuery.of(context).size.shortestSide >= 600;
+    navTo(
+      context: context,
+      page: isTablet ? const TabLoginScreen() : const LoginScreen(),
+      removeUntil: true,
+    );
   }
 
   String forgetMail = "";

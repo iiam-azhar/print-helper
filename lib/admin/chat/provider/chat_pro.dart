@@ -81,6 +81,26 @@ class ChatPro extends ChangeNotifier {
   List<TwilioClient> twilioClients = [];
   bool isTwilioClientsLoading = false;
   bool twilioClientsHasError = false;
+  // Twilio Pagination
+  int twilioCurrentPage = 1;
+  int twilioLastPage = 1;
+  int twilioPerPage = 10;
+  int twilioTotal = 0;
+
+  // Twilio Credentials
+  String? twilioAccountSid;
+  String? twilioApiKeySid;
+  String? twilioApiKeySecret;
+  String? twilioTwimlAppSid;
+  bool isTwilioCredentialsLoading = false;
+  bool twilioCredentialsHasError = false;
+  bool isTwilioSyncing = false;
+
+  // Twilio Search Filters
+  String? twilioSearchPhone;
+  String? twilioSearchClient;
+  String? twilioSearchContact;
+  String? twilioSearchAccount;
 
   // Twilio Staff (Assigned Accounts)
   List<AssignedAccount> twilioStaff = [];
@@ -92,7 +112,6 @@ class ChatPro extends ChangeNotifier {
 
   // Twilio API Credentials
   TwilioApiCredentials? twilioApiCredentials;
-  bool isTwilioCredentialsLoading = false;
 
   Future<void> startDummyVoiceRecording() async {
     isRecordingVoice = true;
@@ -1320,7 +1339,7 @@ class ChatPro extends ChangeNotifier {
       final old = conversations[index];
       // Determine preview text based on type
       String previewText = text;
-      if (type == 'voice') previewText = "🎤 Voice Message";
+      if (type == 'voice') previewText = "🎙️Voice Message";
       if (type == 'image') previewText = "📷 Image";
       final updatedConversation = ChatConversation(
         id: old.id,
@@ -1908,7 +1927,7 @@ class ChatPro extends ChangeNotifier {
         participants: old.participants,
         latestMessage: ChatLatestMessage(
           id: tempMessage.id,
-          message: "🎤 Voice Message",
+          message: "🎙️ Voice Message",
           type: 'voice',
           createdAt: DateTime.now(),
           userId: currentUserId,
@@ -2429,5 +2448,159 @@ class ChatPro extends ChangeNotifier {
       showToast(message: 'Failed to update number');
       return false;
     }
+  }
+
+  Future<void> syncTwilioNumbers() async {
+    if (isTwilioSyncing) return;
+    isTwilioSyncing = true;
+    notifyListeners();
+    try {
+      final res = await http.post(
+        Uri.parse("${ApiRoutes.baseUrl}${ApiRoutes.twilioSyncNumbers}"),
+        headers: await apiHeaders(),
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          showToast(
+            message: data['message'] ?? 'Twilio numbers synced successfully',
+          );
+          await fetchTwilioNumbersTab(page: twilioCurrentPage);
+        } else {
+          showToast(
+            message: data['message'] ?? 'Failed to sync Twilio numbers',
+          );
+        }
+      } else {
+        showToast(message: 'Error: ${res.statusCode}');
+      }
+    } catch (e) {
+      showToast(message: 'Failed to sync Twilio numbers');
+      debugPrint('Error syncing Twilio numbers: $e');
+    } finally {
+      isTwilioSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchTwilioNumbersTab({
+    int page = 1,
+    String? phone,
+    String? client,
+    String? contact,
+    String? account,
+  }) async {
+    isTwilioLoading = true;
+    twilioHasError = false;
+    notifyListeners();
+    try {
+      if (phone != null ||
+          client != null ||
+          contact != null ||
+          account != null) {
+        twilioSearchPhone = phone;
+        twilioSearchClient = client;
+        twilioSearchContact = contact;
+        twilioSearchAccount = account;
+      }
+
+      final queryParams = <String, String>{'page': page.toString()};
+      if ((twilioSearchPhone ?? '').isNotEmpty) {
+        queryParams['phone'] = twilioSearchPhone!.trim();
+      }
+      if ((twilioSearchClient ?? '').isNotEmpty) {
+        queryParams['client'] = twilioSearchClient!.trim();
+      }
+      if ((twilioSearchContact ?? '').isNotEmpty) {
+        queryParams['contact'] = twilioSearchContact!.trim();
+      }
+      if ((twilioSearchAccount ?? '').isNotEmpty) {
+        queryParams['account'] = twilioSearchAccount!.trim();
+      }
+
+      final res = await http.get(
+        Uri.parse(
+          "${ApiRoutes.baseUrl}${ApiRoutes.twilioNumbers}",
+        ).replace(queryParameters: queryParams),
+        headers: await apiHeaders(),
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && data['data'] != null) {
+          final List<dynamic> numbersData = data['data']['numbers'] ?? [];
+          twilioNumbers = numbersData
+              .map((json) => TwilioCredential.fromJson(json))
+              .toList();
+
+          // Store pagination meta
+          if (data['meta'] != null) {
+            twilioCurrentPage = data['meta']['current_page'] ?? 1;
+            twilioLastPage = data['meta']['last_page'] ?? 1;
+            twilioPerPage = data['meta']['per_page'] ?? 10;
+            twilioTotal = data['meta']['total'] ?? 0;
+          }
+
+          twilioNumbersRevision++;
+          isTwilioLoading = false;
+          twilioHasError = false;
+        } else {
+          twilioHasError = true;
+          isTwilioLoading = false;
+          showToast(
+            message: data['message'] ?? 'Failed to load Twilio numbers',
+          );
+        }
+      } else {
+        twilioHasError = true;
+        isTwilioLoading = false;
+        showToast(message: 'Error: ${res.statusCode}');
+      }
+    } catch (e) {
+      twilioHasError = true;
+      isTwilioLoading = false;
+      showToast(message: 'Failed to fetch Twilio numbers');
+      debugPrint('Error fetching Twilio numbers: $e');
+    }
+    notifyListeners();
+  }
+
+  Future<void> fetchTwilioCredentials() async {
+    isTwilioCredentialsLoading = true;
+    twilioCredentialsHasError = false;
+    notifyListeners();
+    try {
+      final res = await http.get(
+        Uri.parse("${ApiRoutes.baseUrl}${ApiRoutes.twilioCredentials}"),
+        headers: await apiHeaders(),
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && data['data'] != null) {
+          final credentials = data['data'];
+          twilioAccountSid = credentials['account_sid']?.toString();
+          twilioApiKeySid = credentials['api_key_sid']?.toString();
+          twilioApiKeySecret = credentials['api_key_secret']?.toString();
+          twilioTwimlAppSid = credentials['twiml_app_sid']?.toString();
+          isTwilioCredentialsLoading = false;
+          twilioCredentialsHasError = false;
+        } else {
+          twilioCredentialsHasError = true;
+          isTwilioCredentialsLoading = false;
+          showToast(
+            message: data['message'] ?? 'Failed to load Twilio credentials',
+          );
+        }
+      } else {
+        twilioCredentialsHasError = true;
+        isTwilioCredentialsLoading = false;
+        showToast(message: 'Error: ${res.statusCode}');
+      }
+    } catch (e) {
+      twilioCredentialsHasError = true;
+      isTwilioCredentialsLoading = false;
+      showToast(message: 'Failed to fetch Twilio credentials');
+      debugPrint('Error fetching Twilio credentials: $e');
+    }
+    notifyListeners();
   }
 }

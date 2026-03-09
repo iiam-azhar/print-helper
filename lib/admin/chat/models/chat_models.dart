@@ -307,10 +307,18 @@ class ChatMessage {
   final int? senderId;
   final String message;
 
-  final String type; // text | image | audio
+  final String type; // text | image | audio | video
   final String? audioUrl; // voice message URL
   final int? audioDuration; // seconds (optional)
   final List<double>? voiceWaveform; // wave data
+
+  // Video-type fields
+  final String? videoUrl; // video message URL
+  final int? videoDuration; // seconds
+  final int? videoSize; // bytes
+  final String? videoMimeType; // video/mp4 etc.
+  final bool
+  isVideoCallRecording; // true when video msg has is_video_call_recording
 
   final DateTime createdAt;
   final bool isMe;
@@ -359,6 +367,11 @@ class ChatMessage {
     this.callerUsers,
     this.toUsers,
     this.voiceWaveform,
+    this.videoUrl,
+    this.videoDuration,
+    this.videoSize,
+    this.videoMimeType,
+    this.isVideoCallRecording = false,
   });
   factory ChatMessage.fromJson(Map<String, dynamic> json, int currentUserId) {
     final user = json['user'];
@@ -396,6 +409,11 @@ class ChatMessage {
       callerUsers: _callOrRecordingListField(json, 'caller_users'),
       toUsers: _callOrRecordingListField(json, 'to_users'),
       voiceWaveform: _extractVoiceWaveform(json),
+      videoUrl: _extractVideoUrl(json),
+      videoDuration: _extractVideoDuration(json),
+      videoSize: _extractVideoSize(json),
+      videoMimeType: _extractVideoMimeType(json),
+      isVideoCallRecording: _isVideoCallRecording(json),
     );
   }
 
@@ -488,6 +506,61 @@ class ChatMessage {
     return null;
   }
 
+  /// Helper to extract video URL from attachments
+  static String? _extractVideoUrl(Map<String, dynamic> json) {
+    if (json['type'] != 'video') return null;
+
+    final att = _getAttachmentsMap(json);
+    if (att != null) {
+      return att['video_url'];
+    }
+
+    return null;
+  }
+
+  /// Helper to extract video duration from attachments
+  static int? _extractVideoDuration(Map<String, dynamic> json) {
+    if (json['type'] != 'video') return null;
+
+    final att = _getAttachmentsMap(json);
+    if (att != null && att['duration'] != null) {
+      return int.tryParse(att['duration'].toString());
+    }
+
+    return null;
+  }
+
+  /// Helper to extract video size from attachments
+  static int? _extractVideoSize(Map<String, dynamic> json) {
+    if (json['type'] != 'video') return null;
+
+    final att = _getAttachmentsMap(json);
+    if (att != null && att['size'] != null) {
+      return int.tryParse(att['size'].toString());
+    }
+
+    return null;
+  }
+
+  /// Helper to extract video mime type from attachments
+  static String? _extractVideoMimeType(Map<String, dynamic> json) {
+    if (json['type'] != 'video') return null;
+
+    final att = _getAttachmentsMap(json);
+    if (att != null) {
+      return att['mime_type'];
+    }
+
+    return null;
+  }
+
+  /// Whether this is a video call recording
+  static bool _isVideoCallRecording(Map<String, dynamic> json) {
+    if (json['type'] != 'video') return false;
+    final att = _getAttachmentsMap(json);
+    return att != null && att['is_video_call_recording'] == true;
+  }
+
   ChatMessage copyWith({
     String? message,
     bool? isRead,
@@ -521,6 +594,11 @@ class ChatMessage {
       callerUsers: callerUsers,
       toUsers: toUsers,
       voiceWaveform: voiceWaveform ?? this.voiceWaveform,
+      videoUrl: videoUrl,
+      videoDuration: videoDuration,
+      videoSize: videoSize,
+      videoMimeType: videoMimeType,
+      isVideoCallRecording: isVideoCallRecording,
     );
   }
 }

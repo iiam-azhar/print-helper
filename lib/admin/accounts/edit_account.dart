@@ -299,8 +299,8 @@ class _EditAccountState extends State<EditAccount> {
           Spacers.sb10(),
           _textField(
             _firstNameCtrl,
-            "*Name",
-            "Type Name",
+            "*First Name",
+            "Type First Name",
             AppStrings.fNameError,
             AppStrings.fNameRegError,
             Regx.nameRegExp,
@@ -308,8 +308,8 @@ class _EditAccountState extends State<EditAccount> {
           Spacers.sb10(),
           _textField(
             _lastNameCtrl,
-            "*Lastname",
-            "Type Lastname",
+            "*Last name",
+            "Type Last name",
             AppStrings.lNameError,
             AppStrings.lNameRegError,
             Regx.nameRegExp,
@@ -477,7 +477,7 @@ class _EditAccountState extends State<EditAccount> {
                       }),
                       child: Container(
                         height: 45.h,
-                        width: 90.w,
+                        width: 70.w,
                         padding: EdgeInsets.symmetric(horizontal: 12.w),
                         decoration: _boxDecor(),
                         child: Row(
@@ -506,7 +506,7 @@ class _EditAccountState extends State<EditAccount> {
                           decoration: InputDecoration(
                             border: InputBorder.none,
                             hintText: field.type.label == "Phone"
-                                ? "Type Phone"
+                                ? "Type Phone No"
                                 : field.type.label == "Land Phone"
                                 ? "Landline"
                                 : "Other",
@@ -555,6 +555,19 @@ class _EditAccountState extends State<EditAccount> {
                   ],
                 ),
                 if (openPhoneDropdownIndex == index) _phoneDropdown(field),
+                if (field.type.label == "Phone")
+                  Padding(
+                    padding: EdgeInsets.only(top: 8.h, left: 80.w),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: TextWidget(
+                        text: "Phone No must include country code",
+                        fontSize: 11.sp,
+                        color: Colors.blue.shade600,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
                 Spacers.sb10(),
               ],
             );
@@ -623,7 +636,7 @@ class _EditAccountState extends State<EditAccount> {
           child: Padding(
             padding: EdgeInsets.only(left: 18.w),
             child: TextWidget(
-              text: "Email (s)",
+              text: "Phone(s) with Country Code",
               fontWeight: FontWeight.bold,
               fontSize: 13,
               color: AppColors.black,

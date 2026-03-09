@@ -517,32 +517,29 @@ class _CustomersScreenState extends State<CustomersScreen> {
               Row(
                 mainAxisAlignment: .end,
                 children: [
-                  Transform.scale(
-                    scale: .95,
-                    child: Switch(
-                      padding: EdgeInsets.zero,
-                      value: item.status,
-                      activeTrackColor: const Color(0xFF00a650),
-                      activeThumbColor: Colors.white,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (val) {
-                        provider
-                            .toggleStatus(
-                              clientId: item.clientId,
-                              custId: item.id,
-                              newStatus: val,
-                            )
-                            .whenComplete(() {
-                              if (!mounted) return;
-                              provider.getCustomers(
-                                ctx: context,
-                                page: provider.currentPage,
-                                clientId: widget.id,
-                              );
-                            });
-                        setState(() {});
-                      },
-                    ),
+                  Switch(
+                    padding: EdgeInsets.zero,
+                    value: item.status,
+                    activeTrackColor: const Color(0xFF00a650),
+                    activeThumbColor: Colors.white,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (val) {
+                      provider
+                          .toggleStatus(
+                            clientId: item.clientId,
+                            custId: item.id,
+                            newStatus: val,
+                          )
+                          .whenComplete(() {
+                            if (!mounted) return;
+                            provider.getCustomers(
+                              ctx: context,
+                              page: provider.currentPage,
+                              clientId: widget.id,
+                            );
+                          });
+                      setState(() {});
+                    },
                   ),
                   Spacers.sbw8(),
                   Builder(
@@ -833,22 +830,19 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       ),
                     ],
                   ),
-                  Transform.scale(
-                    scale: .95,
-                    child: Switch(
-                      padding: EdgeInsets.zero,
-                      value: contact.status,
-                      activeTrackColor: const Color(0xFF00a650),
-                      activeThumbColor: Colors.white,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (val) {
-                        provider.toggleCustContact(
-                          clientId: item.id,
-                          custId: contact.contactId,
-                          newStatus: val,
-                        );
-                      },
-                    ),
+                  Switch(
+                    padding: EdgeInsets.zero,
+                    value: contact.status,
+                    activeTrackColor: const Color(0xFF00a650),
+                    activeThumbColor: Colors.white,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (val) {
+                      provider.toggleCustContact(
+                        clientId: item.id,
+                        custId: contact.contactId,
+                        newStatus: val,
+                      );
+                    },
                   ),
                 ],
               ),
@@ -875,7 +869,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     _imageButton(
                       image: Paths.email,
                       width: 28,
-                      onPressed: () {},
+                      onPressed: () {
+                        if (contact.emails.isNotEmpty) {
+                          tryLaunchUrl(
+                            url: 'mailto:${contact.emails.first}',
+                            message: 'Could not open email app',
+                          );
+                        } else {
+                          showToast(message: 'No email address available');
+                        }
+                      },
                     ),
                     _imageButton(
                       image: Paths.call,

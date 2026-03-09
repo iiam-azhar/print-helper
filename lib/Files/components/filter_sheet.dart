@@ -1,8 +1,11 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:intl/intl.dart';
+import 'package:print_helper/widgets/custom_button.dart';
 import 'package:print_helper/widgets/spacers.dart';
 import 'package:print_helper/widgets/text_widget.dart';
+
+import '../../widgets/image_widget.dart';
 
 class FilterFilesSheet extends StatefulWidget {
   const FilterFilesSheet({super.key});
@@ -47,38 +50,11 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.black),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25.r),
-                    ),
-                  ),
-                  onPressed: () {},
-                  child: TextWidget(
-                    text: "Clear",
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                child: CustomButton(title: 'C', onTap: () {}),
               ),
               Spacers.sbw15(),
               Expanded(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25.r),
-                    ),
-                  ),
-                  onPressed: () {},
-                  child: TextWidget(
-                    text: "Save",
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                child: CustomButton(title: 'Save', onTap: () {}),
               ),
             ],
           ),
@@ -252,30 +228,32 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
       padding: EdgeInsets.all(16.w),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14.r),
-        border: Border.all(color: Colors.black12),
-        color: Colors.white,
+        color: Color(0xfff1f1f2),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.calendar_month),
+              ImageWidget(
+                image: 'assets/images/date.png',
+                height: 25,
+                width: 30,
+                color: Colors.black,
+              ),
               Spacers.sbw10(),
               TextWidget(
                 text: "Date Added",
                 fontWeight: FontWeight.bold,
-                fontSize: 14.sp,
+                fontSize: 14,
               ),
             ],
           ),
           Spacers.sb12(),
-
           _dateField("From", fromDate, (d) {
             setState(() => fromDate = d);
           }),
           Spacers.sb12(),
-
           _dateField("To", toDate, (d) {
             setState(() => toDate = d);
           }),
@@ -285,38 +263,55 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
   }
 
   Widget _dateField(String label, DateTime value, Function(DateTime) onPick) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        TextWidget(text: label, fontSize: 13.sp, fontWeight: FontWeight.w500),
+        Expanded(
+          flex: 1,
+          child: TextWidget(
+            text: label,
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+            color: Colors.black87,
+          ),
+        ),
         Spacers.sb5(),
-        GestureDetector(
-          onTap: () async {
-            DateTime? picked = await showDatePicker(
-              context: context,
-              firstDate: DateTime(2000),
-              lastDate: DateTime(2050),
-              initialDate: value,
-            );
-            if (picked != null) onPick(picked);
-          },
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10.r),
-              border: Border.all(color: Colors.black12),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextWidget(
-                    text: "${value.month}/${value.day}/${value.year}",
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.w500,
+        Expanded(
+          flex: 5,
+          child: GestureDetector(
+            onTap: () async {
+              DateTime? picked = await showDatePicker(
+                context: context,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2050),
+                initialDate: value,
+              );
+              if (picked != null) onPick(picked);
+            },
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10.r),
+                border: Border.all(color: Colors.black12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextWidget(
+                      text: DateFormat('MMM dd, yyyy').format(value),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                Icon(Icons.calendar_month),
-              ],
+                  ImageWidget(
+                    image: 'assets/images/date.png',
+                    height: 25,
+                    width: 25,
+                    color: Colors.grey,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

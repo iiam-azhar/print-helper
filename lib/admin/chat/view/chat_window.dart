@@ -31,6 +31,7 @@ import '../../../widgets/typing_dots.dart';
 import 'components/mesg_forward_sheet.dart';
 import 'components/mesg_options_dialog.dart';
 import 'components/voice_mesg_bubble.dart';
+import 'components/video_mesg_bubble.dart';
 import 'components/dialpad_dialog.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -179,7 +180,7 @@ class _ChatScreenState extends State<ChatScreen> {
       showToast(message: "Phone number is required to place a call.");
       return;
     }
-    final String? finalToUserId = isInternal ? targetUserId?.toString() : null;
+    final String? finalToUserId = targetUserId?.toString();
     final success = await CallDeviceService.placeExternalCall(
       toNumber: toNumber,
       conversationId: widget.conversationId,
@@ -1917,6 +1918,11 @@ class _ChatScreenState extends State<ChatScreen> {
       return _callRecordingBubble(msg);
     }
 
+    // ── Video message bubble ──
+    if (msg.type == 'video' && msg.videoUrl != null) {
+      return _videoBubble(msg);
+    }
+
     return Container(
       margin: EdgeInsets.only(bottom: 10.h),
       padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
@@ -2156,6 +2162,47 @@ class _ChatScreenState extends State<ChatScreen> {
     return msg.message.replaceAll('Missed Call To ', '');
   }
 
+  /// Video message bubble
+  Widget _videoBubble(ChatMessage msg) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 10.h),
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        color: msg.isMe ? Colors.white : AppColors.primary,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Sender name (group chat)
+          if (!msg.isMe && msg.senderName != null)
+            Padding(
+              padding: EdgeInsets.only(bottom: 6.h),
+              child: TextWidget(
+                text: msg.senderName!,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+
+          // Video player
+          VideoMessageBubbleUI(
+            videoUrl: msg.videoUrl!,
+            duration: msg.videoDuration,
+            isMe: msg.isMe,
+            isVideoCallRecording: msg.isVideoCallRecording,
+          ),
+
+          SizedBox(height: 4.h),
+          // Time + ticks
+          _metaRow(msg),
+        ],
+      ),
+    );
+  }
+
   Widget _metaRow(ChatMessage msg) {
     Color iconColor = Colors.grey;
     IconData iconData = Icons.done;
@@ -2165,22 +2212,27 @@ class _ChatScreenState extends State<ChatScreen> {
     } else if (msg.isDelivered == true) {
       iconData = Icons.done_all;
     }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        TextWidget(
-          text: 'APP Chat • ${formatMessageTime(msg.createdAt.toString())}',
-          fontSize: 10,
-          color: Colors.black54,
-          fontWeight: FontWeight.w400,
-          overflow: TextOverflow.ellipsis,
-        ),
-        if (msg.isMe) ...[
-          SizedBox(width: 4.w),
-          Icon(iconData, size: 14.sp, color: iconColor),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Flexible(
+            child: TextWidget(
+              text: 'APP Chat • ${formatMessageTime(msg.createdAt.toString())}',
+              fontSize: 10,
+              color: Colors.black54,
+              fontWeight: FontWeight.w400,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (msg.isMe) ...[
+            SizedBox(width: 4.w),
+            Icon(iconData, size: 14.sp, color: iconColor),
+          ],
         ],
-      ],
+      ),
     );
   }
 

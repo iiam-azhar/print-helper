@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:print_helper/widgets/image_widget.dart';
+import '../../Files/files_list.dart';
 import '../chat/view/chat_list.dart';
 import '../client/clients_list.dart';
 import '../../constants/colors.dart';
@@ -10,7 +11,7 @@ import '../../constants/paths.dart';
 class NavWidgets {
   static List<Widget> screens = [
     ClientScreen(isFromAdmin: true, isFromStaff: false, isFromClient: false),
-    const SizedBox(),
+    const FilesScreen(),
     ChatList(),
     const SizedBox(),
     // ChatListScreenTest(),

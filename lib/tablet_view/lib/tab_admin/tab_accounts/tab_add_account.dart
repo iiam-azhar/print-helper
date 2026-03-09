@@ -63,6 +63,8 @@ class AccountAddContentState extends State<AccountAddContent> {
   bool showLanguageDropdown = false;
   bool showSkillsDropdown = false;
   List<String> selectedSkills = [];
+  bool _showPassword = false;
+  bool _showConfirmPassword = false;
   @override
   void initState() {
     super.initState();
@@ -263,8 +265,8 @@ class AccountAddContentState extends State<AccountAddContent> {
           Spacers.sb8(),
           _roundedTextField(
             controller: _firstNameCtrl,
-            label: '*Name',
-            hint: 'Type Name',
+            label: '*First Name',
+            hint: 'Type First Name',
             errorText: AppStrings.fNameError,
             regErrorText: AppStrings.fNameRegError,
             regExpCondition: Regx.nameRegExp,
@@ -272,8 +274,8 @@ class AccountAddContentState extends State<AccountAddContent> {
           Spacers.sb8(),
           _roundedTextField(
             controller: _lastNameCtrl,
-            label: '*Lastname',
-            hint: 'Type Lastname',
+            label: '*Last Name',
+            hint: 'Type Last Name',
             errorText: AppStrings.lNameError,
             regErrorText: AppStrings.lNameRegError,
             regExpCondition: Regx.nameRegExp,
@@ -292,7 +294,12 @@ class AccountAddContentState extends State<AccountAddContent> {
             controller: _passwordCtrl,
             label: '*Password',
             hint: 'Type Password',
-            obscure: true,
+            obscure: !_showPassword,
+            isPassword: true,
+            showPassword: _showPassword,
+            onToggleVisibility: () {
+              setState(() => _showPassword = !_showPassword);
+            },
             errorText: AppStrings.passError,
             regErrorText: AppStrings.passRegError,
             regExpCondition: Regx.passwordRegExp,
@@ -302,7 +309,12 @@ class AccountAddContentState extends State<AccountAddContent> {
             controller: _confirmPasswordCtrl,
             label: '*Confirm Password',
             hint: 'Type Confirm Password',
-            obscure: true,
+            obscure: !_showConfirmPassword,
+            isPassword: true,
+            showPassword: _showConfirmPassword,
+            onToggleVisibility: () {
+              setState(() => _showConfirmPassword = !_showConfirmPassword);
+            },
             errorText: AppStrings.passError,
             regErrorText: AppStrings.passRegError,
             regExpCondition: Regx.passwordRegExp,
@@ -408,7 +420,7 @@ class AccountAddContentState extends State<AccountAddContent> {
           child: Padding(
             padding: EdgeInsets.only(left: 18),
             child: TextWidget(
-              text: "Phone (s)",
+              text: "Phone(s) with Country Code",
               fontWeight: FontWeight.bold,
               fontSize: 13,
               color: AppColors.black,
@@ -464,62 +476,55 @@ class AccountAddContentState extends State<AccountAddContent> {
 
                       Spacers.sbw12(),
                       Expanded(
-                        child: Container(
-                          height: 45,
-                          padding: EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.grey.shade400,
-                              width: 1.3,
-                            ),
-                            color: Colors.white,
-                          ),
-                          child: TextField(
-                            controller: field.controller,
-                            keyboardType: TextInputType.phone,
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              hintText: field.type.label == "Phone"
-                                  ? "Type Phone"
-                                  : field.type.label == "Land Phone"
-                                  ? "Landline"
-                                  : "other",
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              height: 45,
+                              padding: EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.grey.shade400,
+                                  width: 1.3,
+                                ),
+                                color: Colors.white,
+                              ),
+                              child: TextField(
+                                controller: field.controller,
+                                keyboardType: TextInputType.phone,
+                                decoration: InputDecoration(
+                                  border: InputBorder.none,
+                                  hintText: field.type.label == "Phone"
+                                      ? "Type Phone No"
+                                      : field.type.label == "Land Phone"
+                                      ? "Landline"
+                                      : "other",
 
-                              hintStyle: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 14,
+                                  hintStyle: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                inputFormatters: [UsPhoneTextFormatter()],
                               ),
                             ),
-                            inputFormatters: [UsPhoneTextFormatter()],
-                          ),
+                            if (field.type.label == "Phone")
+                              Padding(
+                                padding: EdgeInsets.only(top: 8, left: 70),
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: TextWidget(
+                                    text: "Phone No must include country code",
+                                    fontSize: 11,
+                                    color: Colors.blue.shade600,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        // Container(
-                        //   height: 45,
-                        //   padding: EdgeInsets.symmetric(horizontal: 16),
-                        //   decoration: BoxDecoration(
-                        //     borderRadius: BorderRadius.circular(16),
-                        //     border: Border.all(
-                        //       color: Colors.grey.shade400,
-                        //       width: 1.3,
-                        //     ),
-                        //     color: Colors.white,
-                        //   ),
-                        //   child: TextField(
-                        //     controller: field.controller,
-                        //     keyboardType: TextInputType.phone,
-                        //     decoration: InputDecoration(
-                        //       border: InputBorder.none,
-                        //       hintText: field.type.label == "Phone"
-                        //           ? "Type Phone"
-                        //           : "Type Cell Phone",
-                        //       hintStyle: TextStyle(
-                        //         color: Colors.grey.shade500,
-                        //         fontSize: 14,
-                        //       ),
-                        //     ),
-                        //   ),
-                        // ),
                       ),
                       Spacers.sbw12(),
                       GestureDetector(
@@ -1033,6 +1038,9 @@ class AccountAddContentState extends State<AccountAddContent> {
     required String label,
     String? hint,
     bool obscure = false,
+    bool isPassword = false,
+    bool showPassword = false,
+    VoidCallback? onToggleVisibility,
     required String errorText,
     required String regErrorText,
     required RegExp regExpCondition,
@@ -1056,6 +1064,7 @@ class AccountAddContentState extends State<AccountAddContent> {
           errorText: errorText,
           controller: controller,
           obscureText: obscure,
+          passField: isPassword,
           hintText: hint ?? '',
           filled: true,
           fillColor: Colors.white,
@@ -1065,6 +1074,16 @@ class AccountAddContentState extends State<AccountAddContent> {
             fontWeight: FontWeight.w500,
           ),
           padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    showPassword ? Icons.visibility : Icons.visibility_off,
+                    color: AppColors.hint,
+                    size: 20,
+                  ),
+                  onPressed: onToggleVisibility,
+                )
+              : null,
         ),
       ],
     );

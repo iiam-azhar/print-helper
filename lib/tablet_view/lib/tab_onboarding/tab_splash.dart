@@ -1,6 +1,6 @@
 import 'package:delayed_display/delayed_display.dart';
 import 'package:flutter/material.dart';
-import 'package:print_helper/auth/login_screen.dart';
+import '../tab_auth/tab_login_screen.dart';
 import '../tab_widgets/tab_image_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,7 +41,7 @@ class _TabSplashState extends State<TabSplash> {
           _navigateByRole(role, context);
         } else {
           // Not logged in → show login
-          navTo(context: context, page: const LoginScreen());
+          navTo(context: context, page: const TabLoginScreen());
         }
       },
     );
@@ -54,29 +54,37 @@ class _TabSplashState extends State<TabSplash> {
         navTo(
           context: context,
           page: DashboardWrapper(role: "ADMIN"),
+          removeUntil: true,
         );
         break;
       case "CONTACT":
         navTo(
           context: context,
           page: DashboardWrapper(role: "CONTACT"),
+          removeUntil: true,
         );
         break;
       case "STAFF":
         navTo(
           context: context,
           page: DashboardWrapper(role: "STAFF"),
+          removeUntil: true,
         );
         break;
       case "CUSTOMER":
         // showToast(message: "Updation currently going on");
         navTo(
           context: context,
+          removeUntil: true,
           page: DashboardWrapper(role: "CUSTOMER"),
         );
         break;
       default:
-        navTo(context: context, page: const LoginScreen());
+        navTo(
+          context: context,
+          page: const TabLoginScreen(),
+          removeUntil: true,
+        );
     }
   }
 

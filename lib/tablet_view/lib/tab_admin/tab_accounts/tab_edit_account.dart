@@ -292,8 +292,8 @@ class _EditAccountState extends State<EditAccount> {
           Spacers.sb10(),
           _textField(
             _firstNameCtrl,
-            "*Name",
-            "Type Name",
+            "*First Name",
+            "Type First Name",
             AppStrings.fNameError,
             AppStrings.fNameRegError,
             Regx.nameRegExp,
@@ -301,8 +301,8 @@ class _EditAccountState extends State<EditAccount> {
           Spacers.sb10(),
           _textField(
             _lastNameCtrl,
-            "*Lastname",
-            "Type Lastname",
+            "*Last Name",
+            "Type Last Name",
             AppStrings.lNameError,
             AppStrings.lNameRegError,
             Regx.nameRegExp,
@@ -494,23 +494,42 @@ class _EditAccountState extends State<EditAccount> {
                     ),
                     Spacers.sbw10(),
                     Expanded(
-                      child: Container(
-                        height: 45,
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        decoration: _boxDecor(),
-                        child: TextField(
-                          controller: field.controller,
-                          keyboardType: TextInputType.phone,
-                          decoration: InputDecoration(
-                            border: InputBorder.none,
-                            hintText: field.type.label == "Phone"
-                                ? "Type Phone"
-                                : field.type.label == "Land Phone"
-                                ? "Landline"
-                                : "Other",
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 45,
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            decoration: _boxDecor(),
+                            child: TextField(
+                              controller: field.controller,
+                              keyboardType: TextInputType.phone,
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                hintText: field.type.label == "Phone"
+                                    ? "Type Phone No"
+                                    : field.type.label == "Land Phone"
+                                    ? "Landline"
+                                    : "Other",
+                              ),
+                              inputFormatters: [UsPhoneTextFormatter()],
+                            ),
                           ),
-                          inputFormatters: [UsPhoneTextFormatter()],
-                        ),
+                          if (field.type.label == "Phone")
+                            Padding(
+                              padding: EdgeInsets.only(top: 8, left: 70),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: TextWidget(
+                                  text: "Phone No must include country code",
+                                  fontSize: 11,
+                                  color: Colors.blue.shade600,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     Spacers.sbw10(),
@@ -616,7 +635,7 @@ class _EditAccountState extends State<EditAccount> {
           child: Padding(
             padding: EdgeInsets.only(left: 18),
             child: TextWidget(
-              text: "Email (s)",
+              text: "Phone(s) with Country Code",
               fontWeight: FontWeight.bold,
               fontSize: 13,
               color: AppColors.black,

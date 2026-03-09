@@ -290,40 +290,37 @@ class _SingleCustomerState extends State<SingleCustomer> {
               Row(
                 mainAxisAlignment: .end,
                 children: [
-                  Transform.scale(
-                    scale: .95,
-                    child: Switch(
-                      padding: EdgeInsets.zero,
-                      value: item.status,
-                      activeTrackColor: const Color(0xFF00a650),
-                      activeThumbColor: Colors.white,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (val) {
-                        provider
-                            .toggleStatus(
-                              clientId: item.clientId,
-                              custId: item.id,
-                              newStatus: val,
-                            )
-                            .whenComplete(() {
-                              if (!mounted) return;
-                              // provider.getCustomers(
-                              //   ctx: context,
-                              //   page: provider.currentPage,
-                              //   clientId: widget.id,
-                              // );
-                              final authPro = context.read<AuthPro>();
-                              final clientId = widget.isFromClient
-                                  ? authPro.user!.custClientId
-                                  : widget.id;
-                              provider.getSingleCustomer(
-                                ctx: context,
-                                clientId: clientId,
-                              );
-                            });
-                        setState(() {});
-                      },
-                    ),
+                  Switch(
+                    padding: EdgeInsets.zero,
+                    value: item.status,
+                    activeTrackColor: const Color(0xFF00a650),
+                    activeThumbColor: Colors.white,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (val) {
+                      provider
+                          .toggleStatus(
+                            clientId: item.clientId,
+                            custId: item.id,
+                            newStatus: val,
+                          )
+                          .whenComplete(() {
+                            if (!mounted) return;
+                            // provider.getCustomers(
+                            //   ctx: context,
+                            //   page: provider.currentPage,
+                            //   clientId: widget.id,
+                            // );
+                            final authPro = context.read<AuthPro>();
+                            final clientId = widget.isFromClient
+                                ? authPro.user!.custClientId
+                                : widget.id;
+                            provider.getSingleCustomer(
+                              ctx: context,
+                              clientId: clientId,
+                            );
+                          });
+                      setState(() {});
+                    },
                   ),
                   Spacers.sbw8(),
                   Builder(
@@ -530,22 +527,19 @@ class _SingleCustomerState extends State<SingleCustomer> {
                       ),
                     ],
                   ),
-                  Transform.scale(
-                    scale: .95,
-                    child: Switch(
-                      padding: EdgeInsets.zero,
-                      value: contact.status,
-                      activeTrackColor: const Color(0xFF00a650),
-                      activeThumbColor: Colors.white,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (val) {
-                        provider.toggleCustContact(
-                          clientId: item.id,
-                          custId: contact.contactId,
-                          newStatus: val,
-                        );
-                      },
-                    ),
+                  Switch(
+                    padding: EdgeInsets.zero,
+                    value: contact.status,
+                    activeTrackColor: const Color(0xFF00a650),
+                    activeThumbColor: Colors.white,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (val) {
+                      provider.toggleCustContact(
+                        clientId: item.id,
+                        custId: contact.contactId,
+                        newStatus: val,
+                      );
+                    },
                   ),
                 ],
               ),
@@ -571,7 +565,16 @@ class _SingleCustomerState extends State<SingleCustomer> {
                     _imageButton(
                       image: Paths.email,
                       width: 28,
-                      onPressed: () {},
+                      onPressed: () {
+                        if (contact.emails.isNotEmpty) {
+                          tryLaunchUrl(
+                            url: 'mailto:${contact.emails.first}',
+                            message: 'Could not open email app',
+                          );
+                        } else {
+                          showToast(message: 'No email address available');
+                        }
+                      },
                     ),
                     _imageButton(
                       image: Paths.call,

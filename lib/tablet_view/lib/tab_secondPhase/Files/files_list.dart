@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import 'package:print_helper/secondPhase/Files/components/fab.dart';
-import 'package:print_helper/secondPhase/Files/components/filter_sheet.dart';
+import 'package:print_helper/Files/components/fab.dart';
+import 'package:print_helper/Files/components/filter_sheet.dart';
 import 'package:print_helper/providers/files_pro.dart';
 import '../../tab_widgets/tab_image_widget.dart';
 import 'package:provider/provider.dart';

@@ -100,7 +100,6 @@ class ClientPro extends ChangeNotifier {
       isLoadingMore = true;
     } else {
       clientsLoad = true;
-      Loaders.show();
       currentPage = 1;
       _clients.clear();
     }
@@ -132,7 +131,6 @@ class ClientPro extends ChangeNotifier {
       printData(title: "Client Pagination Error", data: "$e\n$st", e: true);
     }
     clientsLoad = false;
-    Loaders.hide();
     isLoadingMore = false;
     notifyListeners();
   }
@@ -239,6 +237,8 @@ class ClientPro extends ChangeNotifier {
       if (res.statusCode == 200 || res.statusCode == 201) {
         await getClients(ctx: context);
         return true;
+      } else {
+        _handleApiErrors(res);
       }
       return false;
     } catch (e) {
@@ -376,10 +376,14 @@ class ClientPro extends ChangeNotifier {
         if (body["success"] == true || body["success"] == "true") {
           await getClients(ctx: context);
           return true;
+        } else {
+          _handleApiErrors(response);
+          return false;
         }
+      } else {
+        _handleApiErrors(response);
         return false;
       }
-      return false;
     } catch (e, st) {
       printData(title: "UPDATE CLIENT ERROR:", data: "$e\n$st", e: true);
       return false;
@@ -564,5 +568,23 @@ class ClientPro extends ChangeNotifier {
     clientFilters.clear();
     notifyListeners();
     getClients(ctx: context);
+  }
+
+  void _handleApiErrors(http.Response res) {
+    try {
+      final body = jsonDecode(res.body);
+      if (body is Map && body.containsKey('errors')) {
+        final Map<String, dynamic> errors = body['errors'];
+        errors.forEach((key, value) {
+          if (value is List && value.isNotEmpty) {
+            showToast(message: value[0]);
+          }
+        });
+      } else if (body is Map && body.containsKey('message')) {
+        showToast(message: body['message']);
+      }
+    } catch (e) {
+      showToast(message: "An error occurred. Please try again.");
+    }
   }
 }

@@ -427,8 +427,8 @@ class AddCustomerState extends State<AddCustomer> {
                 Spacers.sb8(),
                 _roundedTextField(
                   controller: model.firstName,
-                  label: "*Name",
-                  hint: "Type Name",
+                  label: "*First Name",
+                  hint: "Type First Name",
                   errorText: "Required",
                   regErrorText: "Invalid",
                   regExpCondition: Regx.nameRegExp,
@@ -436,8 +436,8 @@ class AddCustomerState extends State<AddCustomer> {
                 Spacers.sb8(),
                 _roundedTextField(
                   controller: model.lastName,
-                  label: "*Lastname",
-                  hint: "Type Lastname",
+                  label: "*Last Name",
+                  hint: "Type Last Name",
                   errorText: "Required",
                   regErrorText: "Invalid",
                   regExpCondition: Regx.nameRegExp,
@@ -510,7 +510,7 @@ class AddCustomerState extends State<AddCustomer> {
         Padding(
           padding: EdgeInsets.only(left: 15.w),
           child: TextWidget(
-            text: "Phone (s)",
+            text: "Phone(s) with Country Code",
             fontWeight: FontWeight.bold,
             fontSize: 13,
             color: AppColors.black,
@@ -561,35 +561,54 @@ class AddCustomerState extends State<AddCustomer> {
                     ),
                     Spacers.sbw12(),
                     Expanded(
-                      child: Container(
-                        height: 45.h,
-                        padding: EdgeInsets.symmetric(horizontal: 16.w),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16.r),
-                          border: Border.all(
-                            color: Colors.grey.shade400,
-                            width: 1.3,
-                          ),
-                          color: Colors.white,
-                        ),
-                        child: TextField(
-                          controller: field.controller,
-                          keyboardType: TextInputType.phone,
-                          decoration: InputDecoration(
-                            border: InputBorder.none,
-                            hintText: field.type.label == "Phone"
-                                ? "Type Phone"
-                                : field.type.label == "Land Phone"
-                                ? "Landline"
-                                : "other",
-                            // hintText: "Type ${field.type.label}",
-                            hintStyle: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 14.sp,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 45.h,
+                            padding: EdgeInsets.symmetric(horizontal: 16.w),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16.r),
+                              border: Border.all(
+                                color: Colors.grey.shade400,
+                                width: 1.3,
+                              ),
+                              color: Colors.white,
+                            ),
+                            child: TextField(
+                              controller: field.controller,
+                              keyboardType: TextInputType.phone,
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                hintText: field.type.label == "Phone"
+                                    ? "Type Phone No"
+                                    : field.type.label == "Land Phone"
+                                    ? "Landline"
+                                    : "other",
+                                // hintText: "Type ${field.type.label}",
+                                hintStyle: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 14.sp,
+                                ),
+                              ),
+                              inputFormatters: [UsPhoneTextFormatter()],
                             ),
                           ),
-                          inputFormatters: [UsPhoneTextFormatter()],
-                        ),
+                          if (field.type.label == "Phone")
+                            Padding(
+                              padding: EdgeInsets.only(top: 8.h, left: 82.w),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: TextWidget(
+                                  text: "Phone No must include country code",
+                                  fontSize: 11.sp,
+                                  color: Colors.blue.shade600,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     Spacers.sbw12(),

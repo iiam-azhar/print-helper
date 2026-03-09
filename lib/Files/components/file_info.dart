@@ -5,7 +5,7 @@ import 'package:print_helper/widgets/image_widget.dart';
 import 'package:print_helper/widgets/spacers.dart';
 import 'package:print_helper/widgets/text_widget.dart';
 
-import '../../../constants/paths.dart';
+import '../../constants/paths.dart';
 
 class FileInformationSheet extends StatelessWidget {
   final String folderName;

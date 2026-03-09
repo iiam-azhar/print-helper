@@ -16,14 +16,14 @@ import '../tab_widgets/tab_image_widget.dart';
 import '../tab_widgets/tab_text_widget.dart';
 import 'tab_forgot_pass.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class TabLoginScreen extends StatefulWidget {
+  const TabLoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<TabLoginScreen> createState() => _TabLoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _TabLoginScreenState extends State<TabLoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _userCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
@@ -287,7 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 GestureDetector(
                                   onTap: () {
-                                    navTo(context: context, page: ForgotPass());
+                                    navTo(context: context, page: TabForgotPass());
                                   },
                                   child: Text(
                                     "Forgot password?",

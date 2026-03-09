@@ -43,6 +43,8 @@ dependencies:
   http_parser: ^4.1.2
   twilio_voice: ^0.3.2+2
   uuid: ^4.0.0
+  video_player: ^2.10.3
+  chewie: ^1.9.0
 
 dev_dependencies:
   flutter_test:

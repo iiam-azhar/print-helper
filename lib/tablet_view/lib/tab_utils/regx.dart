@@ -5,10 +5,12 @@ class Regx {
     r'^(?:(\S+@\S+\.\S+)|(?:[1-9]\d{8}|0\d{9}))$',
   );
   static final emailRegExp = RegExp(r'\S+@\S+\.\S+');
-  static final phoneRegExp = RegExp(r'^\d{10}$');
+  static final phoneRegExp = RegExp(r'^\+?[0-9]{10,15}$');
   static final addressRegExp = RegExp(r'^[a-zA-Z0-9\s.,-]*$');
   static final eightDigitRegExp = RegExp(r'^\d{8}$');
+  static final fiveDigitRegExp = RegExp(r'^\d{5}$');
   static final sixDigitRegExp = RegExp(r'^\d{6}$');
+  static final zipcodeRegExp = RegExp(r'^\d{4,10}$');
   // ensures 0 can be added at front
   // static final nineDigitRegExp = RegExp(r'^(?:[1-9]\d{8}|0\d{9})$');
   static final passwordRegExp = RegExp(

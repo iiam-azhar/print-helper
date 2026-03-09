@@ -376,7 +376,7 @@ class _SideBarState extends State<SideBar> {
                                         ? name
                                         : "My Account",
                                     color: isStaff || isContact || isCustomer
-                                        ? Colors.black
+                                        ? Colors.white
                                         : Colors.white,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
@@ -538,7 +538,7 @@ class _SideBarState extends State<SideBar> {
                     width: collapsed ? 26 : 24,
                     // color: active ? Colors.black : Colors.white,
                     color: isStaff || isContact || isCustomer
-                        ? Colors.black
+                        ? Colors.white
                         : Colors.white,
                   ),
                 ),
@@ -577,7 +577,7 @@ class _SideBarState extends State<SideBar> {
               TextWidget(
                 text: title,
                 color: isStaff || isContact || isCustomer
-                    ? AppColors.black
+                    ? AppColors.white
                     : Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w400,

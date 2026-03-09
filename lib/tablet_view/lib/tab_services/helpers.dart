@@ -38,19 +38,31 @@ Future<void> tryLaunchUrl({
   bool inline = false,
 }) async {
   final Uri parsedUrl = Uri.parse(url);
-  if (await canLaunchUrl(parsedUrl)) {
-    try {
-      await launchUrl(
-        parsedUrl,
-        mode: inline
-            ? LaunchMode.inAppBrowserView
-            : LaunchMode.externalApplication,
-      );
-    } catch (e, st) {
-      printData(data: '$e,$st');
+  try {
+    // For specific schemes, we prefer externalApplication
+    final LaunchMode mode =
+        (url.startsWith('mailto:') || url.startsWith('tel:'))
+        ? LaunchMode.externalApplication
+        : (inline
+              ? LaunchMode.inAppBrowserView
+              : LaunchMode.externalApplication);
+
+    // canLaunchUrl is sometimes unreliable on Android 11+,
+    // so we attempt to launch even if it returns false, using try-catch for safety.
+    final bool canLaunch = await canLaunchUrl(parsedUrl);
+    if (canLaunch) {
+      await launchUrl(parsedUrl, mode: mode);
+    } else {
+      // Direct attempt fallback
+      try {
+        await launchUrl(parsedUrl, mode: mode);
+      } catch (e) {
+        showToast(message: message);
+      }
     }
-  } else {
+  } catch (e) {
     showToast(message: message);
+    debugPrint("Error launching URL: $e");
   }
 }
 

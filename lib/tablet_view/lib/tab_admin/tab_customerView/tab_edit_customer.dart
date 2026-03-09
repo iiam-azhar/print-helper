@@ -288,7 +288,7 @@ class EditCustomerState extends State<EditCustomer> {
         Padding(
           padding: EdgeInsets.only(left: 15),
           child: TextWidget(
-            text: "Phone (s)",
+            text: "Phone(s) with Country Code",
             fontWeight: FontWeight.bold,
             fontSize: 13,
             color: AppColors.black,
@@ -339,34 +339,53 @@ class EditCustomerState extends State<EditCustomer> {
                     ),
                     Spacers.sbw12(),
                     Expanded(
-                      child: Container(
-                        height: 45,
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.grey.shade400,
-                            width: 1.3,
-                          ),
-                          color: Colors.white,
-                        ),
-                        child: TextField(
-                          controller: field.controller,
-                          keyboardType: TextInputType.phone,
-                          decoration: InputDecoration(
-                            border: InputBorder.none,
-                            hintText: field.type.label == "Phone"
-                                ? "Type Phone"
-                                : (field.type.label == "Land Phone"
-                                      ? "Landline"
-                                      : "other"),
-                            hintStyle: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 14,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 45,
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.grey.shade400,
+                                width: 1.3,
+                              ),
+                              color: Colors.white,
+                            ),
+                            child: TextField(
+                              controller: field.controller,
+                              keyboardType: TextInputType.phone,
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                hintText: field.type.label == "Phone"
+                                    ? "Type Phone No"
+                                    : (field.type.label == "Land Phone"
+                                          ? "Landline"
+                                          : "other"),
+                                hintStyle: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              inputFormatters: [UsPhoneTextFormatter()],
                             ),
                           ),
-                          inputFormatters: [UsPhoneTextFormatter()],
-                        ),
+                          if (field.type.label == "Phone")
+                            Padding(
+                              padding: EdgeInsets.only(top: 8, left: 70),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: TextWidget(
+                                  text: "Phone No must include country code",
+                                  fontSize: 11,
+                                  color: Colors.blue.shade600,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     Spacers.sbw12(),
@@ -1256,8 +1275,8 @@ class EditCustomerState extends State<EditCustomer> {
                 Spacers.sb8(),
                 _roundedTextField(
                   controller: model.firstName,
-                  label: "*Name",
-                  hint: "Type Name",
+                  label: "*First Name",
+                  hint: "Type First Name",
                   errorText: "Required",
                   regErrorText: "Invalid",
                   regExpCondition: Regx.nameRegExp,
@@ -1265,8 +1284,8 @@ class EditCustomerState extends State<EditCustomer> {
                 Spacers.sb8(),
                 _roundedTextField(
                   controller: model.lastName,
-                  label: "*Lastname",
-                  hint: "Type Lastname",
+                  label: "*Last Name",
+                  hint: "Type Last Name",
                   errorText: "Required",
                   regErrorText: "Invalid",
                   regExpCondition: Regx.nameRegExp,

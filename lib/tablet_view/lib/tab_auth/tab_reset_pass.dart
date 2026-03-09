@@ -20,14 +20,14 @@ import '../tab_widgets/tab_custom_button.dart';
 import '../tab_widgets/tab_field_widget.dart';
 import '../tab_widgets/tab_toasts.dart';
 
-class ResetPass extends StatefulWidget {
+class TabResetPass extends StatefulWidget {
   final String email;
-  const ResetPass({super.key, required this.email});
+  const TabResetPass({super.key, required this.email});
   @override
-  State<ResetPass> createState() => _ResetPassState();
+  State<TabResetPass> createState() => _TabResetPassState();
 }
 
-class _ResetPassState extends State<ResetPass> {
+class _TabResetPassState extends State<TabResetPass> {
   final _fieldOne = TextEditingController();
   final _fieldTwo = TextEditingController();
   final _fieldThree = TextEditingController();

@@ -4,7 +4,7 @@ import 'package:print_helper/admin/chat/view/chat_list.dart';
 import 'package:print_helper/secondPhase/projects/projects.dart';
 
 import '../../../constants/colors.dart';
-import '../../Files/files_list.dart';
+import '../../../Files/files_list.dart';
 
 class NavWidgets {
   static List<Widget> screens = [

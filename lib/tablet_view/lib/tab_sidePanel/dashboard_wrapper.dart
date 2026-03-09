@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:print_helper/providers/client_pro.dart';
+import '../../../widgets/loaders.dart';
 import '../tab_settings/tab_settings.dart';
 import 'package:provider/provider.dart';
 import '../tab_admin/tab_accounts/tab_accounts_list.dart';
@@ -109,6 +110,8 @@ class _DashboardWrapperState extends State<DashboardWrapper> {
       debugPrint(pro.custClientId.toString());
       debugPrint("${pro.custClientId} custclient");
       switch (page) {
+        case "chat":
+          return const ChatWrapper();
         case "customer":
           // if (pro.custClientId == 0) {
           //   return const Center(child: CircularProgressIndicator());
@@ -125,11 +128,13 @@ class _DashboardWrapperState extends State<DashboardWrapper> {
     }
     if (widget.role == "CONTACT") {
       switch (page) {
+        case "chat":
+          return const ChatWrapper();
         case "customers":
           final clientId = getAuthPro(context).user!.clientId;
-          print("$clientId idddddddddddddddddddddd");
+          debugPrint("$clientId idddddddddddddddddddddd");
           if (clientId == null) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(child: showLoader());
           }
           return CustomersScreen(isFromAdmin: false, id: clientId);
 

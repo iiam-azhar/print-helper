@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:print_helper/providers/admin_pro.dart';
 import 'package:print_helper/providers/cust_pro.dart';
 import 'package:print_helper/providers/files_pro.dart';
@@ -44,11 +45,30 @@ Future<void> main() async {
   await NotificationService.instance.init();
   // 5. System UI settings
   SysChromes.setSystemChromes();
+  // 5.1 Lock orientation based on physical device size
+  await _setOrientationByPhysicalDeviceSize();
   // 6. Request Permissions FIRST
   await _checkPermissions();
   // 7. Setup Firebase Messaging & Twilio Voice
   await _initFirebaseMessaging();
   runApp(multiProviders());
+}
+
+Future<void> _setOrientationByPhysicalDeviceSize() async {
+  final view = WidgetsBinding.instance.platformDispatcher.views.first;
+  final physicalShortestSide = view.physicalSize.shortestSide;
+  final devicePixelRatio = view.devicePixelRatio;
+  final shortestSide = physicalShortestSide / devicePixelRatio;
+
+  if (shortestSide < 600) {
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    return;
+  }
+
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
 }
 
 Future<void> _initFirebaseMessaging() async {

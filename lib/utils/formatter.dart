@@ -137,3 +137,32 @@ class UsPhoneTextFormatter extends TextInputFormatter {
     );
   }
 }
+
+class InternationalPhoneFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    String text = newValue.text;
+
+    // Allow leading +
+    if (text.startsWith('+')) {
+      String digits = text.substring(1).replaceAll(RegExp(r'\D'), '');
+      if (digits.length > 14) {
+        digits = digits.substring(0, 14);
+      }
+      text = '+$digits';
+    } else {
+      text = text.replaceAll(RegExp(r'\D'), '');
+      if (text.length > 15) {
+        text = text.substring(0, 15);
+      }
+    }
+
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}

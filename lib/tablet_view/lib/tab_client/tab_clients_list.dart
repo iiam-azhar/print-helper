@@ -245,34 +245,42 @@ class _ClientScreenState extends State<ClientScreen> {
         if (provider.clients.isEmpty) {
           return _noClientsFound();
         }
-        return ListView.separated(
-          controller: _scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          itemCount: provider.clients.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 16),
-          itemBuilder: (context, index) {
-            // if (index == provider.clients.length) {
-            //   return provider.isLoadingMore
-            //       ? Padding(
-            //           padding: const EdgeInsets.all(16.0),
-            //           child: Center(child: showLoader()),
-            //         )
-            //       : SizedBox();
-            // }
+        return RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: ListView.separated(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            itemCount: provider.clients.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 16),
+            itemBuilder: (context, index) {
+              // if (index == provider.clients.length) {
+              //   return provider.isLoadingMore
+              //       ? Padding(
+              //           padding: const EdgeInsets.all(16.0),
+              //           child: Center(child: showLoader()),
+              //         )
+              //       : SizedBox();
+              // }
 
-            if (index == provider.clients.length) {
-              return Padding(
-                padding: const EdgeInsets.all(16),
-                child: Center(child: showLoader()),
-              );
-            }
-            final item = provider.clients[index];
+              if (index == provider.clients.length) {
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Center(child: showLoader()),
+                );
+              }
+              final item = provider.clients[index];
 
-            return _companyCard(item, context, provider, index);
-          },
+              return _companyCard(item, context, provider, index);
+            },
+          ),
         );
       },
     );
+  }
+
+  Future<void> _onRefresh() async {
+    final provider = Provider.of<ClientPro>(context, listen: false);
+    await provider.getClients(ctx: context, page: 1);
   }
 
   Widget _companyCard(
@@ -284,11 +292,8 @@ class _ClientScreenState extends State<ClientScreen> {
     final authPro = Provider.of<AuthPro>(context, listen: false);
     final role = authPro.user?.roleName ?? "";
     // final clPro = Provider.of<ClientPro>(context, listen: false);
-
     // Color primaryColor = AppColors.primary; // default fallback
-
     // final brandHex = clPro.selectedClient?.brandSecondaryColor;
-
     // if (brandHex != null && brandHex.isNotEmpty) {
     //   primaryColor = _hexToColor(brandHex);
     // }
@@ -427,7 +432,7 @@ class _ClientScreenState extends State<ClientScreen> {
                             children: [
                               SizedBox(
                                 width: 55,
-                                height: 33,
+                                height: 40,
                                 child: FittedBox(
                                   fit: BoxFit.fill,
                                   child: Switch(
@@ -440,7 +445,7 @@ class _ClientScreenState extends State<ClientScreen> {
                                           if (!mounted) return;
                                           provider.getClients(
                                             ctx: context,
-                                            page: provider.currentPage,
+                                            page: 1,
                                           );
                                         }),
                                   ),
@@ -604,7 +609,7 @@ class _ClientScreenState extends State<ClientScreen> {
                         children: [
                           SizedBox(
                             width: 55,
-                            height: 33,
+                            height: 40,
                             child: FittedBox(
                               child: Switch(
                                 value: contact.status,
@@ -638,7 +643,21 @@ class _ClientScreenState extends State<ClientScreen> {
                               },
                             ),
 
-                          _iconButton(icon: Paths.email, onTap: () {}),
+                          _iconButton(
+                            icon: Paths.email,
+                            onTap: () {
+                              if (contact.emails.isNotEmpty) {
+                                tryLaunchUrl(
+                                  url: 'mailto:${contact.emails.first}',
+                                  message: 'Could not open email app',
+                                );
+                              } else {
+                                showToast(
+                                  message: 'No email address available',
+                                );
+                              }
+                            },
+                          ),
                           _iconButton(icon: Paths.call, onTap: () {}),
                           _iconButton(icon: Paths.chat, onTap: () {}),
                         ],
@@ -741,6 +760,34 @@ class _ClientScreenState extends State<ClientScreen> {
             color: Colors.grey.shade700,
           ),
           Spacers.sb5(),
+          Spacers.sb10(),
+          Consumer<ClientPro>(
+            builder: (context, provider, _) {
+              return GestureDetector(
+                onTap: () {
+                  provider.clearClientFilters(context);
+                  provider.getClients(ctx: context, page: 1, loadMore: false);
+                  showToast(message: "Filters cleared");
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: AppColors.primary,
+                  ),
+                  child: const TextWidget(
+                    text: "Reset Filters",
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );

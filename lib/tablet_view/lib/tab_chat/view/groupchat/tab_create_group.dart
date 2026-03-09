@@ -324,7 +324,8 @@ class CreateChatGroupState extends State<CreateChatGroup> {
       return Center(child: showLoader());
     }
 
-    if (pro.searchResults.isEmpty && _searchCntrler.text.isNotEmpty) {
+    if (pro.searchResults.isEmpty &&
+        _searchCntrler.text.isNotEmpty) {
       return Center(
         heightFactor: 5,
         child: const TextWidget(

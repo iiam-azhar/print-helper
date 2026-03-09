@@ -458,6 +458,27 @@ class _ChatListState extends State<ChatList> {
       );
     }
 
+    // Handle video messages
+    if (msg.type == 'video') {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.videocam, size: 14.sp, color: Colors.black54),
+          SizedBox(width: 4.w),
+          Flexible(
+            child: TextWidget(
+              text: msg.message.isNotEmpty ? msg.message : 'Video',
+              color: Colors.black54,
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
     final isCallMsg = msg.type == 'voice' || msg.type == 'call';
 
     if (isCallMsg) {

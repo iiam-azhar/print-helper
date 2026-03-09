@@ -58,6 +58,9 @@ class AddClientState extends State<AddClient> {
   List<String> selectedLanguages = [];
   List<int> selectedStaffIds = [];
   bool showStaffDropdown = false;
+  Map<int, bool> passwordVisibility = {}; // Track visibility for each contact
+  Map<int, bool> confirmPasswordVisibility =
+      {}; // Track visibility for each contact
 
   List<PhoneType> phoneTypes = [
     PhoneType("Land Phone", Paths.landPhone, "landline"),
@@ -206,6 +209,9 @@ class AddClientState extends State<AddClient> {
                   child: SingleChildScrollView(
                     child: Form(
                       key: _formKey,
+                      autovalidateMode: formSubmitted
+                          ? AutovalidateMode.always
+                          : AutovalidateMode.disabled,
                       child: Column(
                         children: [
                           Spacers.sb10(),
@@ -406,11 +412,11 @@ class AddClientState extends State<AddClient> {
             Spacers.sb8(),
           _roundedTextField(
             controller: zipCodeCtrl,
-            label: 'Zipcode',
-            hint: 'Type Zipcode',
-            errorText: "Zipcode is required",
-            regErrorText: AppStrings.invalidInput,
-            regExpCondition: Regx.sixDigitRegExp,
+            label: '*Zipcode',
+            hint: 'Type Zipcode (4-10 digits)',
+            errorText: "Zipcode is required (4-10 digits)",
+            regErrorText: "Zipcode must be 4-10 digits",
+            regExpCondition: Regx.zipcodeRegExp,
           ),
           Spacers.sb8(),
           _assignStaff(),
@@ -637,30 +643,43 @@ class AddClientState extends State<AddClient> {
                   regExpCondition: Regx.userNameRegExp,
                 ),
                 Spacers.sb8(),
-                _roundedTextField(
+                _passwordField(
                   controller: model.password,
                   label: "*Password",
-                  obscure: true,
                   hint: "Type Password",
-                  errorText: "Required",
-                  regErrorText: "Invalid",
-                  regExpCondition: Regx.passwordRegExp,
+                  isVisible:
+                      passwordVisibility[contactForms.indexOf(model)] ?? false,
+                  onVisibilityToggle: () {
+                    setState(() {
+                      passwordVisibility[contactForms.indexOf(model)] =
+                          !(passwordVisibility[contactForms.indexOf(model)] ??
+                              false);
+                    });
+                  },
                 ),
                 Spacers.sb8(),
-                _roundedTextField(
+                _passwordField(
                   controller: model.confirmPassword,
                   label: "*Confirm Password",
-                  obscure: true,
                   hint: "Type Confirm Password",
-                  errorText: "Required",
-                  regErrorText: "Invalid",
-                  regExpCondition: Regx.passwordRegExp,
+                  isVisible:
+                      confirmPasswordVisibility[contactForms.indexOf(model)] ??
+                      false,
+                  onVisibilityToggle: () {
+                    setState(() {
+                      confirmPasswordVisibility[contactForms.indexOf(model)] =
+                          !(confirmPasswordVisibility[contactForms.indexOf(
+                                model,
+                              )] ??
+                              false);
+                    });
+                  },
                 ),
                 Spacers.sb8(),
                 _roundedTextField(
                   controller: model.firstName,
-                  label: "*Name",
-                  hint: "Type Name",
+                  label: "*First Name",
+                  hint: "Type First Name",
                   errorText: "Required",
                   regErrorText: "Invalid",
                   regExpCondition: Regx.nameRegExp,
@@ -668,8 +687,8 @@ class AddClientState extends State<AddClient> {
                 Spacers.sb8(),
                 _roundedTextField(
                   controller: model.lastName,
-                  label: "*Lastname",
-                  hint: "Type Lastname",
+                  label: "*Last Name",
+                  hint: "Type Last Name",
                   errorText: "Required",
                   regErrorText: "Invalid",
                   regExpCondition: Regx.nameRegExp,
@@ -739,7 +758,7 @@ class AddClientState extends State<AddClient> {
         Padding(
           padding: EdgeInsets.only(left: 15),
           child: TextWidget(
-            text: "Phone (s)",
+            text: "Phone(s) with Country Code",
             fontWeight: FontWeight.bold,
             fontSize: 13,
             color: AppColors.black,
@@ -790,35 +809,54 @@ class AddClientState extends State<AddClient> {
                     ),
                     Spacers.sbw12(),
                     Expanded(
-                      child: Container(
-                        height: 45,
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.grey.shade400,
-                            width: 1.3,
-                          ),
-                          color: Colors.white,
-                        ),
-                        child: TextField(
-                          controller: field.controller,
-                          keyboardType: TextInputType.phone,
-                          decoration: InputDecoration(
-                            border: InputBorder.none,
-                            hintText: field.type.label == "Phone"
-                                ? "Type Phone"
-                                : field.type.label == "Land Phone"
-                                ? "Landline"
-                                : "other",
-                            // hintText: "Type ${field.type.label}",
-                            hintStyle: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 14,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 45,
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.grey.shade400,
+                                width: 1.3,
+                              ),
+                              color: Colors.white,
+                            ),
+                            child: TextField(
+                              controller: field.controller,
+                              keyboardType: TextInputType.phone,
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                hintText: field.type.label == "Phone"
+                                    ? "Type Phone No"
+                                    : field.type.label == "Land Phone"
+                                    ? "Landline"
+                                    : "other",
+                                // hintText: "Type ${field.type.label}",
+                                hintStyle: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              inputFormatters: [InternationalPhoneFormatter()],
                             ),
                           ),
-                          inputFormatters: [UsPhoneTextFormatter()],
-                        ),
+                          if (field.type.label == "Phone")
+                            Padding(
+                              padding: EdgeInsets.only(top: 8, left: 70),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: TextWidget(
+                                  text: "Phone No must include country code",
+                                  fontSize: 11,
+                                  color: Colors.blue.shade600,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     Spacers.sbw12(),
@@ -1528,6 +1566,7 @@ class AddClientState extends State<AddClient> {
         ),
         Spacers.sb5(),
         CustomTextField(
+          autoValidate: formSubmitted,
           regExpCondition: regExpCondition,
           regErrorText: regErrorText,
           errorText: errorText,
@@ -1542,6 +1581,65 @@ class AddClientState extends State<AddClient> {
             fontWeight: FontWeight.w500,
           ),
           padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _passwordField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required bool isVisible,
+    required VoidCallback onVisibilityToggle,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(left: 15),
+          child: TextWidget(
+            text: label,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: AppColors.black,
+          ),
+        ),
+        Spacers.sb5(),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+            color: Colors.white,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  obscureText: !isVisible,
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    hintText: hint,
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade400,
+                    ),
+                    contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: onVisibilityToggle,
+                child: Icon(
+                  isVisible ? Icons.visibility : Icons.visibility_off,
+                  color: Colors.grey.shade600,
+                  size: 20,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -1570,6 +1668,9 @@ class AddClientState extends State<AddClient> {
         Spacers.sb5(),
         DropdownButtonFormField<DropdownItem>(
           borderRadius: BorderRadius.circular(12),
+          autovalidateMode: formSubmitted
+              ? AutovalidateMode.always
+              : AutovalidateMode.disabled,
           initialValue: value,
           isExpanded: true,
           dropdownColor: Colors.white,

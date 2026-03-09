@@ -25,7 +25,7 @@ class _ChatWrapperState extends State<ChatWrapper> {
           // 🟦 CHAT LIST (full width when no chat is open)
           if (selectedChat == null)
             SizedBox(
-              width: 450,
+              width: 380,
               child: ChatList(
                 onChatSelected: (chat) {
                   setState(() {
@@ -38,7 +38,7 @@ class _ChatWrapperState extends State<ChatWrapper> {
           // 🟦 CHAT LIST (fixed width when chat is open)
           if (selectedChat != null)
             SizedBox(
-              width: 450,
+              width: 360,
               child: ChatList(
                 onChatSelected: (chat) {
                   setState(() {

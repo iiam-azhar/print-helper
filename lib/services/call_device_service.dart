@@ -58,9 +58,9 @@ class CallDeviceService {
       if (conversationId != null) {
         queryParams += "&conversation_id=$conversationId";
       }
-      // Laravel expects `to_user_id` to be defined in the array, so we always pass it.
-      // If it's null or empty, it just gets passed as an empty string.
-      queryParams += "&to_user_id=${toUserId ?? ''}";
+      if (toUserId != null && toUserId.isNotEmpty) {
+        queryParams += "&to_user_id=$toUserId";
+      }
 
       // Use the newly added route
       final endpoint = "${ApiRoutes.outboundVoiceUrl}?$queryParams";

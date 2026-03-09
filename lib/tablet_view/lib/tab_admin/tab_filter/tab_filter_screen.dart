@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../tab_services/helpers.dart';
 
 import '../../tab_constants/colors.dart';
@@ -32,6 +33,8 @@ class _FilterSheetState extends State<FilterSheet> {
   final emailCtrl = TextEditingController();
   final phoneCtrl = TextEditingController();
   final dateCtrl = TextEditingController();
+  String? emailError;
+
   @override
   void initState() {
     super.initState();
@@ -121,11 +124,18 @@ class _FilterSheetState extends State<FilterSheet> {
                           Spacers.sb10(),
                           _sectionTitle("Email"),
                           Spacers.sb5(),
-                          _input(emailCtrl, "Filter by email"),
+                          _emailInput(emailCtrl, "Filter by email"),
                           Spacers.sb10(),
                           _sectionTitle("Phone"),
                           Spacers.sb5(),
-                          _input(phoneCtrl, "Filter by phone"),
+                          _input(
+                            phoneCtrl,
+                            "Filter by phone",
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            keyboardType: TextInputType.phone,
+                          ),
                           Spacers.sb10(),
                           _sectionTitle("Date Added"),
                           Spacers.sb5(),
@@ -271,7 +281,12 @@ class _FilterSheetState extends State<FilterSheet> {
     );
   }
 
-  Widget _input(TextEditingController ctrl, String hint) {
+  Widget _input(
+    TextEditingController ctrl,
+    String hint, {
+    List<TextInputFormatter>? inputFormatters,
+    TextInputType? keyboardType,
+  }) {
     return Container(
       height: 45,
       padding: EdgeInsets.symmetric(horizontal: 14),
@@ -281,6 +296,8 @@ class _FilterSheetState extends State<FilterSheet> {
       ),
       child: TextField(
         controller: ctrl,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         decoration: InputDecoration(
           border: InputBorder.none,
           hintText: hint,
@@ -289,6 +306,60 @@ class _FilterSheetState extends State<FilterSheet> {
         ),
       ),
     );
+  }
+
+  Widget _emailInput(TextEditingController ctrl, String hint) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: 45,
+          padding: EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: emailError != null ? Colors.red : Colors.grey.shade300,
+            ),
+          ),
+          child: TextField(
+            controller: ctrl,
+            onChanged: (value) {
+              setState(() {
+                if (value.isEmpty) {
+                  emailError = null;
+                } else if (!_isValidEmail(value)) {
+                  emailError = "Invalid email format";
+                } else {
+                  emailError = null;
+                }
+              });
+            },
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              hintText: hint,
+              hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        ),
+        if (emailError != null) ...[
+          SizedBox(height: 4),
+          TextWidget(
+            text: emailError!,
+            fontSize: 12,
+            color: Colors.red,
+            fontWeight: FontWeight.w400,
+          ),
+        ],
+      ],
+    );
+  }
+
+  bool _isValidEmail(String email) {
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    );
+    return emailRegex.hasMatch(email);
   }
 
   Widget _dateField() {
