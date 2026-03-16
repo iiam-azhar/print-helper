@@ -212,25 +212,6 @@ class _ChatListState extends State<ChatList> {
         chat.latestMessage?.userId != null &&
         chat.latestMessage!.userId == currentUserId;
 
-    // Format message preview
-    String messagePreview = chat.latestMessage?.message ?? "No messages yet";
-    if (isMyMessage && chat.latestMessage != null) {
-      if (chat.latestMessage!.type == 'voice') {
-        messagePreview = "You: 🎙️ Voice Message";
-      } else if (chat.latestMessage!.type == 'image') {
-        messagePreview = "You: 📷 Image";
-      } else if (chat.latestMessage!.type == 'video') {
-        messagePreview = "You: 📹 Video";
-      } else {
-        messagePreview = "You: ${chat.latestMessage!.message}";
-      }
-    } else if (chat.latestMessage?.type == 'voice') {
-      messagePreview = "🎙️ Voice Message";
-    } else if (chat.latestMessage?.type == 'image') {
-      messagePreview = "📷 Image";
-    } else if (chat.latestMessage?.type == 'video') {
-      messagePreview = "📹 Video";
-    }
     return InkWell(
       onTap: () async {
         if (widget.onChatSelected != null) {
@@ -368,13 +349,16 @@ class _ChatListState extends State<ChatList> {
           mainAxisAlignment: .spaceBetween,
           children: [
             Expanded(
-              child: TextWidget(
-                text: messagePreview,
-                color: const Color(0xff6b6b6b),
-                fontWeight: FontWeight.w400,
-                fontSize: 13,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: _buildLatestMessageSubtitle(
+                chat.latestMessage,
+                isSelfCaller:
+                    chat.latestMessage?.userId != null &&
+                    chat.latestMessage!.userId == currentUserId,
+                calleeFallback:
+                    chat.type == 'private' && chat.participants.isNotEmpty
+                    ? '${chat.participants.first.name} ${chat.participants.first.lastName}'
+                          .trim()
+                    : null,
               ),
             ),
             const SizedBox(width: 12),
@@ -401,6 +385,155 @@ class _ChatListState extends State<ChatList> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLatestMessageSubtitle(
+    ChatLatestMessage? msg, {
+    String? calleeFallback,
+    bool isSelfCaller = false,
+  }) {
+    if (msg == null) {
+      return TextWidget(
+        text: 'No messages yet',
+        color: const Color(0xff6b6b6b),
+        fontWeight: FontWeight.w400,
+        fontSize: 13,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    if (msg.type == 'video') {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.videocam, size: 14, color: Colors.black54),
+          const SizedBox(width: 4),
+          Flexible(
+            child: TextWidget(
+              text: msg.message.isNotEmpty ? msg.message : 'Video',
+              color: const Color(0xff6b6b6b),
+              fontWeight: FontWeight.w400,
+              fontSize: 13,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    final isCallMsg =
+        msg.type == 'call' || (msg.type == 'voice' && msg.isCallRecording);
+
+    if (isCallMsg) {
+      final isMissed =
+          msg.callOutcome == 'missed' ||
+          msg.callOutcome == 'no-answer' ||
+          (msg.callOutcome == null && msg.type == 'call');
+
+      final callerName = isSelfCaller
+          ? 'You'
+          : (msg.userName != null
+                ? '${msg.userName}${msg.userLastName != null && msg.userLastName!.isNotEmpty ? ' ${msg.userLastName}' : ''}'
+                : 'Unknown');
+
+      final toUser = msg.toUsers?.isNotEmpty == true
+          ? msg.toUsers!.first
+          : null;
+      final calleeName = toUser != null
+          ? (toUser['name']?.toString() ?? 'Unknown')
+          : calleeFallback;
+
+      final chipColor = isMissed
+          ? const Color(0xFFFFF0F0)
+          : const Color(0xFFEDFBF0);
+      final iconColor = isMissed ? Colors.red : Colors.green;
+      final textColor = isMissed ? Colors.red : Colors.green;
+
+      final label = calleeName != null
+          ? '$callerName → $calleeName'
+          : callerName;
+
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 250),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: chipColor,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: iconColor.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isMissed ? Icons.phone_missed : Icons.phone_forwarded,
+                size: 11,
+                color: iconColor,
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (msg.type == 'voice') {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.mic, size: 14, color: Colors.black54),
+          const SizedBox(width: 4),
+          Flexible(
+            child: TextWidget(
+              text: 'Voice message',
+              color: const Color(0xff6b6b6b),
+              fontWeight: FontWeight.w400,
+              fontSize: 13,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (msg.type == 'image') {
+      return TextWidget(
+        text: '📷 Image',
+        color: const Color(0xff6b6b6b),
+        fontWeight: FontWeight.w400,
+        fontSize: 13,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    return TextWidget(
+      text: msg.message.isEmpty ? 'No messages yet' : msg.message,
+      color: const Color(0xff6b6b6b),
+      fontWeight: FontWeight.w400,
+      fontSize: 13,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 

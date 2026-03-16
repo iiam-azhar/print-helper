@@ -513,13 +513,17 @@ class AddCustomerState extends State<AddCustomer> {
   Widget _contactPhoneSection(ContactFormModel model, Color primaryColor) {
     final authPro = Provider.of<AuthPro>(context, listen: false);
     final isContact = authPro.user?.roleName == "CONTACT";
+    final hasPhoneField = model.phoneFields.any(
+      (field) => field.type.label == "Phone",
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: EdgeInsets.only(left: 15),
           child: TextWidget(
-            text: "Phone(s) with Country Code",
+            text: hasPhoneField ? "Phone(s) with Country Code" : "Phone(s)",
             fontWeight: FontWeight.bold,
             fontSize: 13,
             color: AppColors.black,
@@ -604,19 +608,6 @@ class AddCustomerState extends State<AddCustomer> {
                               inputFormatters: [UsPhoneTextFormatter()],
                             ),
                           ),
-                          if (field.type.label == "Phone")
-                            Padding(
-                              padding: EdgeInsets.only(top: 8, left: 70),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: TextWidget(
-                                  text: "Phone No must include country code",
-                                  fontSize: 11,
-                                  color: Colors.blue.shade600,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                     ),
@@ -1090,6 +1081,8 @@ class AddCustomerState extends State<AddCustomer> {
         ),
         Spacers.sb5(),
         CustomTextField(
+          alphaWithSpaceOnly:
+              regExpCondition.pattern == Regx.nameRegExp.pattern,
           regExpCondition: regExpCondition,
           regErrorText: regErrorText,
           errorText: errorText,

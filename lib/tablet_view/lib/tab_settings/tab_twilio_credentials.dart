@@ -33,6 +33,37 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
   bool _didUserModify = false;
   String? _lastSyncKey;
   bool _didSyncCredentials = false;
+  final Map<int, List<AssignedAccount>> _staffByClientCache = {};
+
+  Future<void> _ensureStaffForClient(
+    int? clientId, {
+    TwilioCredential? credential,
+  }) async {
+    if (clientId == null) return;
+
+    List<AssignedAccount> staffList = [];
+    if (_staffByClientCache.containsKey(clientId)) {
+      staffList = _staffByClientCache[clientId]!;
+    } else {
+      final chatPro = Provider.of<ChatPro>(context, listen: false);
+      staffList = await chatPro.fetchStaffByClient(clientId: clientId);
+      if (mounted) {
+        setState(() {
+          _staffByClientCache[clientId] = staffList;
+        });
+      }
+    }
+
+    if (credential != null && mounted) {
+      setState(() {
+        final validIds = staffList.map((s) => s.id).toSet();
+        credential.assignedAccounts.removeWhere(
+          (acc) => !validIds.contains(acc.id),
+        );
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -507,6 +538,9 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
             .map((account) => account.copyWith(isSelected: true))
             .toList();
       }
+      if (credential.selectedClientId != null) {
+        _ensureStaffForClient(credential.selectedClientId);
+      }
     }
   }
 
@@ -765,84 +799,95 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: chatPro.twilioStaff.map((staff) {
-                    final isSelected = credential.assignedAccounts.any(
-                      (account) => account.id == staff.id,
-                    );
-                    return InkWell(
-                      onTap: () {
-                        setState(() {
-                          if (isSelected) {
-                            credential.assignedAccounts.removeWhere(
+                  children:
+                      (credential.selectedClientId != null
+                              ? _staffByClientCache[credential
+                                        .selectedClientId] ??
+                                    []
+                              : chatPro.twilioStaff)
+                          .map((staff) {
+                            final isSelected = credential.assignedAccounts.any(
                               (account) => account.id == staff.id,
                             );
-                          } else {
-                            credential.assignedAccounts.add(
-                              AssignedAccount(
-                                id: staff.id,
-                                accountName: staff.accountName,
-                                image: staff.image,
-                                isSelected: true,
+                            return InkWell(
+                              onTap: () {
+                                setState(() {
+                                  if (isSelected) {
+                                    credential.assignedAccounts.removeWhere(
+                                      (account) => account.id == staff.id,
+                                    );
+                                  } else {
+                                    credential.assignedAccounts.add(
+                                      AssignedAccount(
+                                        id: staff.id,
+                                        accountName: staff.accountName,
+                                        image: staff.image,
+                                        isSelected: true,
+                                      ),
+                                    );
+                                  }
+                                });
+                                _saveTwilioAssignments(credential);
+                              },
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? const Color(0xFFE8F5E9)
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            30,
+                                          ),
+                                          child: ImageWidget(
+                                            image:
+                                                staff.image
+                                                        .toString()
+                                                        .isEmpty ||
+                                                    staff.image == null
+                                                ? Paths.user
+                                                : staff.image.toString(),
+                                            fit: BoxFit.cover,
+                                            width: 28,
+                                            height: 28,
+                                          ),
+                                        ),
+                                        Spacers.sbw8(),
+                                        Expanded(
+                                          child: TextWidget(
+                                            text: staff.accountName,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          Icon(
+                                            Icons.check_circle,
+                                            color: Colors.green,
+                                            size: 18,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ),
                             );
-                          }
-                        });
-                        _saveTwilioAssignments(credential);
-                      },
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? const Color(0xFFE8F5E9)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(30),
-                                  child: ImageWidget(
-                                    image:
-                                        staff.image.toString().isEmpty ||
-                                            staff.image == null
-                                        ? Paths.user
-                                        : staff.image.toString(),
-                                    fit: BoxFit.cover,
-                                    width: 28,
-                                    height: 28,
-                                  ),
-                                ),
-                                Spacers.sbw8(),
-                                Expanded(
-                                  child: TextWidget(
-                                    text: staff.accountName,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                if (isSelected)
-                                  Icon(
-                                    Icons.check_circle,
-                                    color: Colors.green,
-                                    size: 18,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                          })
+                          .toList(),
                 ),
               ),
             ),
@@ -1054,7 +1099,7 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                           vertical: 4,
                         ),
                         child: GestureDetector(
-                          onTap: () {
+                          onTap: () async {
                             setState(() {
                               if (isClientSelected) {
                                 credential.selectedClientId = null;
@@ -1065,6 +1110,12 @@ class _TwilioCredentialsWebState extends State<TwilioCredentialsWeb> {
                               }
                             });
                             setMenuState(() {});
+                            if (credential.selectedClientId != null) {
+                              await _ensureStaffForClient(
+                                credential.selectedClientId,
+                                credential: credential,
+                              );
+                            }
                             _saveTwilioAssignments(credential);
                           },
                           child: _buildClientListItem(client, credential),

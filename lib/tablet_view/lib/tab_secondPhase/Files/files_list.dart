@@ -68,27 +68,69 @@ class _FilesScreenState extends State<FilesScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Column(
                     children: [
-                      Spacers.sb15(),
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              mainAxisSpacing: 16,
-                              crossAxisSpacing: 16,
-                              childAspectRatio: 0.80,
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.black12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextWidget(
+                              text: "Path: ${pro.displayPath}",
+                              fontSize: 12,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w600,
                             ),
-                        itemCount: combined.length,
-                        itemBuilder: (context, i) {
-                          final item = combined[i];
-                          if (item["type"] == "folder") {
-                            return _folderTile(item["data"]);
-                          } else {
-                            return _fileTile(item["data"]);
-                          }
-                        },
+                            if (pro.storageSummary.isNotEmpty)
+                              TextWidget(
+                                text: pro.storageSummary,
+                                fontSize: 11,
+                                color: Colors.black54,
+                                fontWeight: FontWeight.w500,
+                              ),
+                          ],
+                        ),
                       ),
+                      Spacers.sb15(),
+                      if (combined.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 30),
+                          child: TextWidget(
+                            text: "No files or folders",
+                            fontSize: 14,
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+                      else
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 16,
+                                crossAxisSpacing: 16,
+                                childAspectRatio: 0.80,
+                              ),
+                          itemCount: combined.length,
+                          itemBuilder: (context, i) {
+                            final item = combined[i];
+                            if (item["type"] == "folder") {
+                              return _folderTile(item["data"]);
+                            } else {
+                              return _fileTile(item["data"]);
+                            }
+                          },
+                        ),
                       Spacers.sb20(),
                     ],
                   ),
@@ -139,6 +181,13 @@ class _FilesScreenState extends State<FilesScreen> {
                   )
                 : Row(
                     children: [
+                      if (pro.currentPath != pro.homePath)
+                        IconButton(
+                          onPressed: () {
+                            pro.getFiles(ctx: context, path: pro.homePath);
+                          },
+                          icon: const Icon(Icons.home_outlined),
+                        ),
                       IconButton(
                         onPressed: () {
                           CustomPrompts.showBottomSheet(
@@ -183,7 +232,15 @@ class _FilesScreenState extends State<FilesScreen> {
                         CustomPrompts.showBottomSheet(
                           ctx: context,
                           bgColor: AppColors.tr,
-                          child: const FileInformationSheet(type: 'folder'),
+                          child: FileInformationSheet(
+                            type: 'folder',
+                            folderName: folder.title,
+                            fileSize: folder.size,
+                            fileLocation: folder.internalPath,
+                            addedDate: folder.createdAt,
+                            addedBy: folder.ownerName,
+                            addedByAvatar: folder.ownerAvatar,
+                          ),
                         );
                       },
                       child: Container(
@@ -203,6 +260,10 @@ class _FilesScreenState extends State<FilesScreen> {
               onTap: () {
                 if (pro.isSelecting) {
                   pro.toggleSelect(folder.id);
+                  return;
+                }
+                if (folder.internalPath.isNotEmpty) {
+                  pro.getFiles(ctx: context, path: folder.internalPath);
                 }
               },
               child: ImageWidget(image: Paths.folder, height: 140),
@@ -222,6 +283,9 @@ class _FilesScreenState extends State<FilesScreen> {
     return Consumer<FilesPro>(
       builder: (context, pro, _) {
         bool selected = pro.selected.contains(file.id);
+        final avatar = file.uploadedBy.isNotEmpty
+            ? file.uploadedBy.first
+            : file.ownerAvatar;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -247,7 +311,7 @@ class _FilesScreenState extends State<FilesScreen> {
                   Positioned(
                     top: 8,
                     left: 8,
-                    child: _avatar(file.uploadedBy.first, 30),
+                    child: _avatar(avatar, 30),
                   ),
                   Positioned(
                     top: 0,
@@ -273,12 +337,11 @@ class _FilesScreenState extends State<FilesScreen> {
                                 child: FileInformationSheet(
                                   file: file.thumbnail,
                                   folderName: file.filename,
-                                  fileSize: "5mb",
-                                  fileLocation:
-                                      "Main/Projects/.../filename.jpg",
-                                  addedDate: "10/10/2025 - 4:56pm",
-                                  addedBy: "Jesus Martinez",
-                                  addedByAvatar: file.uploadedBy.first,
+                                  fileSize: file.size,
+                                  fileLocation: file.internalPath,
+                                  addedDate: file.createdAt,
+                                  addedBy: file.ownerName,
+                                  addedByAvatar: avatar,
                                 ),
                               );
                             },
@@ -321,7 +384,28 @@ class _FilesScreenState extends State<FilesScreen> {
     if (file.type == "psd") {
       return ImageWidget(image: Paths.psd, height: 120);
     }
+    if (!_isImageType(file.type)) {
+      return const Icon(
+        Icons.insert_drive_file_rounded,
+        size: 56,
+        color: Colors.grey,
+      );
+    }
     return ImageWidget(image: file.thumbnail, height: 140, fit: BoxFit.cover);
+  }
+
+  bool _isImageType(String type) {
+    const imageTypes = {
+      'image',
+      'jpg',
+      'jpeg',
+      'png',
+      'webp',
+      'gif',
+      'bmp',
+      'svg',
+    };
+    return imageTypes.contains(type.toLowerCase());
   }
 
   Widget _avatar(String img, double size) {

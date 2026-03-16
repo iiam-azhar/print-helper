@@ -60,12 +60,12 @@ abstract class AppStrings {
   static const String lNameRegError = 'Please enter a valid last name';
   static const String fNameRegError = 'Please enter a valid first name';
   static const String userNmeRegError = 'Please enter a valid user name';
-  static const String passError = 'Please enter your password';
+  static const String passError = 'Password is required';
   static const String newPassError = 'Please enter new password';
-  static const String cnfmPassError = 'Please confirm your password';
+  static const String cnfmPassError = 'Confirm password is required';
   static const String passMatchError = 'Passwords do not match';
   static const String passRegError =
-      'Password must be at least 8 characters with uppercase, lowercase, digits, and special characters.';
+      'Password must be at least 8 characters including uppercase, lowercase, number, and special character.';
 
   static const String notReceive = "Didn't receive code? ";
   static const String resendCode = 'Resend Code';

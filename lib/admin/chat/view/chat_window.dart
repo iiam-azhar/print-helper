@@ -16,6 +16,7 @@ import 'package:print_helper/widgets/image_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:twilio_voice/twilio_voice.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:print_helper/services/call_device_service.dart';
 
 import '../../../constants/colors.dart';
@@ -135,7 +136,18 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    final deviceToken = prefs.getString("fcm_token");
+    String? deviceToken = prefs.getString("fcm_token");
+    if (deviceToken == null || deviceToken.isEmpty) {
+      // Token missing from prefs — recover directly from Firebase and cache it
+      try {
+        deviceToken = await FirebaseMessaging.instance.getToken();
+        if (deviceToken != null && deviceToken.isNotEmpty) {
+          await prefs.setString("fcm_token", deviceToken);
+        }
+      } catch (e) {
+        printData(title: "FCM getToken error:", data: e, e: true);
+      }
+    }
     if (deviceToken == null || deviceToken.isEmpty) {
       showToast(message: "FCM device token is missing");
       return false;
@@ -1709,22 +1721,90 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
       actions: [
-        IconButton(
-          icon: ImageIcon(
-            AssetImage(Paths.vc),
-            color: AppColors.black,
-            size: 30,
-          ),
-          onPressed: () {},
+        Consumer<ChatPro>(
+          builder: (context, pro, _) {
+            if (widget.conversationId != null) {
+              final convo = pro.conversations.firstWhere(
+                (c) => c.id == widget.conversationId,
+                orElse: () => ChatConversation(
+                  id: -1,
+                  type: 'private',
+                  title: '',
+                  participants: const [],
+                  latestMessage: null,
+                  image: '',
+                  unreadCount: 0,
+                  updatedAt: DateTime.now(),
+                  isDefault: true,
+                ),
+              );
+              if (convo.type == 'group') {
+                final myId = getAuthPro(context, listen: false).user?.id;
+                final me = convo.participants.firstWhere(
+                  (p) => p.id == myId,
+                  orElse: () => ChatParticipant(
+                    name: '',
+                    username: '',
+                    lastName: '',
+                    isOnline: false,
+                    phoneNumbers: const [],
+                  ),
+                );
+                if (me.role == 'observer') return const SizedBox.shrink();
+              }
+            }
+            return IconButton(
+              icon: ImageIcon(
+                AssetImage(Paths.vc),
+                color: AppColors.black,
+                size: 30,
+              ),
+              onPressed: () {},
+            );
+          },
         ),
 
-        IconButton(
-          icon: ImageIcon(
-            AssetImage(Paths.call),
-            color: AppColors.black,
-            size: 20,
-          ),
-          onPressed: _showCallFromSheet,
+        Consumer<ChatPro>(
+          builder: (context, pro, _) {
+            if (widget.conversationId != null) {
+              final convo = pro.conversations.firstWhere(
+                (c) => c.id == widget.conversationId,
+                orElse: () => ChatConversation(
+                  id: -1,
+                  type: 'private',
+                  title: '',
+                  participants: const [],
+                  latestMessage: null,
+                  image: '',
+                  unreadCount: 0,
+                  updatedAt: DateTime.now(),
+                  isDefault: true,
+                ),
+              );
+              if (convo.type == 'group') {
+                final myId = getAuthPro(context, listen: false).user?.id;
+                final me = convo.participants.firstWhere(
+                  (p) => p.id == myId,
+                  orElse: () => ChatParticipant(
+                    name: '',
+                    username: '',
+                    lastName: '',
+                    isOnline: false,
+                    phoneNumbers: const [],
+                  ),
+                );
+                if (me.role == 'observer') return const SizedBox.shrink();
+              }
+            }
+            return IconButton(
+              icon: ImageIcon(
+                AssetImage(Paths.call),
+                color: AppColors.black,
+                size: 20,
+              ),
+              onPressed: _showCallFromSheet,
+            );
+          },
         ),
         _groupInfoAction(),
         IconButton(

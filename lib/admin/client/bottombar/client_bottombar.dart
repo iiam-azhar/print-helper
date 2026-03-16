@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:print_helper/admin/chat/provider/chat_pro.dart';
 import 'package:print_helper/admin/chat/view/chat_list.dart';
 import 'package:print_helper/providers/auth_pro.dart';
 import 'package:print_helper/widgets/loaders.dart';
+import 'package:print_helper/widgets/toasts.dart';
 import 'package:provider/provider.dart';
 import '../../../constants/colors.dart';
 import '../../../constants/paths.dart';
@@ -22,6 +24,8 @@ class ClientBottomBar extends StatefulWidget {
 
 class _ClientBottomBarState extends State<ClientBottomBar>
     with WidgetsBindingObserver {
+  DateTime? currentBackPressTime;
+  bool canPopNow = false;
   int pageNum = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -31,6 +35,7 @@ class _ClientBottomBarState extends State<ClientBottomBar>
     pageNum = widget.pageNum;
     WidgetsBinding.instance.addPostFrameCallback((_) async {});
   }
+
   void _onItemTapped(int index) {
     if (index == 4) {
       _scaffoldKey.currentState?.openDrawer();
@@ -41,63 +46,92 @@ class _ClientBottomBarState extends State<ClientBottomBar>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      drawer: CustomDrawer(
-        isFromAdmin: false,
-        isFromClient: true,
-        isFromStaff: false,
-      ),
-      extendBody: true,
-      body: Consumer<AuthPro>(
-        builder: (context, pro, _) {
-          final user = pro.user;
-          if (user == null || user.clientId == null) {
-            return Center(child: showLoader());
-          }
-          return IndexedStack(
-            index: pageNum,
-            children: [
-              CustomersScreen(
-                isFromAdmin: false,
-                isFromStaff: false,
-                isFromClient: true,
-                id: user.clientId!,
-              ),
-              const SizedBox(),
-              ChatList(),
-              const SizedBox(),
-              const SizedBox(),
-            ],
-          );
-        },
-      ),
+    return PopScope(
+      canPop: canPopNow,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        // Handle back button: go to first tab instead of exiting app
+        if (pageNum != 0) {
+          setState(() => pageNum = 0);
+          return;
+        }
 
-      bottomNavigationBar: Theme(
-        data: ThemeData(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
+        DateTime now = DateTime.now();
+        if (currentBackPressTime == null || 
+            now.difference(currentBackPressTime!) > const Duration(seconds: 2)) {
+          currentBackPressTime = now;
+          showToast(message: "press again to exit");
+          setState(() {
+            canPopNow = true;
+          });
+          
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              setState(() {
+                canPopNow = false;
+              });
+            }
+          });
+        }
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawer: CustomDrawer(
+          isFromAdmin: false,
+          isFromClient: true,
+          isFromStaff: false,
         ),
-        child: Container(
-          decoration: decor(),
-          child: Consumer<ChatPro>(
-            builder: (_, chatPro, _) {
-              final unread = chatPro.totalUnreadCount;
-              return BottomNavigationBar(
-                onTap: _onItemTapped,
-                elevation: 0,
-                currentIndex: pageNum,
-                items: tabItems(unreadCount: unread),
-                type: BottomNavigationBarType.fixed,
-                backgroundColor: AppColors.black,
-                selectedItemColor: AppColors.white,
-                unselectedItemColor: AppColors.white,
-                showSelectedLabels: false,
-                showUnselectedLabels: false,
-                selectedLabelStyle: TextStyleData.selectedNavLbl,
-                unselectedLabelStyle: TextStyleData.unSelectedNavLbl,
-              );
-            },
+        extendBody: true,
+        body: Consumer<AuthPro>(
+          builder: (context, pro, _) {
+            final user = pro.user;
+            if (user == null || user.clientId == null) {
+              return Center(child: showLoader());
+            }
+            return IndexedStack(
+              index: pageNum,
+              children: [
+                CustomersScreen(
+                  isFromAdmin: false,
+                  isFromStaff: false,
+                  isFromClient: true,
+                  id: user.clientId!,
+                ),
+                const SizedBox(),
+                ChatList(),
+                const SizedBox(),
+                const SizedBox(),
+              ],
+            );
+          },
+        ),
+
+        bottomNavigationBar: Theme(
+          data: ThemeData(
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+          ),
+          child: Container(
+            decoration: decor(),
+            child: Consumer<ChatPro>(
+              builder: (_, chatPro, _) {
+                final unread = chatPro.totalUnreadCount;
+                return BottomNavigationBar(
+                  onTap: _onItemTapped,
+                  elevation: 0,
+                  currentIndex: pageNum,
+                  items: tabItems(unreadCount: unread),
+                  type: BottomNavigationBarType.fixed,
+                  backgroundColor: AppColors.black,
+                  selectedItemColor: AppColors.white,
+                  unselectedItemColor: AppColors.white,
+                  showSelectedLabels: false,
+                  showUnselectedLabels: false,
+                  selectedLabelStyle: TextStyleData.selectedNavLbl,
+                  unselectedLabelStyle: TextStyleData.unSelectedNavLbl,
+                );
+              },
+            ),
           ),
         ),
       ),

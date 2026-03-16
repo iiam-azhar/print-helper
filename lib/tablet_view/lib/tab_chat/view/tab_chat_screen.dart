@@ -12,6 +12,7 @@ import 'package:print_helper/screens/call_screen.dart' as cs;
 import 'package:print_helper/services/call_device_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:twilio_voice/twilio_voice.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../tab_constants/colors.dart';
 import '../../tab_constants/paths.dart';
 import '../../tab_services/helpers.dart';
@@ -438,7 +439,16 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    final deviceToken = prefs.getString("fcm_token");
+    String? deviceToken = prefs.getString("fcm_token");
+    if (deviceToken == null || deviceToken.isEmpty) {
+      // Token missing from prefs — recover directly from Firebase and cache it
+      try {
+        deviceToken = await FirebaseMessaging.instance.getToken();
+        if (deviceToken != null && deviceToken.isNotEmpty) {
+          await prefs.setString("fcm_token", deviceToken);
+        }
+      } catch (_) {}
+    }
     if (deviceToken == null || deviceToken.isEmpty) {
       showToast(message: "FCM device token is missing");
       return false;
@@ -1217,13 +1227,81 @@ class _ChatScreenState extends State<ChatScreen> {
         },
       ),
       actions: [
-        IconButton(
-          icon: ImageWidget(image: Paths.vc.toString(), width: 28),
-          onPressed: () {},
+        Consumer<ChatPro>(
+          builder: (context, pro, _) {
+            if (widget.conversationId != null && widget.conversationId! > 0) {
+              final convo = pro.conversations.firstWhere(
+                (c) => c.id == widget.conversationId,
+                orElse: () => ChatConversation(
+                  id: -1,
+                  type: 'private',
+                  title: '',
+                  participants: const [],
+                  latestMessage: null,
+                  image: '',
+                  unreadCount: 0,
+                  updatedAt: DateTime.now(),
+                  isDefault: true,
+                ),
+              );
+              if (convo.type == 'group') {
+                final myId = getAuthPro(context, listen: false).user?.id;
+                final me = convo.participants.firstWhere(
+                  (p) => p.id == myId,
+                  orElse: () => ChatParticipant(
+                    name: '',
+                    username: '',
+                    lastName: '',
+                    isOnline: false,
+                    phoneNumbers: const [],
+                  ),
+                );
+                if (me.role == 'observer') return const SizedBox.shrink();
+              }
+            }
+            return IconButton(
+              icon: ImageWidget(image: Paths.vc.toString(), width: 28),
+              onPressed: () {},
+            );
+          },
         ),
-        IconButton(
-          icon: Icon(CupertinoIcons.phone),
-          onPressed: _showCallFromSheet,
+        Consumer<ChatPro>(
+          builder: (context, pro, _) {
+            if (widget.conversationId != null && widget.conversationId! > 0) {
+              final convo = pro.conversations.firstWhere(
+                (c) => c.id == widget.conversationId,
+                orElse: () => ChatConversation(
+                  id: -1,
+                  type: 'private',
+                  title: '',
+                  participants: const [],
+                  latestMessage: null,
+                  image: '',
+                  unreadCount: 0,
+                  updatedAt: DateTime.now(),
+                  isDefault: true,
+                ),
+              );
+              if (convo.type == 'group') {
+                final myId = getAuthPro(context, listen: false).user?.id;
+                final me = convo.participants.firstWhere(
+                  (p) => p.id == myId,
+                  orElse: () => ChatParticipant(
+                    name: '',
+                    username: '',
+                    lastName: '',
+                    isOnline: false,
+                    phoneNumbers: const [],
+                  ),
+                );
+                if (me.role == 'observer') return const SizedBox.shrink();
+              }
+            }
+            return IconButton(
+              icon: Icon(CupertinoIcons.phone),
+              onPressed: _showCallFromSheet,
+            );
+          },
         ),
         // Show info button for group chats only
         Consumer<ChatPro>(

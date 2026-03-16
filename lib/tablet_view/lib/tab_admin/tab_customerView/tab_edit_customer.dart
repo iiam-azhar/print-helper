@@ -282,13 +282,17 @@ class EditCustomerState extends State<EditCustomer> {
     final role = authPro.user?.roleName;
 
     final bool isBrandUser = role == "CONTACT" || role == "CUSTOMER";
+    final hasPhoneField = model.phoneFields.any(
+      (field) => field.type.label == "Phone",
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: EdgeInsets.only(left: 15),
           child: TextWidget(
-            text: "Phone(s) with Country Code",
+            text: hasPhoneField ? "Phone(s) with Country Code" : "Phone(s)",
             fontWeight: FontWeight.bold,
             fontSize: 13,
             color: AppColors.black,
@@ -372,19 +376,6 @@ class EditCustomerState extends State<EditCustomer> {
                               inputFormatters: [UsPhoneTextFormatter()],
                             ),
                           ),
-                          if (field.type.label == "Phone")
-                            Padding(
-                              padding: EdgeInsets.only(top: 8, left: 70),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: TextWidget(
-                                  text: "Phone No must include country code",
-                                  fontSize: 11,
-                                  color: Colors.blue.shade600,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                     ),
@@ -864,6 +855,8 @@ class EditCustomerState extends State<EditCustomer> {
         ),
         Spacers.sb5(),
         CustomTextField(
+          alphaWithSpaceOnly:
+              regExpCondition.pattern == Regx.nameRegExp.pattern,
           regExpCondition: regExpCondition,
           regErrorText: regErrorText,
           errorText: errorText,

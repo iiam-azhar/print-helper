@@ -16,6 +16,7 @@ import '../../tab_services/helpers.dart';
 import 'tab_add_account.dart';
 import 'tab_edit_account.dart';
 import '../tab_filter/tab_filter_screen.dart';
+import '../tab_adminBottombar/tab_admin_bottombar.dart';
 
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
@@ -332,13 +333,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     ),
                     _iconButtonTwo(
                       Paths.chat,
-                      onTap: () {
-                        // For tablet, we typically use the unified chat view
-                        // If there's a specific navigation needed, it should follow tab patterns
-                        // Assuming ChatScreen is available or handled by the parent
-                        showToast(message: 'Opening chat...');
-                        // For now, let's just attempt standard navigation or a placeholder if complex
-                      },
+                      onTap: () => navTo(
+                        context: context,
+                        page: AdminBottomBar(pageNum: 2),
+                        removeUntil: true,
+                      ),
                     ),
                   ],
                 ),

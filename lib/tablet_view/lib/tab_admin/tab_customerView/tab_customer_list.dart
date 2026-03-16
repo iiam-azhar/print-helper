@@ -19,7 +19,9 @@ import '../../tab_constants/paths.dart';
 import '../../tab_widgets/loaders.dart';
 import '../../tab_widgets/tab_toasts.dart';
 import '../tab_filter/tab_filter_screen.dart';
+import '../../tab_client/tab_edit_client.dart';
 import 'tab_edit_customer.dart';
+import '../tab_adminBottombar/tab_admin_bottombar.dart';
 
 class CustomersScreen extends StatefulWidget {
   final bool isFromAdmin;
@@ -237,6 +239,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             children: [
                               IconButton(
                                 onPressed: () async {
+                                  debugPrint(
+                                    'Banner Login Tap Client ID: ${item.client!.id}',
+                                  );
                                   final clPro = Provider.of<ClientPro>(
                                     context,
                                     listen: false,
@@ -271,7 +276,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               ),
                               Spacers.sbw15(),
                               IconButton(
-                                onPressed: () {},
+                                onPressed: () {
+                                  debugPrint(
+                                    'Banner Edit Tap Client ID: ${item.client!.id}',
+                                  );
+                                  _openRightSideSheet(
+                                    context,
+                                    EditClient(clientId: item.client!.id),
+                                  );
+                                },
                                 icon: ImageWidget(
                                   image: Paths.edit,
                                   width: 25,
@@ -996,8 +1009,24 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     showToast(message: 'No email address available');
                   }
                 }),
-                _imageButton(Paths.call, 20, () {}),
-                _imageButton(Paths.chat, 20, () {}),
+                _imageButton(
+                  Paths.call,
+                  20,
+                  () => navTo(
+                    context: context,
+                    page: AdminBottomBar(pageNum: 2),
+                    removeUntil: true,
+                  ),
+                ),
+                _imageButton(
+                  Paths.chat,
+                  20,
+                  () => navTo(
+                    context: context,
+                    page: AdminBottomBar(pageNum: 2),
+                    removeUntil: true,
+                  ),
+                ),
                 role == "CONTACT" || role == "STAFF"
                     ? SizedBox()
                     : _imageButton(Paths.login, 20, () async {

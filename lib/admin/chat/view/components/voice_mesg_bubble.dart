@@ -81,8 +81,10 @@ class _VoiceMessageBubbleUIState extends State<VoiceMessageBubbleUI>
       // Safety check before starting heavy async work
       if (!mounted) return;
 
+      // Convert file path to proper URI format for audio_waveforms package
+      final fileUri = file.uri.toString();
       final extractedWaveform = await _waveController.waveformExtraction
-          .extractWaveformData(path: file.path, noOfSamples: 50);
+          .extractWaveformData(path: fileUri, noOfSamples: 50);
 
       if (extractedWaveform.isNotEmpty) {
         await WaveformCache.saveWaveform(widget.path, extractedWaveform);

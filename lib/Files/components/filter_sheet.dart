@@ -5,6 +5,7 @@ import 'package:print_helper/widgets/custom_button.dart';
 import 'package:print_helper/widgets/spacers.dart';
 import 'package:print_helper/widgets/text_widget.dart';
 
+import '../../constants/paths.dart';
 import '../../widgets/image_widget.dart';
 
 class FilterFilesSheet extends StatefulWidget {
@@ -49,13 +50,37 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
           Expanded(child: SingleChildScrollView(child: _filterBody())),
           Row(
             children: [
+              Spacer(flex: 1),
               Expanded(
-                child: CustomButton(title: 'C', onTap: () {}),
+                child: CustomButton(
+                  title: 'Clear',
+                  onTap: () {},
+                  stadium: false,
+                  height: 43,
+                  showBorder: true,
+                  borderRadius: 22,
+                  buttonColor: Colors.white,
+                  textColor: Colors.black,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
               Spacers.sbw15(),
               Expanded(
-                child: CustomButton(title: 'Save', onTap: () {}),
+                child: CustomButton(
+                  title: 'Save',
+                  onTap: () {},
+                  stadium: false,
+                  height: 43,
+                  showBorder: false,
+                  borderRadius: 22,
+                  buttonColor: Color(0xff30b76a),
+                  textColor: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
+              Spacer(flex: 1),
             ],
           ),
           Spacers.sb10(),
@@ -126,11 +151,7 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
           Spacers.sb10(),
           Row(
             children: [
-              Icon(
-                Icons.filter_alt_outlined,
-                size: 22.sp,
-                fontWeight: FontWeight.w800,
-              ),
+              ImageWidget(image: Paths.filter, width: 22, height: 22),
               Spacers.sbw10(),
               Expanded(
                 child: TextWidget(

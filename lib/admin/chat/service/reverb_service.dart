@@ -21,6 +21,7 @@ class ReverbSocketService {
   StreamSubscription? _conversationCreatedSub;
   StreamSubscription? _unreadCountUpdatedSub;
   StreamSubscription? _conversationUpdatedSub;
+  StreamSubscription? _messageUpdatedSub; // Added for message edits
   StreamSubscription?
   _connectionEstablishedSub; // Prevents duplicate listeners on reconnect
 
@@ -35,6 +36,7 @@ class ReverbSocketService {
 
   // 2. New Event Callbacks
   final void Function(Map<String, dynamic>)? onMessageDeleted;
+  final void Function(Map<String, dynamic>)? onMessageUpdated; // For edits
   final void Function(Map<String, dynamic>)?
   onMessageStatusUpdated; // For Read/Delivered status
   final void Function(Map<String, dynamic>)?
@@ -57,6 +59,7 @@ class ReverbSocketService {
     required this.onTypingReceived,
     required this.onConnected,
     this.onMessageDeleted,
+    this.onMessageUpdated,
     this.onMessageStatusUpdated,
     this.onUserStatusChanged,
     this.onConversationCreated,
@@ -184,6 +187,16 @@ class ReverbSocketService {
         }
       });
 
+      _messageDeletedSub = _userChannel!.bind("message.deleted").listen((
+        event,
+      ) {
+        final data = _safeJsonDecode(event.data);
+        if (data != null && onMessageDeleted != null) {
+          printData(title: "MESSAGE DELETED (User Channel):", data: data);
+          onMessageDeleted!(data);
+        }
+      });
+
       _userChannel!.subscribeIfNotUnsubscribed();
       onConnected();
     });
@@ -198,23 +211,31 @@ class ReverbSocketService {
     required Uri authEndpoint,
     required Map<String, String> headers,
   }) {
-    if (_isConnected) return;
-    _isConnected = true;
+    if (_conversationChannel != null) {
+      return; // Already connected to this conversation
+    }
 
-    final options = PusherChannelsOptions.fromHost(
-      scheme: 'wss',
-      host: host,
-      port: port,
-      key: appKey,
-    );
+    // Reuse existing client if user channel is already initialized
+    if (_userChannel == null) {
+      // Client not initialized yet, create it
+      final options = PusherChannelsOptions.fromHost(
+        scheme: 'wss',
+        host: host,
+        port: port,
+        key: appKey,
+      );
 
-    _client = PusherChannelsClient.websocket(
-      options: options,
-      connectionErrorHandler: (err, stack, refresh) {
-        printData(title: "Reverb Chat Error:", data: err, e: true);
-        refresh();
-      },
-    );
+      _client = PusherChannelsClient.websocket(
+        options: options,
+        connectionErrorHandler: (err, stack, refresh) {
+          printData(title: "Reverb Chat Error:", data: err, e: true);
+          refresh();
+        },
+      );
+      _client.connect();
+    }
+
+    // Wait for connection, then subscribe to conversation channel
     _client.onConnectionEstablished.listen((_) {
       printData(title: "✅ Reverb Conversation Channel Connected", data: "");
 
@@ -242,6 +263,16 @@ class ReverbSocketService {
           if (data != null && onMessageDeleted != null) {
             printData(title: "MESSAGE DELETED:", data: data);
             onMessageDeleted!(data);
+          }
+        },
+      );
+      // X. Message Updated
+      _messageUpdatedSub = _conversationChannel!.bind("message.updated").listen(
+        (event) {
+          final data = _safeJsonDecode(event.data);
+          if (data != null && onMessageUpdated != null) {
+            printData(title: "MESSAGE UPDATED:", data: data);
+            onMessageUpdated!(data);
           }
         },
       );
@@ -283,8 +314,6 @@ class ReverbSocketService {
       _conversationChannel!.subscribeIfNotUnsubscribed();
       onConnected();
     });
-
-    _client.connect();
   }
 
   /// Helper to safely decode JSON
@@ -304,6 +333,7 @@ class ReverbSocketService {
     _messageSub?.cancel();
     _typingSub?.cancel();
     _messageDeletedSub?.cancel();
+    _messageUpdatedSub?.cancel();
     _messageStatusSub?.cancel();
     _userStatusSub?.cancel();
     _conversationCreatedSub?.cancel();
@@ -311,6 +341,8 @@ class ReverbSocketService {
     _conversationUpdatedSub?.cancel();
     _conversationChannel?.unsubscribe();
     _userChannel?.unsubscribe();
+    _conversationChannel = null;
+    _userChannel = null;
     try {
       _client.dispose();
     } catch (_) {}

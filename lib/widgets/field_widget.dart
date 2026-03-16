@@ -16,6 +16,7 @@ class CustomTextField extends StatelessWidget {
   final String? prefixText;
   final bool digit;
   final bool isDouble;
+  final bool alphaWithSpaceOnly;
   final bool readOnly;
   final bool enabled;
   final bool passField;
@@ -54,6 +55,7 @@ class CustomTextField extends StatelessWidget {
     this.maxLines = 1,
     this.digit = false,
     this.isDouble = false,
+    this.alphaWithSpaceOnly = false,
     this.readOnly = false,
     this.enabled = true,
     this.passField = false,
@@ -116,6 +118,8 @@ class CustomTextField extends StatelessWidget {
               FilteringTextInputFormatter.allow(Regx.double2RegExp),
               LengthLimitingTextInputFormatter(maxLength ?? 8),
             ]
+          : alphaWithSpaceOnly
+          ? [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]'))]
           : null,
       style:
           style ??

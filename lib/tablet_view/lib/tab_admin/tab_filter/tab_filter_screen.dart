@@ -34,6 +34,9 @@ class _FilterSheetState extends State<FilterSheet> {
   final phoneCtrl = TextEditingController();
   final dateCtrl = TextEditingController();
   String? emailError;
+  String? phoneError;
+  String? firstNameError;
+  String? lastNameError;
 
   @override
   void initState() {
@@ -50,7 +53,7 @@ class _FilterSheetState extends State<FilterSheet> {
     lastNameCtrl.text = f["last_name"] ?? "";
     cmpnyNameCtrl.text = f["company_name"] ?? "";
     emailCtrl.text = f["email"] ?? "";
-    phoneCtrl.text = f["phone"] ?? "";
+    phoneCtrl.text = (f["phone"] ?? "").toString().replaceAll('%', '');
     if (f["created_date"] != null) {
       final parts = f["created_date"].split("-");
       if (parts.length == 3) {
@@ -116,11 +119,19 @@ class _FilterSheetState extends State<FilterSheet> {
                             Spacers.sb10(),
                           _sectionTitle("First Name"),
                           Spacers.sb5(),
-                          _input(firstNameCtrl, "Filter by first name"),
+                          _nameInput(
+                            firstNameCtrl,
+                            "Filter by first name",
+                            isLastName: false,
+                          ),
                           Spacers.sb10(),
                           _sectionTitle("Last Name"),
                           Spacers.sb5(),
-                          _input(lastNameCtrl, "Filter by last name"),
+                          _nameInput(
+                            lastNameCtrl,
+                            "Filter by last name",
+                            isLastName: true,
+                          ),
                           Spacers.sb10(),
                           _sectionTitle("Email"),
                           Spacers.sb5(),
@@ -128,14 +139,7 @@ class _FilterSheetState extends State<FilterSheet> {
                           Spacers.sb10(),
                           _sectionTitle("Phone"),
                           Spacers.sb5(),
-                          _input(
-                            phoneCtrl,
-                            "Filter by phone",
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                            keyboardType: TextInputType.phone,
-                          ),
+                          _phoneInput(phoneCtrl, "Filter by phone"),
                           Spacers.sb10(),
                           _sectionTitle("Date Added"),
                           Spacers.sb5(),
@@ -308,6 +312,111 @@ class _FilterSheetState extends State<FilterSheet> {
     );
   }
 
+  Widget _nameInput(
+    TextEditingController ctrl,
+    String hint, {
+    required bool isLastName,
+  }) {
+    final error = isLastName ? lastNameError : firstNameError;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: 45,
+          padding: EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: error != null ? Colors.red : Colors.grey.shade300,
+            ),
+          ),
+          child: TextField(
+            controller: ctrl,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z ]")),
+            ],
+            onChanged: (value) {
+              setState(() {
+                final msg = _hasInvalidNameCharacters(value)
+                    ? "${isLastName ? 'Last' : 'First'} name should contain only alphabetic characters"
+                    : null;
+                if (isLastName) {
+                  lastNameError = msg;
+                } else {
+                  firstNameError = msg;
+                }
+              });
+            },
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              hintText: hint,
+              hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        ),
+        if (error != null) ...[
+          SizedBox(height: 4),
+          TextWidget(
+            text: error,
+            fontSize: 12,
+            color: Colors.red,
+            fontWeight: FontWeight.w400,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _phoneInput(TextEditingController ctrl, String hint) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: 45,
+          padding: EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: phoneError != null ? Colors.red : Colors.grey.shade300,
+            ),
+          ),
+          child: TextField(
+            controller: ctrl,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (value) {
+              setState(() {
+                if (value.isEmpty) {
+                  phoneError = null;
+                } else if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
+                  phoneError = "Phone number should contain only digits";
+                } else {
+                  phoneError = null;
+                }
+              });
+            },
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              hintText: hint,
+              hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        ),
+        if (phoneError != null) ...[
+          SizedBox(height: 4),
+          TextWidget(
+            text: phoneError!,
+            fontSize: 12,
+            color: Colors.red,
+            fontWeight: FontWeight.w400,
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _emailInput(TextEditingController ctrl, String hint) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,6 +471,17 @@ class _FilterSheetState extends State<FilterSheet> {
     return emailRegex.hasMatch(email);
   }
 
+  bool _hasInvalidNameCharacters(String value) {
+    if (value.isEmpty) return false;
+    return !RegExp(r'^[a-zA-Z ]+$').hasMatch(value);
+  }
+
+  String _buildPhoneQueryPattern(String value) {
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return '';
+    return digits.split('').join('%');
+  }
+
   Widget _dateField() {
     final bool hasDate = dateCtrl.text.isNotEmpty;
     return GestureDetector(
@@ -397,11 +517,13 @@ class _FilterSheetState extends State<FilterSheet> {
   }
 
   void _pickDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final date = await showDatePicker(
       context: context,
       firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-      initialDate: DateTime.now(),
+      lastDate: today,
+      initialDate: today,
     );
     if (date != null) {
       setState(() {
@@ -412,13 +534,42 @@ class _FilterSheetState extends State<FilterSheet> {
   }
 
   void _applyFilters() {
+    final email = emailCtrl.text.trim();
+    final fn = firstNameCtrl.text.trim();
+    final ln = lastNameCtrl.text.trim();
+    final phone = _buildPhoneQueryPattern(phoneCtrl.text);
+
+    setState(() {
+      emailError = null;
+      firstNameError = null;
+      lastNameError = null;
+    });
+
+    if (email.isNotEmpty && !_isValidEmail(email)) {
+      setState(() => emailError = "Please enter a valid email address");
+      return;
+    }
+    if (_hasInvalidNameCharacters(fn)) {
+      setState(
+        () => firstNameError =
+            "First name should contain only alphabetic characters",
+      );
+      return;
+    }
+    if (_hasInvalidNameCharacters(ln)) {
+      setState(
+        () => lastNameError =
+            "Last name should contain only alphabetic characters",
+      );
+      return;
+    }
     Navigator.pop(context, {
       "status": status,
       "company_name": cmpnyNameCtrl.text,
-      "first_name": firstNameCtrl.text,
-      "last_name": lastNameCtrl.text,
-      "email": emailCtrl.text,
-      "phone": phoneCtrl.text,
+      "first_name": fn,
+      "last_name": ln,
+      "email": email,
+      "phone": phone,
       "date": dateCtrl.text,
     });
   }

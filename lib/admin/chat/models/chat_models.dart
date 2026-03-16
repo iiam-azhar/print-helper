@@ -1,5 +1,18 @@
 import 'dart:convert';
 
+DateTime parseDateLocal(String? dateString) {
+  if (dateString == null || dateString.isEmpty) return DateTime.now();
+  String dateStr = dateString.toString();
+  if (!dateStr.endsWith('Z') &&
+      !dateStr.contains(RegExp(r'[+-]\d{2}:\d{2}$'))) {
+    if (!dateStr.contains('T')) {
+      dateStr = dateStr.replaceAll(' ', 'T');
+    }
+    dateStr += 'Z';
+  }
+  return DateTime.parse(dateStr).toLocal();
+}
+
 class ChatConversation {
   final int id;
   final String type; // private | group
@@ -48,7 +61,7 @@ class ChatConversation {
           : null,
       image: json['image'] ?? '',
       updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'])
+          ? parseDateLocal(json['updated_at'])
           : DateTime.now(),
       isDefault: json['is_default'] ?? false,
     );
@@ -67,6 +80,9 @@ class ChatParticipant {
   final String? personalPhone;
   final List<String> phoneNumbers;
 
+  /// Participant role inside a group conversation: 'member' | 'observer'
+  final String? role;
+
   ChatParticipant({
     this.id,
     required this.name,
@@ -78,6 +94,7 @@ class ChatParticipant {
     this.phone,
     this.personalPhone,
     required this.phoneNumbers,
+    this.role,
   });
 
   factory ChatParticipant.fromJson(Map<String, dynamic> json) {
@@ -89,13 +106,14 @@ class ChatParticipant {
       image: json['image'],
       isOnline: json['is_online'] ?? false,
       lastSeenAt: json['last_seen_at'] != null
-          ? DateTime.parse(json['last_seen_at'])
+          ? parseDateLocal(json['last_seen_at'])
           : null,
       phone: json['phone'],
       personalPhone: json['personal_phone'],
       phoneNumbers: (json['phone_numbers'] as List? ?? [])
           .map((e) => e.toString())
           .toList(),
+      role: json['role'],
     );
   }
 }
@@ -130,6 +148,8 @@ class ChatLatestMessage {
   final String? userLastName;
 
   // Call-related fields (from attachments)
+  final bool
+  isCallRecording; // true when voice latest message is a call recording
   final String? callOutcome; // 'attended', 'missed', 'no-answer', etc.
   final List<Map<String, dynamic>>? toUsers; // list of {id, name, image}
 
@@ -141,6 +161,7 @@ class ChatLatestMessage {
     this.userId,
     this.userName,
     this.userLastName,
+    this.isCallRecording = false,
     this.callOutcome,
     this.toUsers,
   });
@@ -149,6 +170,7 @@ class ChatLatestMessage {
     final user = json['user'];
 
     // Parse attachments for call data
+    bool isCallRecording = false;
     String? callOutcome;
     List<Map<String, dynamic>>? toUsers;
     final type = json['type'] ?? 'text';
@@ -161,6 +183,7 @@ class ChatLatestMessage {
         attMap = Map<String, dynamic>.from(att);
       }
       if (attMap != null) {
+        isCallRecording = attMap['is_call_recording'] == true;
         callOutcome = attMap['call_outcome']?.toString();
         if (attMap['to_users'] is List) {
           toUsers = (attMap['to_users'] as List)
@@ -174,10 +197,11 @@ class ChatLatestMessage {
       id: json['id'] is int ? json['id'] : int.parse(json['id'].toString()),
       message: json['message'] ?? '',
       type: type,
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: parseDateLocal(json['created_at']),
       userId: user != null && user['id'] != null ? user['id'] as int : null,
       userName: user != null ? user['name'] : null,
       userLastName: user != null ? user['last_name'] : null,
+      isCallRecording: isCallRecording,
       callOutcome: callOutcome,
       toUsers: toUsers,
     );
@@ -378,11 +402,15 @@ class ChatMessage {
     final userId = user != null ? user['id'] : json['user_id'];
 
     return ChatMessage(
-      id: json['id'],
-      conversationId: json['conversation_id'],
-      senderId: userId,
+      id: json['id'] is int
+          ? json['id']
+          : int.tryParse(json['id'].toString()) ?? 0,
+      conversationId: json['conversation_id'] is int
+          ? json['conversation_id']
+          : int.tryParse(json['conversation_id'].toString()) ?? 0,
+      senderId: userId is int ? userId : int.tryParse(userId.toString()),
       message: json['message'] ?? '',
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: parseDateLocal(json['created_at']),
       isMe: userId != null && userId == currentUserId,
       senderName: user != null
           ? "${user['name'] ?? ''} ${user['last_name'] ?? ''}".trim()
@@ -391,9 +419,9 @@ class ChatMessage {
       isRead: json['is_read'],
       isDelivered: json['is_delivered'],
       deliveredAt: json['delivered_at'] != null
-          ? DateTime.parse(json['delivered_at'])
+          ? parseDateLocal(json['delivered_at'])
           : null,
-      readAt: json['read_at'] != null ? DateTime.parse(json['read_at']) : null,
+      readAt: json['read_at'] != null ? parseDateLocal(json['read_at']) : null,
       type: json['type'] ?? 'text',
       audioUrl: _extractVoiceUrl(json),
       audioDuration: json['voice_duration'],

@@ -11,6 +11,7 @@ import '../models/filefolder_models.dart';
 import '../providers/files_pro.dart';
 import '../services/helpers.dart';
 import '../widgets/custom_prompts.dart';
+import '../widgets/loaders.dart';
 import '../widgets/spacers.dart';
 import '../widgets/text_widget.dart';
 import 'components/file_info.dart';
@@ -58,7 +59,7 @@ class _FilesScreenState extends State<FilesScreen> {
             child: Consumer<FilesPro>(
               builder: (context, pro, child) {
                 if (pro.filesLoad) {
-                  return const Center(child: CircularProgressIndicator());
+                  return Center(child: showLoader());
                 }
                 final List<dynamic> combined = [
                   ...pro.folders.map((e) => {"type": "folder", "data": e}),
@@ -68,26 +69,114 @@ class _FilesScreenState extends State<FilesScreen> {
                   padding: EdgeInsets.symmetric(horizontal: 14.w),
                   child: Column(
                     children: [
-                      Spacers.sb15(),
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: NeverScrollableScrollPhysics(),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 0.80,
+                      Container(
+                        width: double.infinity,
+                        margin: EdgeInsets.only(top: 12.h),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12.w,
+                          vertical: 10.h,
                         ),
-                        itemCount: combined.length,
-                        itemBuilder: (context, i) {
-                          final item = combined[i];
-                          if (item["type"] == "folder") {
-                            return _folderTile(item["data"]);
-                          } else {
-                            return _fileTile(item["data"]);
-                          }
-                        },
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: Border.all(color: Colors.black12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextWidget(
+                              text: "Path: ${pro.displayPath}",
+                              fontSize: 12,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            if (pro.storageSummary.isNotEmpty)
+                              TextWidget(
+                                text: pro.storageSummary,
+                                fontSize: 11,
+                                color: Colors.black54,
+                                fontWeight: FontWeight.w500,
+                              ),
+                          ],
+                        ),
                       ),
+                      if (pro.isSelecting)
+                        Padding(
+                          padding: EdgeInsets.only(top: 15.h, bottom: 15.h),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 12.w,
+                              vertical: 10.h,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12.r),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 8,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _actionButton(
+                                  icon: CupertinoIcons.cloud_upload,
+                                  label: "Upload",
+                                  onTap: () {},
+                                ),
+                                _actionButton(
+                                  icon: Icons.share_outlined,
+                                  label: "Share",
+                                  onTap: () {},
+                                ),
+                                _actionButton(
+                                  icon: Icons.drive_file_move_outlined,
+                                  label: "Move",
+                                  onTap: () {},
+                                ),
+                                _actionButton(
+                                  icon: CupertinoIcons.delete,
+                                  label: "Delete",
+                                  onTap: () {},
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (!pro.isSelecting) Spacers.sb15(),
+                      if (combined.isEmpty)
+                        Padding(
+                          padding: EdgeInsets.only(top: 30.h),
+                          child: TextWidget(
+                            text: "No files or folders",
+                            fontSize: 14,
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+                      else
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: NeverScrollableScrollPhysics(),
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 16,
+                            childAspectRatio: 0.80,
+                          ),
+                          itemCount: combined.length,
+                          itemBuilder: (context, i) {
+                            final item = combined[i];
+                            if (item["type"] == "folder") {
+                              return _folderTile(item["data"]);
+                            } else {
+                              return _fileTile(item["data"]);
+                            }
+                          },
+                        ),
                       Spacers.sb20(),
                     ],
                   ),
@@ -107,7 +196,7 @@ class _FilesScreenState extends State<FilesScreen> {
       elevation: 0,
       title: Row(
         children: [
-          Icon(CupertinoIcons.folder, size: 25.sp),
+          ImageWidget(image: Paths.foldr, width: 25.w),
           Spacers.sbw12(),
           TextWidget(text: "Files", fontWeight: FontWeight.bold, fontSize: 20),
         ],
@@ -115,30 +204,16 @@ class _FilesScreenState extends State<FilesScreen> {
       actions: [
         Consumer<FilesPro>(
           builder: (context, pro, _) {
-            return pro.isSelecting
+            return !pro.isSelecting
                 ? Row(
                     children: [
-                      IconButton(
-                        onPressed: () {},
-                        icon: Icon(CupertinoIcons.cloud_upload),
-                      ),
-
-                      IconButton(
-                        onPressed: () {},
-                        icon: Icon(Icons.share_outlined),
-                      ),
-                      IconButton(
-                        onPressed: () {},
-                        icon: Icon(Icons.drive_file_move_outlined),
-                      ),
-                      IconButton(
-                        onPressed: () {},
-                        icon: Icon(CupertinoIcons.delete),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
+                      if (pro.currentPath != pro.homePath)
+                        IconButton(
+                          onPressed: () {
+                            pro.getFiles(ctx: context, path: pro.homePath);
+                          },
+                          icon: Icon(Icons.home_outlined),
+                        ),
                       IconButton(
                         onPressed: () {
                           CustomPrompts.showBottomSheet(
@@ -147,10 +222,11 @@ class _FilesScreenState extends State<FilesScreen> {
                             child: FilterFilesSheet(),
                           );
                         },
-                        icon: Icon(Icons.filter_alt_outlined),
+                        icon: ImageWidget(image: Paths.filter, width: 20),
                       ),
                     ],
-                  );
+                  )
+                : SizedBox.shrink();
           },
         ),
       ],
@@ -184,7 +260,15 @@ class _FilesScreenState extends State<FilesScreen> {
                         CustomPrompts.showBottomSheet(
                           ctx: context,
                           bgColor: AppColors.tr,
-                          child: FileInformationSheet(type: 'folder'),
+                          child: FileInformationSheet(
+                            type: 'folder',
+                            folderName: folder.title,
+                            fileSize: folder.size,
+                            fileLocation: folder.internalPath,
+                            addedDate: folder.createdAt,
+                            addedBy: folder.ownerName,
+                            addedByAvatar: folder.ownerAvatar,
+                          ),
                         );
                       },
                       child: Container(
@@ -204,9 +288,17 @@ class _FilesScreenState extends State<FilesScreen> {
               onTap: () {
                 if (pro.isSelecting) {
                   pro.toggleSelect(folder.id);
+                  return;
+                }
+                if (folder.internalPath.isNotEmpty) {
+                  pro.getFiles(ctx: context, path: folder.internalPath);
                 }
               },
-              child: ImageWidget(image: Paths.folder, height: 140),
+              child: ImageWidget(
+                image: Paths.folder,
+                height: 140,
+                // color: Colors.purple,
+              ),
             ),
             TextWidget(
               text: folder.title,
@@ -223,6 +315,9 @@ class _FilesScreenState extends State<FilesScreen> {
     return Consumer<FilesPro>(
       builder: (context, pro, _) {
         bool selected = pro.selected.contains(file.id);
+        final avatar = file.uploadedBy.isNotEmpty
+            ? file.uploadedBy.first
+            : file.ownerAvatar;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -248,7 +343,7 @@ class _FilesScreenState extends State<FilesScreen> {
                   Positioned(
                     top: 8,
                     left: 8,
-                    child: _avatar(file.uploadedBy.first, 30),
+                    child: _avatar(avatar, 30),
                   ),
                   Positioned(
                     top: 0,
@@ -275,12 +370,11 @@ class _FilesScreenState extends State<FilesScreen> {
                                 child: FileInformationSheet(
                                   file: file.thumbnail,
                                   folderName: file.filename,
-                                  fileSize: "5mb",
-                                  fileLocation:
-                                      "Main/Projects/.../filename.jpg",
-                                  addedDate: "10/10/2025 - 4:56pm",
-                                  addedBy: "Jesus Martinez",
-                                  addedByAvatar: file.uploadedBy.first,
+                                  fileSize: file.size,
+                                  fileLocation: file.internalPath,
+                                  addedDate: file.createdAt,
+                                  addedBy: file.ownerName,
+                                  addedByAvatar: avatar,
                                 ),
                               );
                             },
@@ -323,7 +417,28 @@ class _FilesScreenState extends State<FilesScreen> {
     if (file.type == "psd") {
       return ImageWidget(image: Paths.psd, height: 120);
     }
+    if (!_isImageType(file.type)) {
+      return Icon(
+        Icons.insert_drive_file_rounded,
+        size: 56.sp,
+        color: Colors.grey,
+      );
+    }
     return ImageWidget(image: file.thumbnail, height: 140, fit: BoxFit.cover);
+  }
+
+  bool _isImageType(String type) {
+    const imageTypes = {
+      'image',
+      'jpg',
+      'jpeg',
+      'png',
+      'webp',
+      'gif',
+      'bmp',
+      'svg',
+    };
+    return imageTypes.contains(type.toLowerCase());
   }
 
   Widget _avatar(String img, double size) {
@@ -334,6 +449,29 @@ class _FilesScreenState extends State<FilesScreen> {
         height: size,
         width: size,
         fit: BoxFit.cover,
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 24.sp, color: Colors.black87),
+          Spacers.sb5(),
+          TextWidget(
+            text: label,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: Colors.black87,
+          ),
+        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../admin/adminBottombar/admin_bottombar.dart';
 import '../admin/client/bottombar/client_bottombar.dart';
@@ -17,6 +18,7 @@ import '../widgets/toasts.dart';
 import '../utils/console_util.dart';
 import 'package:print_helper/tablet_view/lib/tab_auth/tab_login_screen.dart';
 import 'package:print_helper/tablet_view/lib/tab_sidePanel/dashboard_wrapper.dart';
+import '../admin/chat/provider/chat_pro.dart';
 
 class AuthPro extends ChangeNotifier {
   Map<String, String> get headers => {'Content-type': 'application/json'};
@@ -90,6 +92,11 @@ class AuthPro extends ChangeNotifier {
         await prefs.setInt("cust_client_id", user.custClientId);
         await CallDeviceService.bootstrap(forceRegister: true);
         notifyListeners();
+
+        // 🔄 CRITICAL: Reset chat provider to disconnect old sockets and clear state
+        final chatPro = Provider.of<ChatPro>(context, listen: false);
+        chatPro.resetForUserSwitch();
+
         _navigateByRole(user.roleName, context);
       } else {
         showToast(message: data["message"] ?? "Switch failed");
@@ -185,10 +192,35 @@ class AuthPro extends ChangeNotifier {
   }
 
   Future<void> logout(dynamic context) async {
+    // 1. Show confirmation dialog
+    final shouldLogout = await _showLogoutConfirmation(context);
+    if (!shouldLogout) {
+      printData(title: "LOGOUT", data: "User cancelled logout");
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final storedToken = prefs.getString("token") ?? "";
     Loaders.show();
     try {
+      // 2. Disconnect chat sockets FIRST to stop receiving messages/calls
+      try {
+        final chatPro = Provider.of<ChatPro>(context, listen: false);
+        chatPro.disconnectConversationSocket();
+        chatPro.disconnectChatListSocket();
+        printData(title: "LOGOUT", data: "Chat sockets disconnected");
+      } catch (e) {
+        printData(
+          title: "LOGOUT",
+          data: "Error disconnecting chat: $e",
+          e: true,
+        );
+      }
+
+      // 3. Unregister from Twilio and backend BEFORE clearing token
+      await CallDeviceService.unregister();
+
+      // 4. Call logout API
       final data = await ApiService().postDataToApi(
         api: ApiRoutes.logout,
         headers: {"Authorization": "Bearer $storedToken"},
@@ -202,6 +234,7 @@ class AuthPro extends ChangeNotifier {
       printData(title: "LOGOUT API ERROR:", data: e, e: true);
     }
     Loaders.hide();
+    // 5. Clear all user data from SharedPreferences
     await prefs.remove("token");
     await prefs.remove("role_name");
     await prefs.remove("user_id");
@@ -209,6 +242,12 @@ class AuthPro extends ChangeNotifier {
     await prefs.remove("email");
     await prefs.remove("customer_id");
     await prefs.remove("cust_client_id");
+    // 6. Clear FCM token to prevent notifications reaching after logout
+    await prefs.remove("fcm_token");
+    // 7. Clear any cached device registration state
+    await prefs.remove("registered_fcm_token");
+    await prefs.remove("registered_user_id");
+    await prefs.remove("registered_device_id");
     user = null;
     token = "";
     notifyListeners();
@@ -218,6 +257,32 @@ class AuthPro extends ChangeNotifier {
       page: isTablet ? const TabLoginScreen() : const LoginScreen(),
       removeUntil: true,
     );
+  }
+
+  /// Shows a confirmation dialog before logout
+  Future<bool> _showLogoutConfirmation(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Text("Confirm Logout"),
+          content: const Text("Are you sure you want to logout?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text("Logout", style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
   }
 
   String forgetMail = "";

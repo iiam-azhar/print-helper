@@ -22,11 +22,13 @@ class ClientScreen extends StatefulWidget {
   final bool isFromAdmin;
   final bool isFromStaff;
   final bool isFromClient;
+  final VoidCallback? onChatTap;
   const ClientScreen({
     super.key,
     required this.isFromAdmin,
     required this.isFromStaff,
     required this.isFromClient,
+    this.onChatTap,
   });
 
   @override
@@ -98,33 +100,34 @@ class _ClientScreenState extends State<ClientScreen> {
                           color: AppColors.grey,
                         ),
                         Spacers.sb20(),
-                        GestureDetector(
-                          onTap: () {
-                            provider.clearClientFilters(context);
-                            provider.getClients(
-                              ctx: context,
-                              page: 1,
-                              loadMore: false,
-                            );
-                            showToast(message: "Filters cleared");
-                          },
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 24.w,
-                              vertical: 10.h,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8.r),
-                              color: AppColors.primary,
-                            ),
-                            child: TextWidget(
-                              text: "Reset Filters",
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                        if (provider.clientFilters.isNotEmpty)
+                          GestureDetector(
+                            onTap: () {
+                              provider.clearClientFilters(context);
+                              provider.getClients(
+                                ctx: context,
+                                page: 1,
+                                loadMore: false,
+                              );
+                              showToast(message: "Filters cleared");
+                            },
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 24.w,
+                                vertical: 10.h,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8.r),
+                                color: AppColors.primary,
+                              ),
+                              child: TextWidget(
+                                text: "Reset Filters",
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                   );
@@ -751,24 +754,12 @@ class _ClientScreenState extends State<ClientScreen> {
                     _imageButton(
                       image: Paths.call,
                       width: 20,
-                      onPressed: () {},
+                      onPressed: () => widget.onChatTap?.call(),
                     ),
                     _imageButton(
                       image: Paths.chat,
                       width: 23,
-                      onPressed: () {
-                        // final authPro = Provider.of<AuthPro>(
-                        //   context,
-                        //   listen: false,
-                        // );
-                        // navTo(
-                        //   context: context,
-                        //   page: ClientChat(
-                        //     clientId: item.id,
-                        //     authToken: authPro.token,
-                        //   ),
-                        // );
-                      },
+                      onPressed: () => widget.onChatTap?.call(),
                     ),
                     widget.isFromAdmin
                         ? _imageButton(

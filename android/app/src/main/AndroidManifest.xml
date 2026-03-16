@@ -48,6 +48,7 @@
         android:label="Print Helper"
         android:name="com.printhelper.print_helper.MyApplication"
         android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
         android:usesCleartextTraffic="true">
         
         <activity

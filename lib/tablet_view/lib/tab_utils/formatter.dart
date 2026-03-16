@@ -164,23 +164,52 @@ class InternationalPhoneFormatter extends TextInputFormatter {
     TextEditingValue newValue,
   ) {
     String text = newValue.text;
+    String digits = text.replaceAll(RegExp(r'\D'), '');
 
-    if (text.startsWith('+')) {
-      String digits = text.substring(1).replaceAll(RegExp(r'\D'), '');
-      if (digits.length > 14) {
-        digits = digits.substring(0, 14);
-      }
-      text = '+$digits';
+    // Limit to 15 digits max
+    if (digits.length > 15) {
+      digits = digits.substring(0, 15);
+    }
+
+    // Format as: +({cc}) ({area}) {exchange}-{line}
+    // For example: +(453) (454) 354-5444
+    if (digits.isEmpty) {
+      return TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    String formatted = '+';
+
+    // Add country code (1-3 digits) in brackets
+    if (digits.length <= 3) {
+      formatted += '(' + digits;
+    } else if (digits.length <= 5) {
+      formatted += '(' + digits.substring(0, 3) + ') (' + digits.substring(3);
+    } else if (digits.length <= 8) {
+      formatted +=
+          '(' +
+          digits.substring(0, 3) +
+          ') (' +
+          digits.substring(3, 5) +
+          ') ' +
+          digits.substring(5);
     } else {
-      text = text.replaceAll(RegExp(r'\D'), '');
-      if (text.length > 15) {
-        text = text.substring(0, 15);
-      }
+      formatted +=
+          '(' +
+          digits.substring(0, 3) +
+          ') (' +
+          digits.substring(3, 5) +
+          ') ' +
+          digits.substring(5, 8) +
+          '-' +
+          digits.substring(8);
     }
 
     return TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

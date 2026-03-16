@@ -412,6 +412,10 @@ class AccountAddContentState extends State<AccountAddContent> {
   }
 
   Widget _phoneFieldSec() {
+    final hasPhoneField = phoneFields.any(
+      (field) => field.type.label == "Phone",
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -420,7 +424,7 @@ class AccountAddContentState extends State<AccountAddContent> {
           child: Padding(
             padding: EdgeInsets.only(left: 18),
             child: TextWidget(
-              text: "Phone(s) with Country Code",
+              text: hasPhoneField ? "Phone(s) with Country Code" : "Phone(s)",
               fontWeight: FontWeight.bold,
               fontSize: 13,
               color: AppColors.black,
@@ -510,19 +514,6 @@ class AccountAddContentState extends State<AccountAddContent> {
                                 inputFormatters: [UsPhoneTextFormatter()],
                               ),
                             ),
-                            if (field.type.label == "Phone")
-                              Padding(
-                                padding: EdgeInsets.only(top: 8, left: 70),
-                                child: SizedBox(
-                                  width: double.infinity,
-                                  child: TextWidget(
-                                    text: "Phone No must include country code",
-                                    fontSize: 11,
-                                    color: Colors.blue.shade600,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                       ),

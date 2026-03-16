@@ -504,13 +504,17 @@ class AddCustomerState extends State<AddCustomer> {
         widget.isFromClient && pro.client?.brandingPrimaryColor != null
         ? hexToColor(pro.client!.brandingPrimaryColor)
         : AppColors.primary;
+    final hasPhoneField = model.phoneFields.any(
+      (field) => field.type.label == "Phone",
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: EdgeInsets.only(left: 15.w),
           child: TextWidget(
-            text: "Phone(s) with Country Code",
+            text: hasPhoneField ? "Phone(s) with Country Code" : "Phone(s)",
             fontWeight: FontWeight.bold,
             fontSize: 13,
             color: AppColors.black,
@@ -595,19 +599,6 @@ class AddCustomerState extends State<AddCustomer> {
                               inputFormatters: [UsPhoneTextFormatter()],
                             ),
                           ),
-                          if (field.type.label == "Phone")
-                            Padding(
-                              padding: EdgeInsets.only(top: 8.h, left: 82.w),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: TextWidget(
-                                  text: "Phone No must include country code",
-                                  fontSize: 11.sp,
-                                  color: Colors.blue.shade600,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                     ),
@@ -1081,6 +1072,8 @@ class AddCustomerState extends State<AddCustomer> {
         ),
         Spacers.sb5(),
         CustomTextField(
+          alphaWithSpaceOnly:
+              regExpCondition.pattern == Regx.nameRegExp.pattern,
           regExpCondition: regExpCondition,
           regErrorText: regErrorText,
           errorText: errorText,

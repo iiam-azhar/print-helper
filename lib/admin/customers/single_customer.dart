@@ -16,6 +16,10 @@ import '../../constants/paths.dart';
 import '../../widgets/loaders.dart';
 import '../../widgets/toasts.dart';
 import '../filter/filter_screen.dart';
+import '../chat/view/chat_list.dart';
+import '../adminBottombar/admin_bottombar.dart';
+import '../staff/bottombar/staff_bottombar.dart';
+import '../client/bottombar/client_bottombar.dart';
 
 class SingleCustomer extends StatefulWidget {
   final bool isFromAdmin;
@@ -579,12 +583,56 @@ class _SingleCustomerState extends State<SingleCustomer> {
                     _imageButton(
                       image: Paths.call,
                       width: 22,
-                      onPressed: () {},
+                      onPressed: () {
+                        if (widget.isFromAdmin) {
+                          navTo(
+                            context: context,
+                            page: AdminBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else if (widget.isFromStaff) {
+                          navTo(
+                            context: context,
+                            page: StaffBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else if (widget.isFromClient) {
+                          navTo(
+                            context: context,
+                            page: ClientBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else {
+                          navTo(context: context, page: ChatList());
+                        }
+                      },
                     ),
                     _imageButton(
                       image: Paths.chat,
                       width: 22,
-                      onPressed: () {},
+                      onPressed: () {
+                        if (widget.isFromAdmin) {
+                          navTo(
+                            context: context,
+                            page: AdminBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else if (widget.isFromStaff) {
+                          navTo(
+                            context: context,
+                            page: StaffBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else if (widget.isFromClient) {
+                          navTo(
+                            context: context,
+                            page: ClientBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else {
+                          navTo(context: context, page: ChatList());
+                        }
+                      },
                     ),
                     widget.isFromAdmin
                         ? _imageButton(

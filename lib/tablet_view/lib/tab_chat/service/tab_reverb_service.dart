@@ -20,6 +20,7 @@ class ReverbSocketService {
   StreamSubscription? _userStatusSub;
   StreamSubscription? _conversationCreatedSub;
   StreamSubscription? _unreadCountUpdatedSub;
+  StreamSubscription? _messageUpdatedSub; // Added for message edits
 
   bool _isConnected = false;
   final String? currentUserId;
@@ -32,6 +33,7 @@ class ReverbSocketService {
 
   // 2. New Event Callbacks
   final void Function(Map<String, dynamic>)? onMessageDeleted;
+  final void Function(Map<String, dynamic>)? onMessageUpdated; // For edits
   final void Function(Map<String, dynamic>)?
   onMessageStatusUpdated; // For Read/Delivered status
   final void Function(Map<String, dynamic>)?
@@ -52,6 +54,7 @@ class ReverbSocketService {
     required this.onTypingReceived,
     required this.onConnected,
     this.onMessageDeleted,
+    this.onMessageUpdated,
     this.onMessageStatusUpdated,
     this.onUserStatusChanged,
     this.onConversationCreated,
@@ -236,6 +239,16 @@ class ReverbSocketService {
           }
         },
       );
+      // X. Message Updated
+      _messageUpdatedSub = _conversationChannel!.bind("message.updated").listen(
+        (event) {
+          final data = _safeJsonDecode(event.data);
+          if (data != null && onMessageUpdated != null) {
+            debugPrint("MESSAGE UPDATED: $data");
+            onMessageUpdated!(data);
+          }
+        },
+      );
       // 3. Message Read Status (Read/Delivered)
       _messageStatusSub = _conversationChannel!.bind("message.status").listen((
         event,
@@ -294,6 +307,7 @@ class ReverbSocketService {
     _messageSub?.cancel();
     _typingSub?.cancel();
     _messageDeletedSub?.cancel();
+    _messageUpdatedSub?.cancel();
     _messageStatusSub?.cancel();
     _userStatusSub?.cancel();
     _conversationCreatedSub?.cancel();

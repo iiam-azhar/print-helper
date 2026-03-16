@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../tab_constants/colors.dart';
 import '../../tab_utils/textstyle_util.dart';
 import '../tab_drawer/tab_drawer.dart';
+import '../../tab_widgets/tab_toasts.dart';
 import 'tab_nav_widgets.dart';
 
 class AdminBottomBar extends StatefulWidget {
@@ -14,13 +15,19 @@ class AdminBottomBar extends StatefulWidget {
 
 class _AdminBottomBarState extends State<AdminBottomBar>
     with WidgetsBindingObserver {
+  DateTime? currentBackPressTime;
+  bool canPopNow = false;
   int pageNum = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
     pageNum = widget.pageNum;
+    _screens = NavWidgets.buildScreens(
+      onChatTap: () => setState(() => pageNum = 2),
+    );
   }
 
   void _onItemTapped(int index) {
@@ -33,31 +40,61 @@ class _AdminBottomBarState extends State<AdminBottomBar>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      drawer: CustomDrawer(),
-      extendBody: true,
-      body: IndexedStack(index: pageNum, children: NavWidgets.screens),
-      bottomNavigationBar: Theme(
-        data: ThemeData(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-        ),
-        child: Container(
-          decoration: NavWidgets.decor(),
-          child: BottomNavigationBar(
-            onTap: _onItemTapped,
-            elevation: 0,
-            currentIndex: pageNum,
-            items: NavWidgets.tabItems,
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: AppColors.black,
-            selectedItemColor: AppColors.white,
-            unselectedItemColor: AppColors.white,
-            showSelectedLabels: false,
-            showUnselectedLabels: false,
-            selectedLabelStyle: TextStyleData.selectedNavLbl,
-            unselectedLabelStyle: TextStyleData.unSelectedNavLbl,
+    return PopScope(
+      canPop: canPopNow,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+
+        if (pageNum != 0) {
+          setState(() => pageNum = 0);
+          return;
+        }
+
+        DateTime now = DateTime.now();
+        if (currentBackPressTime == null ||
+            now.difference(currentBackPressTime!) >
+                const Duration(seconds: 2)) {
+          currentBackPressTime = now;
+          showToast(message: "press again to exit");
+          setState(() {
+            canPopNow = true;
+          });
+
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              setState(() {
+                canPopNow = false;
+              });
+            }
+          });
+        }
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawer: CustomDrawer(),
+        extendBody: true,
+        body: IndexedStack(index: pageNum, children: _screens),
+        bottomNavigationBar: Theme(
+          data: ThemeData(
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+          ),
+          child: Container(
+            decoration: NavWidgets.decor(),
+            child: BottomNavigationBar(
+              onTap: _onItemTapped,
+              elevation: 0,
+              currentIndex: pageNum,
+              items: NavWidgets.tabItems,
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: AppColors.black,
+              selectedItemColor: AppColors.white,
+              unselectedItemColor: AppColors.white,
+              showSelectedLabels: false,
+              showUnselectedLabels: false,
+              selectedLabelStyle: TextStyleData.selectedNavLbl,
+              unselectedLabelStyle: TextStyleData.unSelectedNavLbl,
+            ),
           ),
         ),
       ),

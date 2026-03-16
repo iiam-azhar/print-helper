@@ -958,6 +958,8 @@ class EditClientState extends State<EditClient> {
         Spacers.sb5(),
         CustomTextField(
           autoValidate: formSubmitted,
+          alphaWithSpaceOnly:
+              regExpCondition.pattern == Regx.nameRegExp.pattern,
           regExpCondition: regExpCondition,
           regErrorText: regErrorText,
           errorText: errorText,
@@ -983,56 +985,28 @@ class EditClientState extends State<EditClient> {
     required String hint,
     required bool isVisible,
     required VoidCallback onVisibilityToggle,
+    String? errorText,
+    String? regErrorText,
+    RegExp? regExpCondition,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(left: 15),
-          child: TextWidget(
-            text: label,
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-            color: AppColors.black,
-          ),
+    return CustomTextField(
+      controller: controller,
+      regExpCondition: regExpCondition ?? Regx.passwordRegExp,
+      obscureText: !isVisible,
+      passField: true,
+      errorText: errorText,
+      regErrorText: regErrorText,
+      hintText: hint,
+      labelText: label,
+      outlined: true,
+      suffixIcon: GestureDetector(
+        onTap: onVisibilityToggle,
+        child: Icon(
+          isVisible ? Icons.visibility : Icons.visibility_off,
+          color: Colors.grey.shade600,
+          size: 20,
         ),
-        Spacers.sb5(),
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300),
-            color: Colors.white,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  obscureText: !isVisible,
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    hintText: hint,
-                    hintStyle: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade400,
-                    ),
-                    contentPadding: EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: onVisibilityToggle,
-                child: Icon(
-                  isVisible ? Icons.visibility : Icons.visibility_off,
-                  color: Colors.grey.shade600,
-                  size: 20,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -1385,6 +1359,8 @@ class EditClientState extends State<EditClient> {
                               false);
                     });
                   },
+                  regErrorText: AppStrings.passRegError,
+                  regExpCondition: Regx.optionalPasswordRegExp,
                 ),
                 Spacers.sb8(),
                 _passwordField(
@@ -1403,6 +1379,8 @@ class EditClientState extends State<EditClient> {
                               false);
                     });
                   },
+                  regErrorText: AppStrings.passRegError,
+                  regExpCondition: Regx.optionalPasswordRegExp,
                 ),
                 Spacers.sb8(),
                 _roundedTextField(
@@ -1480,13 +1458,17 @@ class EditClientState extends State<EditClient> {
   }
 
   Widget _contactPhoneSection(ContactFormModel model) {
+    final hasPhoneField = model.phoneFields.any(
+      (field) => field.type.label == "Phone",
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: EdgeInsets.only(left: 15),
           child: TextWidget(
-            text: "Phone(s) with Country Code",
+            text: hasPhoneField ? "Phone(s) with Country Code" : "Phone(s)",
             fontWeight: FontWeight.bold,
             fontSize: 13,
             color: AppColors.black,
@@ -1568,19 +1550,6 @@ class EditClientState extends State<EditClient> {
                               inputFormatters: [InternationalPhoneFormatter()],
                             ),
                           ),
-                          if (field.type.label == "Phone")
-                            Padding(
-                              padding: EdgeInsets.only(top: 8, left: 70),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: TextWidget(
-                                  text: "Phone No must include country code",
-                                  fontSize: 11,
-                                  color: Colors.blue.shade600,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                     ),

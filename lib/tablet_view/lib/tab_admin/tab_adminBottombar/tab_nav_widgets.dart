@@ -3,14 +3,15 @@ import 'package:flutter/cupertino.dart';
 import '../../tab_widgets/tab_image_widget.dart';
 
 import '../../tab_client/tab_clients_list.dart';
+import '../../tab_chat/view/tab_chat_list.dart';
 import '../../tab_constants/colors.dart';
 import '../../tab_constants/paths.dart';
 
 class NavWidgets {
-  static List<Widget> screens = [
-    ClientScreen(isFromAdmin: true),
+  static List<Widget> buildScreens({VoidCallback? onChatTap}) => [
+    ClientScreen(isFromAdmin: true, onChatTap: onChatTap),
     const SizedBox(),
-    const SizedBox(),
+    ChatList(),
     const SizedBox(),
     const SizedBox(),
   ];

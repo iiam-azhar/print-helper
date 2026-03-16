@@ -54,6 +54,7 @@ class ChatPro extends ChangeNotifier {
   int _currentPage = 1;
   bool _isLoadingMore = false;
   bool _hasMore = true;
+  bool _isLoadingConversationList = false;
 
   bool get isLoadingMore => _isLoadingMore;
   bool get hasMore => _hasMore;
@@ -419,6 +420,23 @@ class ChatPro extends ChangeNotifier {
       onMessageReceived: (data) {
         printData(title: "📩 CHAT LIST DATA:", data: data);
         _handleRealtimeChatListMessage(data, userId);
+
+        final activeConversationId = currentActiveConversationId;
+        final dataConversationId = int.tryParse(
+          data['conversation_id']?.toString() ?? '',
+        );
+        final parsedCurrentUserId = int.tryParse(userId);
+
+        if (activeConversationId != null &&
+            dataConversationId != null &&
+            dataConversationId == activeConversationId &&
+            parsedCurrentUserId != null) {
+          _handleRealtimeConversationMessage(
+            data,
+            parsedCurrentUserId,
+            activeConversationId,
+          );
+        }
       },
       onTypingReceived: (isTyping) {
         isOtherUserTyping = isTyping;
@@ -433,6 +451,9 @@ class ChatPro extends ChangeNotifier {
       },
       onConversationCreated: (data) {
         _handleNewConversation(data);
+      },
+      onMessageDeleted: (data) {
+        _handleMessageDeleted(data);
       },
       onGroupMemberAdded: (data) {
         _handleGroupMemberAdded(data);
@@ -487,6 +508,9 @@ class ChatPro extends ChangeNotifier {
       onMessageDeleted: (data) {
         _handleMessageDeleted(data);
       },
+      onMessageUpdated: (data) {
+        _handleRealtimeConversationMessage(data, currentUserId, conversationId);
+      },
       // 4. ✅ NEW: Message Status (Read/Delivered)
       onMessageStatusUpdated: (data) {
         _handleMessageStatusUpdate(data);
@@ -514,6 +538,15 @@ class ChatPro extends ChangeNotifier {
       isOtherUserTyping = false;
       isOtherUserOnline = false;
       currentActiveConversationId = null;
+    }
+  }
+
+  /// Disconnects the global chat list socket (for incoming messages/calls)
+  void disconnectChatListSocket() {
+    if (_chatListSocket != null) {
+      printData(title: "🔌 Disconnecting Chat List Socket...", data: "");
+      _chatListSocket!.disconnect();
+      _chatListSocket = null;
     }
   }
 
@@ -550,82 +583,238 @@ class ChatPro extends ChangeNotifier {
     int currentUserId,
     int conversationId,
   ) {
-    final payload = data.containsKey('message') && data['message'] is Map
-        ? data['message']
-        : data;
-    if (payload['conversation_id'].toString() != conversationId.toString()) {
-      return;
-    }
-    final msg = ChatMessage.fromJson(payload, currentUserId);
+    try {
+      final payload = data.containsKey('message') && data['message'] is Map
+          ? Map<String, dynamic>.from(data['message'])
+          : Map<String, dynamic>.from(data);
 
-    /// Prevent duplicate self-message (but allow backend-generated call messages)
-    final isCallMessage = msg.type == 'call' || msg.isCallRecording;
-    if (msg.senderId == currentUserId && !isCallMessage) return;
-
-    /// Check if message already exists
-    final existingIndex = messages.indexWhere((m) => m.id == msg.id);
-
-    /// If exists → update message
-    if (existingIndex != -1) {
-      messages[existingIndex] = msg;
-    }
-    /// If new → insert at top
-    else {
-      messages.insert(0, msg);
-
-      /// Show notification only for new messages & when chat is closed
-      if (!isChatScreenOpen) {
-        NotificationService.instance.showChatNotification(
-          title: "New message",
-          body: msg.message,
-          id: msg.id,
-        );
+      final eventConversationId = int.tryParse(
+        payload['conversation_id']?.toString() ?? '',
+      );
+      final activeConversationId =
+          currentActiveConversationId ?? conversationId;
+      if (eventConversationId == null ||
+          eventConversationId != activeConversationId) {
+        return;
       }
-    }
-    printData(
-      title: "📩 Message received. ChatScreenOpen:",
-      data: isChatScreenOpen,
-    );
-    printData(title: "📩 Message received Payload:", data: payload);
 
-    /// If chat screen is open, mark as read
-    if (isChatScreenOpen) {
-      markConversAsRead(conversationId);
-    }
+      final msg = ChatMessage.fromJson(payload, currentUserId);
+      final isCallMessage = msg.type == 'call' || msg.isCallRecording;
 
-    notifyListeners();
+      final existingIndex = messages.indexWhere((m) => m.id == msg.id);
+      if (existingIndex != -1) {
+        messages[existingIndex] = msg;
+      } else {
+        if (msg.senderId == currentUserId && !isCallMessage) {
+          final optimisticIndex = messages.indexWhere(
+            (m) =>
+                m.isMe &&
+                m.conversationId == eventConversationId &&
+                m.type == msg.type &&
+                m.message == msg.message,
+          );
+
+          if (optimisticIndex != -1) {
+            messages[optimisticIndex] = msg;
+          } else {
+            messages.insert(0, msg);
+          }
+        } else {
+          messages.insert(0, msg);
+
+          if (!isChatScreenOpen) {
+            NotificationService.instance.showChatNotification(
+              title: "New message",
+              body: msg.message,
+              id: msg.id,
+            );
+          }
+        }
+      }
+
+      printData(
+        title: "📩 Message received. ChatScreenOpen:",
+        data: isChatScreenOpen,
+      );
+      printData(title: "📩 Message received Payload:", data: payload);
+
+      if (isChatScreenOpen) {
+        markConversAsRead(activeConversationId);
+      }
+
+      notifyListeners();
+    } catch (e) {
+      printData(
+        title: "_handleRealtimeConversationMessage error",
+        data: e,
+        e: true,
+      );
+    }
   }
 
   // 2. ✅ Handle Message Deletion
   void _handleMessageDeleted(Map<String, dynamic> data) {
-    // Expected data: { "id": 123, "conversation_id": 456 }
-    final messageId = data['id'];
-    if (messageId == null) return;
-    messages.removeWhere((m) => m.id.toString() == messageId.toString());
-    notifyListeners();
+    try {
+      final payload = data['message'] is Map
+          ? Map<String, dynamic>.from(data['message'])
+          : Map<String, dynamic>.from(data);
+
+      final dynamic rawMessageId =
+          payload['id'] ?? payload['message_id'] ?? payload['messageId'];
+      final dynamic rawConversationId =
+          payload['conversation_id'] ?? payload['conversationId'];
+
+      final messageId = int.tryParse(rawMessageId?.toString() ?? '');
+      final conversationId = int.tryParse(rawConversationId?.toString() ?? '');
+
+      if (messageId == null) {
+        printData(
+          title: "_handleMessageDeleted missing message id",
+          data: data,
+        );
+        return;
+      }
+
+      final before = messages.length;
+      messages.removeWhere((m) => m.id == messageId);
+      final removed = before != messages.length;
+
+      if (conversationId != null) {
+        _syncConversationAfterMessageDeletion(
+          conversationId: conversationId,
+          deletedMessageId: messageId,
+        );
+      }
+
+      if (removed) {
+        notifyListeners();
+      }
+    } catch (e) {
+      printData(title: "_handleMessageDeleted error", data: e, e: true);
+    }
+  }
+
+  void _syncConversationAfterMessageDeletion({
+    required int conversationId,
+    required int deletedMessageId,
+  }) {
+    final convoIndex = conversations.indexWhere((c) => c.id == conversationId);
+    if (convoIndex == -1) return;
+
+    final convo = conversations[convoIndex];
+    if (convo.latestMessage?.id != deletedMessageId) return;
+
+    if (currentActiveConversationId == conversationId) {
+      final replacement = messages.isNotEmpty ? messages.first : null;
+      final updatedConversation = ChatConversation(
+        id: convo.id,
+        type: convo.type,
+        title: convo.title,
+        participants: convo.participants,
+        latestMessage: replacement == null
+            ? null
+            : ChatLatestMessage(
+                id: replacement.id,
+                message: replacement.message,
+                type: replacement.type,
+                createdAt: replacement.createdAt,
+                userId: replacement.senderId,
+                userName: replacement.senderName,
+              ),
+        unreadCount: convo.unreadCount,
+        updatedAt: DateTime.now(),
+        isDefault: convo.isDefault,
+        image: convo.image,
+      );
+      conversations[convoIndex] = updatedConversation;
+      notifyListeners();
+      return;
+    }
+
+    unawaited(_refreshConversationLatestMessage(conversationId));
+  }
+
+  Future<void> _refreshConversationLatestMessage(int conversationId) async {
+    try {
+      final res = await http.get(
+        Uri.parse(
+          "${ApiRoutes.baseUrl}chat/conversations/$conversationId/messages?page=1",
+        ),
+        headers: await apiHeaders(),
+      );
+
+      if (res.statusCode != 200) {
+        await _updateSingleConversation(conversationId);
+        return;
+      }
+
+      final decoded = jsonDecode(res.body);
+      final List data = decoded['data'] ?? [];
+      final convoIndex = conversations.indexWhere(
+        (c) => c.id == conversationId,
+      );
+      if (convoIndex == -1) return;
+
+      final convo = conversations[convoIndex];
+      final ChatLatestMessage? latestMessage = data.isEmpty
+          ? null
+          : ChatLatestMessage.fromJson(
+              Map<String, dynamic>.from(data.first as Map),
+            );
+
+      conversations[convoIndex] = ChatConversation(
+        id: convo.id,
+        type: convo.type,
+        title: convo.title,
+        participants: convo.participants,
+        latestMessage: latestMessage,
+        unreadCount: convo.unreadCount,
+        updatedAt: DateTime.now(),
+        isDefault: convo.isDefault,
+        image: convo.image,
+      );
+      notifyListeners();
+    } catch (e) {
+      printData(
+        title: "_refreshConversationLatestMessage error",
+        data: e,
+        e: true,
+      );
+      await _updateSingleConversation(conversationId);
+    }
   }
 
   void _handleMessageStatusUpdate(Map<String, dynamic> data) {
     final status = data['status']; // "read" | "delivered"
-    final messageId = data['id'];
-    if (messageId == null) return;
-    final index = messages.indexWhere(
-      (m) => m.id.toString() == messageId.toString(),
-    );
-    if (index == -1) return;
-    if (status == 'read') {
-      messages[index] = messages[index].copyWith(
-        isRead: true,
-        readAt: DateTime.now(),
-      );
+    final rawMessageId = data['id'];
+    if (rawMessageId == null) return;
+
+    final targetMessageId = int.tryParse(rawMessageId.toString());
+    if (targetMessageId == null) return;
+
+    bool updated = false;
+    for (int i = 0; i < messages.length; i++) {
+      // Mark this message and any older messages as read/delivered
+      if (messages[i].id <= targetMessageId) {
+        if (status == 'read' && messages[i].isRead != true) {
+          messages[i] = messages[i].copyWith(
+            isRead: true,
+            readAt: DateTime.now(),
+          );
+          updated = true;
+        } else if (status == 'delivered' && messages[i].isDelivered != true) {
+          messages[i] = messages[i].copyWith(
+            isDelivered: true,
+            deliveredAt: DateTime.now(),
+          );
+          updated = true;
+        }
+      }
     }
-    if (status == 'delivered') {
-      messages[index] = messages[index].copyWith(
-        isDelivered: true,
-        deliveredAt: DateTime.now(),
-      );
+
+    if (updated) {
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   // 4. ✅ Handle User Online Status
@@ -686,6 +875,7 @@ class ChatPro extends ChangeNotifier {
           } else {
             conversations.insert(0, newConvo);
           }
+          _recomputeTotalUnreadFromList();
           notifyListeners();
           return;
         } catch (e) {
@@ -701,6 +891,7 @@ class ChatPro extends ChangeNotifier {
       // Add a short delay so that message.sent can process first
       await Future.delayed(const Duration(milliseconds: 500));
       await _updateSingleConversation(conversationId);
+      _recomputeTotalUnreadFromList();
       notifyListeners();
     } catch (e) {
       printData(title: "Error handling group member added:", data: e, e: true);
@@ -748,6 +939,7 @@ class ChatPro extends ChangeNotifier {
             title: "🗑️ Removed conversation (current user removed)",
             data: conversationId,
           );
+          _recomputeTotalUnreadFromList();
         }
         notifyListeners();
         _groupRemovalInProgress.remove(conversationId);
@@ -756,6 +948,7 @@ class ChatPro extends ChangeNotifier {
 
       // Fallback: let the API tell us (403 = removed, 200 = just update metadata)
       await _updateSingleConversation(conversationId);
+      _recomputeTotalUnreadFromList();
       notifyListeners();
     } catch (e) {
       printData(
@@ -803,6 +996,7 @@ class ChatPro extends ChangeNotifier {
               isDefault: updatedConvo.isDefault,
               image: updatedConvo.image,
             );
+            _recomputeTotalUnreadFromList();
           }
           notifyListeners();
           return;
@@ -817,6 +1011,7 @@ class ChatPro extends ChangeNotifier {
 
       // Fallback: fetch from API
       await _updateSingleConversation(conversationId);
+      _recomputeTotalUnreadFromList();
       notifyListeners();
     } catch (e) {
       printData(
@@ -829,6 +1024,7 @@ class ChatPro extends ChangeNotifier {
 
   /// ---------------- UPDATE SINGLE CONVERSATION ----------------
   Future<void> _updateSingleConversation(int conversationId) async {
+    bool didMutate = false;
     try {
       final res = await http.get(
         Uri.parse("${ApiRoutes.baseUrl}chat/conversations/$conversationId"),
@@ -862,6 +1058,7 @@ class ChatPro extends ChangeNotifier {
                     image: updatedConvo.image,
                   );
             conversations[index] = merged;
+            didMutate = true;
             printData(
               title: "Updated conversation in list",
               data: conversationId,
@@ -869,6 +1066,7 @@ class ChatPro extends ChangeNotifier {
           } else {
             // If not found, add to top (new conversation)
             conversations.insert(0, updatedConvo);
+            didMutate = true;
             printData(
               title: "Added new conversation to list",
               data: conversationId,
@@ -884,6 +1082,7 @@ class ChatPro extends ChangeNotifier {
           final index = conversations.indexWhere((c) => c.id == conversationId);
           if (index != -1) {
             conversations.removeAt(index);
+            didMutate = true;
             printData(
               title: "Removed conversation from list (no access)",
               data: conversationId,
@@ -899,6 +1098,7 @@ class ChatPro extends ChangeNotifier {
         final index = conversations.indexWhere((c) => c.id == conversationId);
         if (index != -1) {
           conversations.removeAt(index);
+          didMutate = true;
           printData(
             title: "Removed conversation from list",
             data: conversationId,
@@ -907,6 +1107,11 @@ class ChatPro extends ChangeNotifier {
       }
     } catch (e) {
       printData(title: "_updateSingleConversation error:", data: e, e: true);
+    } finally {
+      if (didMutate) {
+        _recomputeTotalUnreadFromList();
+        notifyListeners();
+      }
     }
   }
 
@@ -1002,7 +1207,6 @@ class ChatPro extends ChangeNotifier {
           conversations.insert(0, updatedNewChat);
 
           if (senderId.toString() != currentUserId) {
-            totalUnreadCount = totalUnreadCount + 1;
             NotificationService.instance.showChatNotification(
               title: "New message from ${latestMessage.userName ?? 'User'}",
               body: latestMessage.message,
@@ -1061,11 +1265,6 @@ class ChatPro extends ChangeNotifier {
 
     conversations.insert(insertIndex, updatedConversation);
 
-    // Keep aggregated unread badge in sync for nav
-    if (senderId.toString() != currentUserId && existingIndex == -1) {
-      totalUnreadCount = totalUnreadCount + 1;
-    }
-
     _recomputeTotalUnreadFromList();
 
     /// Show notification only for new incoming messages
@@ -1081,9 +1280,13 @@ class ChatPro extends ChangeNotifier {
   }
 
   /// ---------------- LOAD CONVERSATIONS ----------------
-  Future<void> loadConversations() async {
-    Loaders.show();
-    notifyListeners();
+  Future<void> loadConversations({bool showLoading = true}) async {
+    if (_isLoadingConversationList) return;
+    _isLoadingConversationList = true;
+    if (showLoading) {
+      Loaders.show();
+      notifyListeners();
+    }
     try {
       final res = await http.get(
         Uri.parse("${ApiRoutes.baseUrl}chat/conversations"),
@@ -1112,7 +1315,10 @@ class ChatPro extends ChangeNotifier {
     } catch (e) {
       printData(title: "loadConversations error:", data: e, e: true);
     } finally {
-      Loaders.hide();
+      _isLoadingConversationList = false;
+      if (showLoading) {
+        Loaders.hide();
+      }
       notifyListeners();
     }
   }
@@ -1190,6 +1396,59 @@ class ChatPro extends ChangeNotifier {
     _currentPage = 1;
     _hasMore = true;
     _isLoadingMore = false;
+    notifyListeners();
+  }
+
+  /// Complete reset when user is switched (admin direct login)
+  /// Disconnects sockets and clears all chat state
+  void resetForUserSwitch() {
+    printData(title: "🔄RESET FOR USER SWITCH - Starting", data: "");
+
+    // 1. Disconnect all sockets with new token
+    disconnectChatListSocket();
+    disconnectConversationSocket();
+
+    // 2. Clear all chat messages and conversations
+    messages.clear();
+    conversations.clear();
+    messageSearchResults.clear();
+
+    // 3. Reset UI state
+    isChatScreenOpen = false;
+    isOtherUserOnline = false;
+    isOtherUserTyping = false;
+    currentActiveConversationId = null;
+    totalUnreadCount = 0;
+    _currentUserId = null;
+
+    // 4. Clear search state
+    searchResults.clear();
+    selectedUserIdss.clear();
+    selectedUsers.clear();
+    isLoading = false;
+    searchQuery = "";
+    messageSearchResults.clear();
+    isSearching = false;
+
+    // 5. Clear pagination state
+    _currentPage = 1;
+    _isLoadingMore = false;
+    _hasMore = true;
+    searchTotalResults = 0;
+    searchCurrentPage = 1;
+    searchLastPage = 1;
+
+    // 6. Cancel any pending timers
+    _typingThrottle?.cancel();
+    _typingAutoClear?.cancel();
+    _debounce?.cancel();
+
+    // 7. Clear group state
+    currentGroup = null;
+    isGroupLoading = false;
+    _groupRemovalInProgress.clear();
+
+    printData(title: "✅ RESET FOR USER SWITCH - Complete", data: "");
     notifyListeners();
   }
 
@@ -1431,9 +1690,6 @@ class ChatPro extends ChangeNotifier {
       if (res.statusCode == 200) {
         final index = conversations.indexWhere((c) => c.id == conversationId);
         if (index != -1) {
-          final int unreadBefore = conversations[index].unreadCount;
-          totalUnreadCount = totalUnreadCount - unreadBefore;
-          if (totalUnreadCount < 0) totalUnreadCount = 0;
           conversations[index].unreadCount = 0;
           _recomputeTotalUnreadFromList();
           notifyListeners();
@@ -2227,6 +2483,11 @@ class ChatPro extends ChangeNotifier {
       final res = await http.delete(url, headers: await apiHeaders());
       printData(title: "Delete response", data: res.statusCode);
       if (res.statusCode == 200 || res.statusCode == 204) {
+        _syncConversationAfterMessageDeletion(
+          conversationId: conversationId,
+          deletedMessageId: messageId,
+        );
+        notifyListeners();
         showToast(message: "Message deleted successfully");
       } else {
         if (deletedMessage != null && index != -1) {

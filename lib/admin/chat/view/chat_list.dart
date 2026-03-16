@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 import 'package:print_helper/admin/chat/view/chat_window.dart';
 import 'package:print_helper/admin/chat/view/groupchat/create_group.dart';
 import 'package:print_helper/constants/colors.dart';
@@ -26,6 +27,7 @@ class ChatList extends StatefulWidget {
 class _ChatListState extends State<ChatList> {
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
+  Timer? _listRefreshTimer;
 
   @override
   void initState() {
@@ -39,11 +41,23 @@ class _ChatListState extends State<ChatList> {
         userId: authpro.user!.id.toString(),
         context: context,
       );
+      _startListRefreshTimer();
+    });
+  }
+
+  void _startListRefreshTimer() {
+    _listRefreshTimer?.cancel();
+    _listRefreshTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (!mounted) return;
+      final pro = getChatPro(context);
+      if (_searchController.text.trim().isNotEmpty) return;
+      await pro.loadConversations(showLoading: false);
     });
   }
 
   @override
   void dispose() {
+    _listRefreshTimer?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
@@ -479,7 +493,8 @@ class _ChatListState extends State<ChatList> {
       );
     }
 
-    final isCallMsg = msg.type == 'voice' || msg.type == 'call';
+    final isCallMsg =
+        msg.type == 'call' || (msg.type == 'voice' && msg.isCallRecording);
 
     if (isCallMsg) {
       final isMissed =
@@ -549,6 +564,27 @@ class _ChatListState extends State<ChatList> {
             ],
           ),
         ),
+      );
+    }
+
+    // Handle non-call voice messages
+    if (msg.type == 'voice') {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.mic, size: 14.sp, color: Colors.black54),
+          SizedBox(width: 4.w),
+          Flexible(
+            child: TextWidget(
+              text: 'Voice message',
+              color: Colors.black54,
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       );
     }
 

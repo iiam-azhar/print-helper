@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.printhelper.app"
+    namespace = "com.printhelper.print_helper"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "28.2.13676358"
 

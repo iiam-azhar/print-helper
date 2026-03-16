@@ -264,6 +264,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18.r),
         color: Colors.white,
+        border: item.roleName.toUpperCase() == 'ADMIN'
+            ? Border.all(color: Colors.black, width: 1.5.w)
+            : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: .08),

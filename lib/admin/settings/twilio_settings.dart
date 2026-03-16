@@ -31,15 +31,31 @@ class _TwilioCredentialsState extends State<TwilioCredentials>
   String? _lastSyncKey;
   final Map<int, List<AssignedAccount>> _staffByClientCache = {};
 
-  Future<void> _ensureStaffForClient(int? clientId) async {
+  Future<void> _ensureStaffForClient(
+    int? clientId, {
+    TwilioCredential? credential,
+  }) async {
     if (clientId == null) return;
-    if (_staffByClientCache.containsKey(clientId)) return;
 
-    final chatPro = Provider.of<ChatPro>(context, listen: false);
-    final staff = await chatPro.fetchStaffByClient(clientId: clientId);
-    if (mounted) {
+    List<AssignedAccount> staffList = [];
+    if (_staffByClientCache.containsKey(clientId)) {
+      staffList = _staffByClientCache[clientId]!;
+    } else {
+      final chatPro = Provider.of<ChatPro>(context, listen: false);
+      staffList = await chatPro.fetchStaffByClient(clientId: clientId);
+      if (mounted) {
+        setState(() {
+          _staffByClientCache[clientId] = staffList;
+        });
+      }
+    }
+
+    if (credential != null && mounted) {
       setState(() {
-        _staffByClientCache[clientId] = staff;
+        final validIds = staffList.map((s) => s.id).toSet();
+        credential.assignedAccounts.removeWhere(
+          (acc) => !validIds.contains(acc.id),
+        );
       });
     }
   }
@@ -569,7 +585,6 @@ class _TwilioCredentialsState extends State<TwilioCredentials>
                                 setState(() {
                                   credential.selectedClientId = null;
                                   credential.selectedContactIds = [];
-                                  credential.assignedAccounts = [];
                                 });
                                 _saveTwilioAssignments(credential);
                               },
@@ -630,7 +645,6 @@ class _TwilioCredentialsState extends State<TwilioCredentials>
                                         setState(() {
                                           credential.selectedClientId = null;
                                           credential.selectedContactIds = [];
-                                          credential.assignedAccounts = [];
                                         });
                                         _saveTwilioAssignments(credential);
                                       },
@@ -1163,7 +1177,7 @@ class _TwilioCredentialsState extends State<TwilioCredentials>
                           vertical: 4.h,
                         ),
                         child: GestureDetector(
-                          onTap: () {
+                          onTap: () async {
                             setState(() {
                               if (isClientSelected) {
                                 credential.selectedClientId = null;
@@ -1171,16 +1185,16 @@ class _TwilioCredentialsState extends State<TwilioCredentials>
                               } else {
                                 credential.selectedClientId = client.id;
                                 credential.selectedContactIds = <int>[];
-                                credential.assignedAccounts = [];
                               }
                             });
                             setMenuState(() {});
-                            _saveTwilioAssignments(credential);
                             if (credential.selectedClientId != null) {
-                              _ensureStaffForClient(
+                              await _ensureStaffForClient(
                                 credential.selectedClientId,
+                                credential: credential,
                               );
                             }
+                            _saveTwilioAssignments(credential);
                           },
                           child: _buildClientListItem(client, credential),
                         ),

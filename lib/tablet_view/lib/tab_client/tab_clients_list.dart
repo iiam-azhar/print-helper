@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:print_helper/providers/auth_pro.dart';
 import 'package:print_helper/providers/client_pro.dart';
 import 'tab_add_client.dart';
@@ -18,14 +19,22 @@ import 'tab_edit_client.dart';
 class ClientScreen extends StatefulWidget {
   final bool isFromAdmin;
   final Function(String page, int id)? onMenuTap;
+  final VoidCallback? onChatTap;
 
-  const ClientScreen({super.key, required this.isFromAdmin, this.onMenuTap});
+  const ClientScreen({
+    super.key,
+    required this.isFromAdmin,
+    this.onMenuTap,
+    this.onChatTap,
+  });
 
   @override
   State<ClientScreen> createState() => _ClientScreenState();
 }
 
 class _ClientScreenState extends State<ClientScreen> {
+  DateTime? currentBackPressTime;
+  bool canPopNow = false;
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -58,7 +67,6 @@ class _ClientScreenState extends State<ClientScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // final pro = Provider.of<ClientPro>(context, listen: false);
     return Scaffold(
       backgroundColor: const Color(0xFFF6F6F7),
       body: SafeArea(
@@ -658,8 +666,14 @@ class _ClientScreenState extends State<ClientScreen> {
                               }
                             },
                           ),
-                          _iconButton(icon: Paths.call, onTap: () {}),
-                          _iconButton(icon: Paths.chat, onTap: () {}),
+                          _iconButton(
+                            icon: Paths.call,
+                            onTap: () => widget.onChatTap?.call(),
+                          ),
+                          _iconButton(
+                            icon: Paths.chat,
+                            onTap: () => widget.onChatTap?.call(),
+                          ),
                         ],
                       ),
                     ),

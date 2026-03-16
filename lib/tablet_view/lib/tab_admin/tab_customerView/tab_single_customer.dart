@@ -13,6 +13,8 @@ import '../../tab_constants/paths.dart';
 import '../../tab_widgets/loaders.dart';
 import '../tab_filter/tab_filter_screen.dart';
 import 'tab_edit_customer.dart';
+import '../../tab_services/helpers.dart';
+import '../tab_adminBottombar/tab_admin_bottombar.dart';
 
 class SingleCustomer extends StatefulWidget {
   final bool isFromAdmin;
@@ -562,8 +564,24 @@ class _SingleCustomerState extends State<SingleCustomer> {
                 ),
                 SizedBox(width: 56),
                 _imageButton(image: Paths.email, width: 20, onPressed: () {}),
-                _imageButton(image: Paths.call, width: 20, onPressed: () {}),
-                _imageButton(image: Paths.chat, width: 20, onPressed: () {}),
+                _imageButton(
+                  image: Paths.call,
+                  width: 20,
+                  onPressed: () => navTo(
+                    context: context,
+                    page: AdminBottomBar(pageNum: 2),
+                    removeUntil: true,
+                  ),
+                ),
+                _imageButton(
+                  image: Paths.chat,
+                  width: 20,
+                  onPressed: () => navTo(
+                    context: context,
+                    page: AdminBottomBar(pageNum: 2),
+                    removeUntil: true,
+                  ),
+                ),
               ],
             ),
           ),

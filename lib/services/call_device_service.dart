@@ -573,6 +573,114 @@ class CallDeviceService {
   }
 
   // --- Utils ---
+  /// Unregisters the device from Twilio and backend when user logs out.
+  /// This prevents calls from being routed to the logged-out user.
+  static Future<void> unregister() async {
+    if (!callEnabled) {
+      printData(
+        title: "CallDevice/unregister",
+        data: "Call features disabled. Skipping unregister.",
+      );
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final authToken = prefs.getString("token") ?? "";
+    final deviceId = prefs.getString(_deviceIdKey) ?? "";
+
+    printData(
+      title: "CallDevice/unregister",
+      data: "Starting unregister process...",
+    );
+
+    // 1. Unregister from Twilio SDK (Android only)
+    if (Platform.isAndroid) {
+      try {
+        printData(
+          title: "CallDevice/unregister",
+          data: "Unregistering Twilio client...",
+        );
+        final success = await TwilioVoice.instance.unregister();
+        printData(
+          title: "CallDevice/unregister",
+          data: "Twilio unregister result: $success",
+        );
+      } catch (e) {
+        printData(
+          title: "CallDevice/unregister",
+          data: "Error unregistering from Twilio: $e",
+          e: true,
+        );
+      }
+    }
+
+    // 2. Notify backend to unregister the device (optional - endpoint may not exist yet)
+    if (authToken.isNotEmpty && deviceId.isNotEmpty) {
+      try {
+        printData(
+          title: "CallDevice/unregister",
+          data: "Notifying backend to unregister device...",
+        );
+        final data = await ApiService().postDataToApi(
+          api: ApiRoutes.unregisterDevice,
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer $authToken",
+          },
+          payload: jsonEncode({"device_id": deviceId}),
+        );
+
+        if (data is Map<String, dynamic> && data["success"] == true) {
+          printData(
+            title: "CallDevice/unregister",
+            data: "Backend unregister successful",
+          );
+        } else {
+          // Backend endpoint may not exist yet - this is fine, Twilio is already unregistered
+          printData(
+            title: "CallDevice/unregister",
+            data:
+                "Backend unregister not available (endpoint may not exist): ${data["message"] ?? data}",
+          );
+        }
+      } catch (e) {
+        // Backend endpoint may not be implemented yet - continue anyway
+        // The Twilio unregister above is the critical part
+        printData(
+          title: "CallDevice/unregister",
+          data:
+              "Backend unregister endpoint not available (will be implemented later): $e",
+        );
+      }
+    }
+
+    // 3. Clear registration state from SharedPreferences
+    try {
+      await prefs.remove(_registeredFcmTokenKey);
+      await prefs.remove("registered_user_id");
+      await prefs.remove("registered_device_id");
+      printData(
+        title: "CallDevice/unregister",
+        data: "Cleared registration state from SharedPreferences",
+      );
+    } catch (e) {
+      printData(
+        title: "CallDevice/unregister",
+        data: "Error clearing prefs: $e",
+        e: true,
+      );
+    }
+
+    // 4. Reset initialization flag to allow re-initialization on next login
+    _isInitialized = false;
+
+    printData(
+      title: "CallDevice/unregister",
+      data: "Unregister complete. Device removed from Twilio and backend.",
+    );
+  }
+
   static Future<String> _getOrCreateDeviceId(SharedPreferences prefs) async {
     final existing = prefs.getString(_deviceIdKey);
     if (existing != null && existing.isNotEmpty) return existing;

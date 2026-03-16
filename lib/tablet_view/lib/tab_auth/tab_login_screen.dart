@@ -287,7 +287,10 @@ class _TabLoginScreenState extends State<TabLoginScreen> {
                                 ),
                                 GestureDetector(
                                   onTap: () {
-                                    navTo(context: context, page: TabForgotPass());
+                                    navTo(
+                                      context: context,
+                                      page: TabForgotPass(),
+                                    );
                                   },
                                   child: Text(
                                     "Forgot password?",

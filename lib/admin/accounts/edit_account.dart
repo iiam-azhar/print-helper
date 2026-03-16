@@ -555,19 +555,7 @@ class _EditAccountState extends State<EditAccount> {
                   ],
                 ),
                 if (openPhoneDropdownIndex == index) _phoneDropdown(field),
-                if (field.type.label == "Phone")
-                  Padding(
-                    padding: EdgeInsets.only(top: 8.h, left: 80.w),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: TextWidget(
-                        text: "Phone No must include country code",
-                        fontSize: 11.sp,
-                        color: Colors.blue.shade600,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ),
+
                 Spacers.sb10(),
               ],
             );
@@ -628,6 +616,10 @@ class _EditAccountState extends State<EditAccount> {
   }
 
   Widget _emailSection() {
+    final hasPhoneField = phoneFields.any(
+      (field) => field.type.label == "Phone",
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -636,7 +628,7 @@ class _EditAccountState extends State<EditAccount> {
           child: Padding(
             padding: EdgeInsets.only(left: 18.w),
             child: TextWidget(
-              text: "Phone(s) with Country Code",
+              text: hasPhoneField ? "Phone(s) with Country Code" : "Phone(s)",
               fontWeight: FontWeight.bold,
               fontSize: 13,
               color: AppColors.black,

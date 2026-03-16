@@ -1,3 +1,16 @@
+DateTime parseDateLocal(String? dateString) {
+  if (dateString == null || dateString.isEmpty) return DateTime.now();
+  String dateStr = dateString.toString();
+  if (!dateStr.endsWith('Z') &&
+      !dateStr.contains(RegExp(r'[+-]\d{2}:\d{2}$'))) {
+    if (!dateStr.contains('T')) {
+      dateStr = dateStr.replaceAll(' ', 'T');
+    }
+    dateStr += 'Z';
+  }
+  return DateTime.parse(dateStr).toLocal();
+}
+
 class ChatConversation {
   final int id;
   final String type; // private | group
@@ -46,7 +59,7 @@ class ChatConversation {
           : null,
       image: json['image'] ?? '',
       updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'])
+          ? parseDateLocal(json['updated_at'])
           : DateTime.now(),
       isDefault: json['is_default'] ?? false,
     );
@@ -87,7 +100,7 @@ class ChatParticipant {
       image: json['image'],
       isOnline: json['is_online'] ?? false,
       lastSeenAt: json['last_seen_at'] != null
-          ? DateTime.parse(json['last_seen_at'])
+          ? parseDateLocal(json['last_seen_at'])
           : null,
       phone: json['phone'],
       personalPhone: json['personal_phone'],
@@ -144,7 +157,7 @@ class ChatLatestMessage {
       id: json['id'] is int ? json['id'] : int.parse(json['id'].toString()),
       message: json['message'] ?? '',
       type: json['type'] ?? 'text',
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: parseDateLocal(json['created_at']),
       userId: user != null && user['id'] != null ? user['id'] as int : null,
       userName: user != null ? user['name'] : null,
       userLastName: user != null ? user['last_name'] : null,
@@ -209,11 +222,15 @@ class ChatMessage {
     final userId = user != null ? user['id'] : json['user_id'];
 
     return ChatMessage(
-      id: json['id'],
-      conversationId: json['conversation_id'],
-      senderId: userId,
+      id: json['id'] is int
+          ? json['id']
+          : int.tryParse(json['id'].toString()) ?? 0,
+      conversationId: json['conversation_id'] is int
+          ? json['conversation_id']
+          : int.tryParse(json['conversation_id'].toString()) ?? 0,
+      senderId: userId is int ? userId : int.tryParse(userId.toString()),
       message: json['message'] ?? '',
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: parseDateLocal(json['created_at']),
       isMe: userId != null && userId == currentUserId,
       senderName: user != null
           ? "${user['name'] ?? ''} ${user['last_name'] ?? ''}".trim()
@@ -222,9 +239,9 @@ class ChatMessage {
       isRead: json['is_read'],
       isDelivered: json['is_delivered'],
       deliveredAt: json['delivered_at'] != null
-          ? DateTime.parse(json['delivered_at'])
+          ? parseDateLocal(json['delivered_at'])
           : null,
-      readAt: json['read_at'] != null ? DateTime.parse(json['read_at']) : null,
+      readAt: json['read_at'] != null ? parseDateLocal(json['read_at']) : null,
       type: json['type'] ?? 'text',
       audioUrl: _extractVoiceUrl(json),
       audioDuration: json['voice_duration'],
