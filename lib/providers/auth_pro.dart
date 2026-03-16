@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../admin/adminBottombar/admin_bottombar.dart';
 import '../admin/client/bottombar/client_bottombar.dart';
@@ -10,9 +11,14 @@ import '../auth/login_screen.dart';
 import '../models/auth_models.dart';
 import '../services/api_routes.dart';
 import '../services/api_service.dart';
+import '../services/call_device_service.dart';
 import '../services/helpers.dart';
 import '../widgets/loaders.dart';
 import '../widgets/toasts.dart';
+import '../utils/console_util.dart';
+import 'package:print_helper/tablet_view/lib/tab_auth/tab_login_screen.dart';
+import 'package:print_helper/tablet_view/lib/tab_sidePanel/dashboard_wrapper.dart';
+import '../admin/chat/provider/chat_pro.dart';
 
 class AuthPro extends ChangeNotifier {
   Map<String, String> get headers => {'Content-type': 'application/json'};
@@ -30,7 +36,7 @@ class AuthPro extends ChangeNotifier {
         api: ApiRoutes.login,
         payload: {"username": email, "password": password},
       );
-      debugPrint("LOGIN RESPONSE: $data");
+      printData(title: "LOGIN RESPONSE:", data: data);
       if (data["success"] == true) {
         final loginModel = LoginResponseModel.fromJson(data);
         await saveUserData(loginModel);
@@ -41,8 +47,9 @@ class AuthPro extends ChangeNotifier {
         prefs.setString("role_name", loginModel.user.roleName);
         prefs.setString("cust_client_id", user!.custClientId.toString());
         prefs.setInt("customer_id", user!.customerId);
-        debugPrint("Customer Client ID: ${user!.custClientId}");
-        debugPrint("Customer ID: ${user!.customerId}");
+        printData(title: "Customer Client ID:", data: user!.custClientId);
+        printData(title: "Customer ID:", data: user!.customerId);
+        await CallDeviceService.bootstrap(forceRegister: true);
         notifyListeners();
         showToast(message: "Login successful");
         return true;
@@ -51,7 +58,7 @@ class AuthPro extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      debugPrint("LOGIN ERROR: $e");
+      printData(title: "LOGIN ERROR:", data: e, e: true);
       showToast(message: "Something went wrong");
       return false;
     } finally {
@@ -71,25 +78,31 @@ class AuthPro extends ChangeNotifier {
         api: "${ApiRoutes.switchUser}/$userId",
         headers: {"Authorization": "Bearer $token"},
       );
-      debugPrint("SWITCH USER RESPONSE: $data");
+      printData(title: "SWITCH USER RESPONSE:", data: data);
       if (data["success"] == true) {
         final user = UserModel.fromJson(data["data"]["user"]);
         final token = data["data"]["token"];
         this.user = user;
         this.token = token;
-        debugPrint("USER clientId: ${user.custClientId}");
+        printData(title: "USER clientId:", data: user.custClientId);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString("token", token);
         await prefs.setString("role_name", user.roleName);
         await prefs.setString("user", jsonEncode(user.toJson()));
         await prefs.setInt("cust_client_id", user.custClientId);
+        await CallDeviceService.bootstrap(forceRegister: true);
         notifyListeners();
+
+        // 🔄 CRITICAL: Reset chat provider to disconnect old sockets and clear state
+        final chatPro = Provider.of<ChatPro>(context, listen: false);
+        chatPro.resetForUserSwitch();
+
         _navigateByRole(user.roleName, context);
       } else {
         showToast(message: data["message"] ?? "Switch failed");
       }
     } catch (e) {
-      debugPrint("SWITCH USER ERROR: $e");
+      printData(title: "SWITCH USER ERROR:", data: e, e: true);
       showToast(message: "Something went wrong");
     } finally {
       Loaders.hide();
@@ -131,45 +144,83 @@ class AuthPro extends ChangeNotifier {
   }
 
   void _navigateByRole(String? role, BuildContext context) {
+    bool isTablet = MediaQuery.of(context).size.shortestSide >= 600;
     switch (role) {
       case "ADMIN":
         navTo(
           context: context,
-          page: AdminBottomBar(pageNum: 0),
+          page: isTablet
+              ? DashboardWrapper(role: "ADMIN")
+              : AdminBottomBar(pageNum: 0),
           removeUntil: true,
         );
         break;
       case "CONTACT":
         navTo(
           context: context,
-          page: ClientBottomBar(pageNum: 0),
+          page: isTablet
+              ? DashboardWrapper(role: "CONTACT")
+              : ClientBottomBar(pageNum: 0),
           removeUntil: true,
         );
         break;
       case "STAFF":
         navTo(
           context: context,
-          page: StaffBottomBar(pageNum: 0),
+          page: isTablet
+              ? DashboardWrapper(role: "STAFF")
+              : StaffBottomBar(pageNum: 0),
           removeUntil: true,
         );
         break;
       case "CUSTOMER":
         navTo(
           context: context,
-          page: CustBottomBar(pageNum: 0),
+          page: isTablet
+              ? DashboardWrapper(role: "CUSTOMER")
+              : CustBottomBar(pageNum: 0),
           removeUntil: true,
         );
         break;
       default:
-        navTo(context: context, page: const LoginScreen(), removeUntil: true);
+        navTo(
+          context: context,
+          page: isTablet ? const TabLoginScreen() : const LoginScreen(),
+          removeUntil: true,
+        );
     }
   }
 
   Future<void> logout(dynamic context) async {
+    // 1. Show confirmation dialog
+    final shouldLogout = await _showLogoutConfirmation(context);
+    if (!shouldLogout) {
+      printData(title: "LOGOUT", data: "User cancelled logout");
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final storedToken = prefs.getString("token") ?? "";
     Loaders.show();
     try {
+      // 2. Disconnect chat sockets FIRST to stop receiving messages/calls
+      try {
+        final chatPro = Provider.of<ChatPro>(context, listen: false);
+        chatPro.disconnectConversationSocket();
+        chatPro.disconnectChatListSocket();
+        printData(title: "LOGOUT", data: "Chat sockets disconnected");
+      } catch (e) {
+        printData(
+          title: "LOGOUT",
+          data: "Error disconnecting chat: $e",
+          e: true,
+        );
+      }
+
+      // 3. Unregister from Twilio and backend BEFORE clearing token
+      await CallDeviceService.unregister();
+
+      // 4. Call logout API
       final data = await ApiService().postDataToApi(
         api: ApiRoutes.logout,
         headers: {"Authorization": "Bearer $storedToken"},
@@ -180,9 +231,10 @@ class AuthPro extends ChangeNotifier {
         showToast(message: data["message"]);
       }
     } catch (e) {
-      debugPrint("LOGOUT API ERROR: $e");
+      printData(title: "LOGOUT API ERROR:", data: e, e: true);
     }
     Loaders.hide();
+    // 5. Clear all user data from SharedPreferences
     await prefs.remove("token");
     await prefs.remove("role_name");
     await prefs.remove("user_id");
@@ -190,10 +242,47 @@ class AuthPro extends ChangeNotifier {
     await prefs.remove("email");
     await prefs.remove("customer_id");
     await prefs.remove("cust_client_id");
+    // 6. Clear FCM token to prevent notifications reaching after logout
+    await prefs.remove("fcm_token");
+    // 7. Clear any cached device registration state
+    await prefs.remove("registered_fcm_token");
+    await prefs.remove("registered_user_id");
+    await prefs.remove("registered_device_id");
     user = null;
     token = "";
     notifyListeners();
-    navTo(context: context, page: const LoginScreen(), removeUntil: true);
+    bool isTablet = MediaQuery.of(context).size.shortestSide >= 600;
+    navTo(
+      context: context,
+      page: isTablet ? const TabLoginScreen() : const LoginScreen(),
+      removeUntil: true,
+    );
+  }
+
+  /// Shows a confirmation dialog before logout
+  Future<bool> _showLogoutConfirmation(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Text("Confirm Logout"),
+          content: const Text("Are you sure you want to logout?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text("Logout", style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
   }
 
   String forgetMail = "";
@@ -207,7 +296,7 @@ class AuthPro extends ChangeNotifier {
         api: 'auth/forgot-password',
         payload: {"email": email},
       );
-      debugPrint('forgetPassword response: $data');
+      printData(title: "forgetPassword response:", data: data);
       final bool isSuccess =
           data['success'] == true ||
           data['message'] == "OTP has been sent to your email address.";
@@ -220,7 +309,7 @@ class AuthPro extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      debugPrint('FromForgetPassword error: $e');
+      printData(title: "FromForgetPassword error:", data: e, e: true);
       showToast(message: 'Something went wrong');
       return false;
     } finally {
@@ -245,7 +334,7 @@ class AuthPro extends ChangeNotifier {
         api: 'auth/verify-otp?',
         payload: {"email": email, "otp": otp},
       );
-      debugPrint('validateOtpApi Response: $data');
+      printData(title: "validateOtpApi Response:", data: data);
       if (data['message'] ==
               "OTP verified successfully. You can now reset your password." &&
           data['success'] == true) {
@@ -255,7 +344,7 @@ class AuthPro extends ChangeNotifier {
         showToast(message: data["message"]);
       }
     } catch (e) {
-      debugPrint('validateOtpApi Error: $e');
+      printData(title: "validateOtpApi Error:", data: e, e: true);
       showToast(message: "Something went wrong, please try again");
     } finally {
       validateOtp = false;
@@ -281,7 +370,7 @@ class AuthPro extends ChangeNotifier {
           "password_confirmation": password,
         },
       );
-      debugPrint('resetPass Response: $data');
+      printData(title: "resetPass Response:", data: data);
       if (data['message'] == "Password has been reset successfully." &&
           data['success'] == true) {
         isVerify = true;
@@ -289,7 +378,7 @@ class AuthPro extends ChangeNotifier {
         showToast(message: data["message"]);
       }
     } catch (e) {
-      debugPrint('resetPass Error: $e');
+      printData(title: "resetPass Error:", data: e, e: true);
       showToast(message: "Something went wrong, please try again");
     } finally {
       Loaders.hide();

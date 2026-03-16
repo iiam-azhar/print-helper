@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../widgets/loaders.dart';
 import '../widgets/toasts.dart';
+import '../utils/console_util.dart';
 
 class AdminPro extends ChangeNotifier {
   bool accountsLoad = false;
@@ -74,7 +75,7 @@ class AdminPro extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("Pagination Error: $e");
+      printData(title: "Pagination Error:", data: e, e: true);
     }
     accountsLoad = false;
     isLoadingMore = false;
@@ -153,7 +154,7 @@ class AdminPro extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint("FETCH ALL DROPDOWNS ERROR: $e");
+      printData(title: "FETCH ALL DROPDOWNS ERROR:", data: e, e: true);
     } finally {
       Loaders.hide();
     }
@@ -180,17 +181,17 @@ class AdminPro extends ChangeNotifier {
         "POST",
         Uri.parse('${ApiRoutes.baseUrl}${ApiRoutes.account}'),
       );
-      debugPrint('${request.url}');
+      printData(title: 'Request URL:', data: request.url);
       request.headers.addAll({
         "Accept": "application/json",
         "Authorization": "Bearer $token",
       });
       phones.asMap().forEach((i, p) {
-        debugPrint("phones[$i][type] = ${p['type']}");
-        debugPrint("phones[$i][number] = ${p['value']}");
+        printData(title: 'phones[$i][type] =', data: p['type']);
+        printData(title: 'phones[$i][number] =', data: p['value']);
       });
       emails.asMap().forEach((i, e) {
-        debugPrint("emails[$i] = $e");
+        printData(title: 'emails[$i] =', data: e);
       });
       request.fields["name"] = firstName;
       request.fields["last_name"] = lastName;
@@ -223,12 +224,12 @@ class AdminPro extends ChangeNotifier {
       }
       final streamedRes = await request.send();
       final response = await http.Response.fromStream(streamedRes);
-      debugPrint("STATUS: ${response.statusCode}");
+      printData(title: "STATUS:", data: response.statusCode);
 
-      debugPrint("BODY: ${response.body}");
+      printData(title: "BODY:", data: response.body);
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      debugPrint("API ERROR: $e");
+      printData(title: "API ERROR:", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -256,12 +257,12 @@ class AdminPro extends ChangeNotifier {
         "POST",
         Uri.parse('${ApiRoutes.baseUrl}${ApiRoutes.account}/$id/update'),
       );
-      debugPrint('${request.url}');
+      printData(title: 'Request URL:', data: request.url);
       request.headers.addAll({
         "Accept": "application/json",
         "Authorization": "Bearer $token",
       });
-      debugPrint('aaaaaaaa');
+      printData(title: 'Prepare keys', data: '');
       request.fields["name"] = firstName;
       request.fields["last_name"] = lastName;
       request.fields["username"] = username;
@@ -277,7 +278,7 @@ class AdminPro extends ChangeNotifier {
       for (int i = 0; i < skills.length; i++) {
         request.fields["skills[$i]"] = skills[i].toString();
       }
-      debugPrint('bbb');
+      printData(title: 'Keys Prepared', data: '');
       for (int i = 0; i < emails.length; i++) {
         request.fields["emails[$i]"] = emails[i];
       }
@@ -289,10 +290,10 @@ class AdminPro extends ChangeNotifier {
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
       final res = jsonDecode(response.body);
-      debugPrint('UPDATE RESPONSE: ${response.body}');
+      printData(title: "UPDATE RESPONSE:", data: response.body);
       return res["success"] == true || res["success"] == "true";
     } catch (e) {
-      debugPrint("UPDATE ERROR: $e");
+      printData(title: "UPDATE ERROR:", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -314,7 +315,7 @@ class AdminPro extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      debugPrint("DELETE ERROR: $e");
+      printData(title: "DELETE ERROR:", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -347,7 +348,7 @@ class AdminPro extends ChangeNotifier {
         showToast(message: response["message"] ?? "Failed to update status");
       }
     } catch (e) {
-      debugPrint("TOGGLE ERROR: $e");
+      printData(title: "TOGGLE ERROR:", data: e, e: true);
     } finally {
       Loaders.hide();
     }

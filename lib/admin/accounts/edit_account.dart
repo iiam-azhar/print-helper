@@ -1,6 +1,7 @@
 // edit_account.dart
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import '../../utils/console_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../constants/colors.dart';
@@ -98,7 +99,7 @@ class _EditAccountState extends State<EditAccount> {
             .where((id) => id != -1)
             .toList() ??
         [];
-    debugPrint(acc.staffDetails?.languages.toString());
+    printData(title: "Account Languages:", data: acc.staffDetails?.languages);
     selectedSkillIds =
         acc.staffDetails?.skills
             .map((skillName) {
@@ -141,7 +142,7 @@ class _EditAccountState extends State<EditAccount> {
   Future<void> _onSave(dynamic context) async {
     if (!_formKey.currentState!.validate()) return;
     final pro = getAdminPro(context);
-    debugPrint('selectedLanguageIds: $selectedLanguageIds');
+    printData(title: "selectedLanguageIds:", data: selectedLanguageIds);
     List<Map<String, dynamic>> phones = phoneFields
         .map(
           (p) => {"type": p.type.apiValue, "value": p.controller.text.trim()},
@@ -164,7 +165,7 @@ class _EditAccountState extends State<EditAccount> {
       imagePath: selectedImage?.path,
       context: context,
     );
-    debugPrint("Update API result: $success");
+    printData(title: "Update API result:", data: success);
     if (success) {
       Navigator.pop(context);
       showToast(message: "Account Updated Successfully");
@@ -298,8 +299,8 @@ class _EditAccountState extends State<EditAccount> {
           Spacers.sb10(),
           _textField(
             _firstNameCtrl,
-            "*Name",
-            "Type Name",
+            "*First Name",
+            "Type First Name",
             AppStrings.fNameError,
             AppStrings.fNameRegError,
             Regx.nameRegExp,
@@ -307,8 +308,8 @@ class _EditAccountState extends State<EditAccount> {
           Spacers.sb10(),
           _textField(
             _lastNameCtrl,
-            "*Lastname",
-            "Type Lastname",
+            "*Last name",
+            "Type Last name",
             AppStrings.lNameError,
             AppStrings.lNameRegError,
             Regx.nameRegExp,
@@ -476,7 +477,7 @@ class _EditAccountState extends State<EditAccount> {
                       }),
                       child: Container(
                         height: 45.h,
-                        width: 90.w,
+                        width: 70.w,
                         padding: EdgeInsets.symmetric(horizontal: 12.w),
                         decoration: _boxDecor(),
                         child: Row(
@@ -505,7 +506,7 @@ class _EditAccountState extends State<EditAccount> {
                           decoration: InputDecoration(
                             border: InputBorder.none,
                             hintText: field.type.label == "Phone"
-                                ? "Type Phone"
+                                ? "Type Phone No"
                                 : field.type.label == "Land Phone"
                                 ? "Landline"
                                 : "Other",
@@ -554,6 +555,7 @@ class _EditAccountState extends State<EditAccount> {
                   ],
                 ),
                 if (openPhoneDropdownIndex == index) _phoneDropdown(field),
+
                 Spacers.sb10(),
               ],
             );
@@ -614,6 +616,10 @@ class _EditAccountState extends State<EditAccount> {
   }
 
   Widget _emailSection() {
+    final hasPhoneField = phoneFields.any(
+      (field) => field.type.label == "Phone",
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -622,7 +628,7 @@ class _EditAccountState extends State<EditAccount> {
           child: Padding(
             padding: EdgeInsets.only(left: 18.w),
             child: TextWidget(
-              text: "Email (s)",
+              text: hasPhoneField ? "Phone(s) with Country Code" : "Phone(s)",
               fontWeight: FontWeight.bold,
               fontSize: 13,
               color: AppColors.black,

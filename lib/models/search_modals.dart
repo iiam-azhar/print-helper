@@ -5,6 +5,8 @@ class SearchUsers {
   final String? email;
   final String? image;
   final int role;
+  final bool isOnline;
+  final DateTime? lastSeenAt;
 
   SearchUsers({
     required this.id,
@@ -13,6 +15,8 @@ class SearchUsers {
     this.email,
     this.image,
     required this.role,
+    this.isOnline = false,
+    this.lastSeenAt,
   });
 
   factory SearchUsers.fromJson(Map<String, dynamic> json) {
@@ -23,7 +27,12 @@ class SearchUsers {
       email: json['email'],
       image: json['image'],
       role: json['role'] ?? 0,
+      isOnline: json['is_online'] ?? false,
+      lastSeenAt: json['last_seen_at'] != null
+          ? DateTime.tryParse(json['last_seen_at'].toString())
+          : null,
     );
   }
+
   String get fullName => '$name $lastName'.trim();
 }

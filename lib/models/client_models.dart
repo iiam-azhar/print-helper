@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import '../utils/console_util.dart';
 
 class ClientModel {
   final int id;
@@ -76,7 +76,7 @@ class ClientModel {
         final period = dt.hour >= 12 ? "pm" : "am";
         formattedTime = "$hour:$minute$period";
       } catch (e) {
-        debugPrint("Date parse error: $e");
+        printData(title: "Date parse error:", data: e, e: true);
       }
     }
 

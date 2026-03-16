@@ -49,8 +49,8 @@ class Paths {
   static const String vc = 'assets/images/video-call.png';
   static const String chtbg = 'assets/images/chtt.png';
   static const String share = 'assets/images/share.png';
-  static const String vc4 = 'assets/images/video-call_4.png';
-  static const String vc5 = 'assets/images/video-call_5.png';
+  static const String call3 = 'assets/images/11.png';
+  static const String close = 'assets/images/5.png';
   static const String vc6 = 'assets/images/video-call_6.png';
 
 

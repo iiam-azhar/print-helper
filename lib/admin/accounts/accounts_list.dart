@@ -264,6 +264,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18.r),
         color: Colors.white,
+        border: item.roleName.toUpperCase() == 'ADMIN'
+            ? Border.all(color: Colors.black, width: 1.5.w)
+            : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: .08),
@@ -314,17 +317,45 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       _imageButton(
                         image: Paths.email,
                         width: 26,
-                        onPressed: () {},
+                        onPressed: () {
+                          if (item.emails.isNotEmpty) {
+                            tryLaunchUrl(
+                              url: 'mailto:${item.emails.first}',
+                              message: 'Could not open email app',
+                            );
+                          } else {
+                            showToast(message: 'No email address available');
+                          }
+                        },
                       ),
                       _imageButton(
                         image: Paths.call,
                         width: 20,
-                        onPressed: () {},
+                        onPressed: () {
+                          if (item.phones.isNotEmpty) {
+                            tryLaunchUrl(
+                              url: 'tel:${item.phones.first.number}',
+                              message: 'Could not open dialer',
+                            );
+                          } else {
+                            showToast(message: 'No phone number available');
+                          }
+                        },
                       ),
                       _imageButton(
                         image: Paths.chat,
                         width: 23,
-                        onPressed: () {},
+                        onPressed: () {
+                          // Navigator.push(
+                          //   context,
+                          //   MaterialPageRoute(
+                          //     builder: (context) => ChatScreen(
+                          //       receiverUserId: item.id,
+                          //       title: '${item.name} ${item.lastName}',
+                          //     ),
+                          //   ),
+                          // );
+                        },
                       ),
                     ],
                   ),

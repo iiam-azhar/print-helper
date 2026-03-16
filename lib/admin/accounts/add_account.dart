@@ -62,6 +62,8 @@ class AccountAddContentState extends State<AccountAddContent> {
   bool showLanguageDropdown = false;
   bool showSkillsDropdown = false;
   List<String> selectedSkills = [];
+  bool _showPassword = false;
+  bool _showConfirmPassword = false;
   @override
   void initState() {
     super.initState();
@@ -226,7 +228,7 @@ class AccountAddContentState extends State<AccountAddContent> {
               title: 'Save',
               onTap: () async {
                 _onSave(context);
-                debugPrint('tap');
+                printData(title: "Tap", data: "Save button tapped");
               },
               buttonColor: AppColors.btnClr,
               textColor: AppColors.white,
@@ -263,8 +265,8 @@ class AccountAddContentState extends State<AccountAddContent> {
           Spacers.sb8(),
           _roundedTextField(
             controller: _firstNameCtrl,
-            label: '*Name',
-            hint: 'Type Name',
+            label: '*First name',
+            hint: 'Type First Name',
             errorText: AppStrings.fNameError,
             regErrorText: AppStrings.fNameRegError,
             regExpCondition: Regx.nameRegExp,
@@ -272,7 +274,7 @@ class AccountAddContentState extends State<AccountAddContent> {
           Spacers.sb8(),
           _roundedTextField(
             controller: _lastNameCtrl,
-            label: '*Lastname',
+            label: '*Last name',
             hint: 'Type Lastname',
             errorText: AppStrings.lNameError,
             regErrorText: AppStrings.lNameRegError,
@@ -292,7 +294,12 @@ class AccountAddContentState extends State<AccountAddContent> {
             controller: _passwordCtrl,
             label: '*Password',
             hint: 'Type Password',
-            obscure: true,
+            obscure: !_showPassword,
+            isPassword: true,
+            showPassword: _showPassword,
+            onToggleVisibility: () {
+              setState(() => _showPassword = !_showPassword);
+            },
             errorText: AppStrings.passError,
             regErrorText: AppStrings.passRegError,
             regExpCondition: Regx.passwordRegExp,
@@ -302,7 +309,12 @@ class AccountAddContentState extends State<AccountAddContent> {
             controller: _confirmPasswordCtrl,
             label: '*Confirm Password',
             hint: 'Type Confirm Password',
-            obscure: true,
+            obscure: !_showConfirmPassword,
+            isPassword: true,
+            showPassword: _showConfirmPassword,
+            onToggleVisibility: () {
+              setState(() => _showConfirmPassword = !_showConfirmPassword);
+            },
             errorText: AppStrings.passError,
             regErrorText: AppStrings.passRegError,
             regExpCondition: Regx.passwordRegExp,
@@ -400,6 +412,10 @@ class AccountAddContentState extends State<AccountAddContent> {
   }
 
   Widget _phoneFieldSec() {
+    final hasPhoneField = phoneFields.any(
+      (field) => field.type.label == "Phone",
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -408,7 +424,7 @@ class AccountAddContentState extends State<AccountAddContent> {
           child: Padding(
             padding: EdgeInsets.only(left: 18.w),
             child: TextWidget(
-              text: "Phone (s)",
+              text: hasPhoneField ? "Phone(s) with Country Code" : "Phone(s)",
               fontWeight: FontWeight.bold,
               fontSize: 13,
               color: AppColors.black,
@@ -437,7 +453,7 @@ class AccountAddContentState extends State<AccountAddContent> {
                         },
                         child: Container(
                           height: 45.h,
-                          width: 90.w,
+                          width: 70.w,
                           padding: EdgeInsets.symmetric(horizontal: 12.w),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(16.r),
@@ -464,36 +480,40 @@ class AccountAddContentState extends State<AccountAddContent> {
 
                       Spacers.sbw12(),
                       Expanded(
-                        child: Container(
-                          height: 45.h,
-                          padding: EdgeInsets.symmetric(horizontal: 16.w),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16.r),
-                            border: Border.all(
-                              color: Colors.grey.shade400,
-                              width: 1.3,
-                            ),
-                            color: Colors.white,
-                          ),
-                          child: TextField(
-                            controller: field.controller,
-                            keyboardType: TextInputType.phone,
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-
-                              hintText: field.type.label == "Phone"
-                                  ? "Type Phone"
-                                  : field.type.label == "Land Phone"
-                                  ? "Landline"
-                                  : "other",
-
-                              hintStyle: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 14.sp,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              height: 45.h,
+                              padding: EdgeInsets.symmetric(horizontal: 16.w),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16.r),
+                                border: Border.all(
+                                  color: Colors.grey.shade400,
+                                  width: 1.3,
+                                ),
+                                color: Colors.white,
+                              ),
+                              child: TextField(
+                                controller: field.controller,
+                                keyboardType: TextInputType.phone,
+                                decoration: InputDecoration(
+                                  border: InputBorder.none,
+                                  hintText: field.type.label == "Phone"
+                                      ? "Type Phone No"
+                                      : field.type.label == "Land Phone"
+                                      ? "Landline"
+                                      : "other",
+                                  hintStyle: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 14.sp,
+                                  ),
+                                ),
+                                inputFormatters: [UsPhoneTextFormatter()],
                               ),
                             ),
-                            inputFormatters: [UsPhoneTextFormatter()],
-                          ),
+                          ],
                         ),
                       ),
                       Spacers.sbw12(),
@@ -1020,6 +1040,9 @@ class AccountAddContentState extends State<AccountAddContent> {
     required String label,
     String? hint,
     bool obscure = false,
+    bool isPassword = false,
+    bool showPassword = false,
+    VoidCallback? onToggleVisibility,
     required String errorText,
     required String regErrorText,
     required RegExp regExpCondition,
@@ -1043,6 +1066,7 @@ class AccountAddContentState extends State<AccountAddContent> {
           errorText: errorText,
           controller: controller,
           obscureText: obscure,
+          passField: isPassword,
           hintText: hint ?? '',
           filled: true,
           fillColor: Colors.white,
@@ -1052,6 +1076,16 @@ class AccountAddContentState extends State<AccountAddContent> {
             fontWeight: FontWeight.w500,
           ),
           padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.w),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    showPassword ? Icons.visibility : Icons.visibility_off,
+                    color: AppColors.hint,
+                    size: 20.sp,
+                  ),
+                  onPressed: onToggleVisibility,
+                )
+              : null,
         ),
       ],
     );

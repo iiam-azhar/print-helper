@@ -127,7 +127,6 @@ class UserPro extends ChangeNotifier {
         await deleteUserData();
         await DbService.deleteRemMe();
         if (ctx.mounted) {
-          // TODO: implement logout
           // navTo(context: ctx, removeUntil: true, page: const LoginPage());
         }
       } else {

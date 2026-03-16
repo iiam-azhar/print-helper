@@ -1,5 +1,5 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../../../utils/console_util.dart';
 
 class NotificationService {
   NotificationService._();
@@ -35,7 +35,7 @@ class NotificationService {
     required String body,
     int id = 0,
   }) async {
-    debugPrint("🔔 TRYING TO SHOW NOTIFICATION: $title");
+    printData(title: "🔔 TRYING TO SHOW NOTIFICATION:", data: title);
     // 1. CHANGE CHANNEL ID: Changed to 'chat_channel_new' to force high importance
     const androidDetails = AndroidNotificationDetails(
       'chat_channel_new', // CHANGED ID
@@ -50,9 +50,13 @@ class NotificationService {
     const notificationDetails = NotificationDetails(android: androidDetails);
     try {
       await _plugin.show(id, title, body, notificationDetails);
-      debugPrint("NOTIFICATION SENT TO PLUGIN"); // Debug Log 2
+      printData(title: "NOTIFICATION SENT TO PLUGIN", data: ""); // Debug Log 2
     } catch (e) {
-      debugPrint("NOTIFICATION ERROR: $e"); // Catch any hidden errors
+      printData(
+        title: "NOTIFICATION ERROR:",
+        data: e,
+        e: true,
+      ); // Catch any hidden errors
     }
   }
 }

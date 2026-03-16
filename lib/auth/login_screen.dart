@@ -22,6 +22,7 @@ import '../utils/regx.dart';
 import '../providers/auth_pro.dart';
 import '../widgets/field_widget.dart';
 import '../widgets/toasts.dart';
+import '../utils/console_util.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -88,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
       email: _userCtrl.text.trim(),
       password: _passCtrl.text.trim(),
     );
-    debugPrint("LOGIN SUCCESS: $success");
+    printData(title: "LOGIN SUCCESS:", data: success);
     setState(() => loading = false);
     if (!success) return;
     await rememberMe();

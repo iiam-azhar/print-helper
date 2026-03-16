@@ -22,11 +22,13 @@ class ClientScreen extends StatefulWidget {
   final bool isFromAdmin;
   final bool isFromStaff;
   final bool isFromClient;
+  final VoidCallback? onChatTap;
   const ClientScreen({
     super.key,
     required this.isFromAdmin,
     required this.isFromStaff,
     required this.isFromClient,
+    this.onChatTap,
   });
 
   @override
@@ -85,14 +87,48 @@ class _ClientScreenState extends State<ClientScreen> {
                 if (provider.clientsLoad) {
                   return Center(child: showLoader());
                 }
-                if (provider.clients.isEmpty) {
+                if (provider.clients.isEmpty && !provider.clientsLoad) {
                   return Center(
-                    child: TextWidget(
-                      text: "No clients found.",
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      fontFam: MyFontFam.poppins,
-                      color: AppColors.grey,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TextWidget(
+                          text: "No clients found.",
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          fontFam: MyFontFam.poppins,
+                          color: AppColors.grey,
+                        ),
+                        Spacers.sb20(),
+                        if (provider.clientFilters.isNotEmpty)
+                          GestureDetector(
+                            onTap: () {
+                              provider.clearClientFilters(context);
+                              provider.getClients(
+                                ctx: context,
+                                page: 1,
+                                loadMore: false,
+                              );
+                              showToast(message: "Filters cleared");
+                            },
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 24.w,
+                                vertical: 10.h,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8.r),
+                                color: AppColors.primary,
+                              ),
+                              child: TextWidget(
+                                text: "Reset Filters",
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 }
@@ -384,10 +420,7 @@ class _ClientScreenState extends State<ClientScreen> {
                               .toggleStatus(item.id, val, context)
                               .whenComplete(() {
                                 if (!mounted) return;
-                                provider.getClients(
-                                  ctx: context,
-                                  page: provider.currentPage,
-                                );
+                                provider.getClients(ctx: context, page: 1);
                               });
                         },
                       ),
@@ -538,7 +571,7 @@ class _ClientScreenState extends State<ClientScreen> {
             Spacers.sbw8(),
             Expanded(
               child: TextWidget(
-                text: "1212 Projects  •  34 Files",
+                text: "0 Projects  •  0 Files",
                 fontWeight: FontWeight.w500,
                 fontSize: 12,
               ),
@@ -669,22 +702,19 @@ class _ClientScreenState extends State<ClientScreen> {
                       ],
                     ),
                   ),
-                  Transform.scale(
-                    scale: .90,
-                    child: Switch(
-                      padding: EdgeInsets.zero,
-                      value: contact.status,
-                      activeTrackColor: const Color(0xFF00a650),
-                      activeThumbColor: Colors.white,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (val) {
-                        provider.toggleContactStatus(
-                          clientId: item.id,
-                          contactId: contact.contactId,
-                          newStatus: val,
-                        );
-                      },
-                    ),
+                  Switch(
+                    padding: EdgeInsets.zero,
+                    value: contact.status,
+                    activeTrackColor: const Color(0xFF00a650),
+                    activeThumbColor: Colors.white,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (val) {
+                      provider.toggleContactStatus(
+                        clientId: item.id,
+                        contactId: contact.contactId,
+                        newStatus: val,
+                      );
+                    },
                   ),
                 ],
               ),
@@ -710,29 +740,26 @@ class _ClientScreenState extends State<ClientScreen> {
                     _imageButton(
                       image: Paths.email,
                       width: 26,
-                      onPressed: () {},
+                      onPressed: () {
+                        if (contact.emails.isNotEmpty) {
+                          tryLaunchUrl(
+                            url: 'mailto:${contact.emails.first}',
+                            message: 'Could not open email app',
+                          );
+                        } else {
+                          showToast(message: 'No email address available');
+                        }
+                      },
                     ),
                     _imageButton(
                       image: Paths.call,
                       width: 20,
-                      onPressed: () {},
+                      onPressed: () => widget.onChatTap?.call(),
                     ),
                     _imageButton(
                       image: Paths.chat,
                       width: 23,
-                      onPressed: () {
-                        // final authPro = Provider.of<AuthPro>(
-                        //   context,
-                        //   listen: false,
-                        // );
-                        // navTo(
-                        //   context: context,
-                        //   page: ClientChat(
-                        //     clientId: item.id,
-                        //     authToken: authPro.token,
-                        //   ),
-                        // );
-                      },
+                      onPressed: () => widget.onChatTap?.call(),
                     ),
                     widget.isFromAdmin
                         ? _imageButton(

@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import '../../../../utils/console_util.dart';
 
 class AudioCacheService {
   static Future<File> getCachedAudio(String url) async {
@@ -50,10 +51,10 @@ class AudioCacheService {
       }
       // Save to device storage
       await file.writeAsBytes(response.bodyBytes);
-      debugPrint("Voice file saved to: ${file.path}");
+      printData(title: "Voice file saved to:", data: file.path);
       return file;
     } catch (e) {
-      debugPrint("Download error: $e");
+      printData(title: "Download error:", data: e, e: true);
       return null;
     }
   }

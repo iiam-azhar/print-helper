@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:print_helper/admin/client/edit_client.dart';
 import 'package:print_helper/admin/customers/add_customer.dart';
 import 'package:print_helper/admin/customers/edit_customer.dart';
+import 'package:print_helper/providers/client_pro.dart';
 import 'package:print_helper/providers/cust_pro.dart';
 import 'package:print_helper/services/helpers.dart';
 import 'package:print_helper/utils/formatter.dart';
@@ -18,6 +20,11 @@ import '../../constants/paths.dart';
 import '../../widgets/loaders.dart';
 import '../../widgets/toasts.dart';
 import '../filter/filter_screen.dart';
+import '../../utils/console_util.dart';
+import '../adminBottombar/admin_bottombar.dart';
+import '../staff/bottombar/staff_bottombar.dart';
+import '../client/bottombar/client_bottombar.dart';
+import 'bottombar/cust_bottombar.dart';
 
 class CustomersScreen extends StatefulWidget {
   final bool isFromAdmin;
@@ -42,7 +49,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   @override
   void initState() {
     super.initState();
-    debugPrint("isFromClient: ${widget.id}");
+    printData(title: "isFromClient:", data: widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final pro = Provider.of<CustomerPro>(context, listen: false);
       pro.getCustomers(ctx: context, clientId: widget.id);
@@ -255,7 +262,43 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   mainAxisAlignment: .end,
                                   children: [
                                     IconButton(
-                                      onPressed: () {},
+                                      onPressed: () async {
+                                        printData(
+                                          title: 'Banner Login Tap Client ID',
+                                          data: item.client!.id,
+                                        );
+                                        final clPro = Provider.of<ClientPro>(
+                                          context,
+                                          listen: false,
+                                        );
+                                        final authPro = Provider.of<AuthPro>(
+                                          context,
+                                          listen: false,
+                                        );
+
+                                        final clientDetails = await clPro
+                                            .getClientDetails(item.client!.id);
+                                        if (clientDetails != null &&
+                                            clientDetails.contacts.isNotEmpty) {
+                                          final primary = clientDetails.contacts
+                                              .firstWhere(
+                                                (c) => c.isPrimary == 1,
+                                                orElse: () => clientDetails
+                                                    .contacts
+                                                    .first,
+                                              );
+
+                                          await authPro.switchUser(
+                                            userId: primary.id,
+                                            context: context,
+                                          );
+                                        } else {
+                                          showToast(
+                                            message:
+                                                'No client contact found for login',
+                                          );
+                                        }
+                                      },
                                       icon: ImageWidget(
                                         image: Paths.login,
                                         width: 20,
@@ -263,7 +306,26 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                       ),
                                     ),
                                     IconButton(
-                                      onPressed: () {},
+                                      onPressed: () {
+                                        printData(
+                                          title: 'Banner Edit Tap Client ID',
+                                          data: item.client!.id,
+                                        );
+                                        showModalBottomSheet(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          backgroundColor: Colors.transparent,
+                                          barrierColor: Colors.black.withValues(
+                                            alpha: .25,
+                                          ),
+                                          builder: (_) => FractionallySizedBox(
+                                            heightFactor: 0.98,
+                                            child: EditClient(
+                                              clientId: item.client!.id,
+                                            ),
+                                          ),
+                                        );
+                                      },
                                       icon: ImageWidget(
                                         image: Paths.edit,
                                         width: 20,
@@ -304,7 +366,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               ImageWidget(image: Paths.customers, width: 28),
               Spacers.sbw12(),
               TextWidget(
-                text: "Customers (${prov.customers.length})",
+                text: "Customers (${prov.totalCustomers})",
                 fontWeight: FontWeight.w700,
                 fontSize: 17,
                 color: const Color(0xFF414345),
@@ -516,32 +578,29 @@ class _CustomersScreenState extends State<CustomersScreen> {
               Row(
                 mainAxisAlignment: .end,
                 children: [
-                  Transform.scale(
-                    scale: .95,
-                    child: Switch(
-                      padding: EdgeInsets.zero,
-                      value: item.status,
-                      activeTrackColor: const Color(0xFF00a650),
-                      activeThumbColor: Colors.white,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (val) {
-                        provider
-                            .toggleStatus(
-                              clientId: item.clientId,
-                              custId: item.id,
-                              newStatus: val,
-                            )
-                            .whenComplete(() {
-                              if (!mounted) return;
-                              provider.getCustomers(
-                                ctx: context,
-                                page: provider.currentPage,
-                                clientId: widget.id,
-                              );
-                            });
-                        setState(() {});
-                      },
-                    ),
+                  Switch(
+                    padding: EdgeInsets.zero,
+                    value: item.status,
+                    activeTrackColor: const Color(0xFF00a650),
+                    activeThumbColor: Colors.white,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (val) {
+                      provider
+                          .toggleStatus(
+                            clientId: item.clientId,
+                            custId: item.id,
+                            newStatus: val,
+                          )
+                          .whenComplete(() {
+                            if (!mounted) return;
+                            provider.getCustomers(
+                              ctx: context,
+                              page: provider.currentPage,
+                              clientId: widget.id,
+                            );
+                          });
+                      setState(() {});
+                    },
                   ),
                   Spacers.sbw8(),
                   Builder(
@@ -832,22 +891,19 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       ),
                     ],
                   ),
-                  Transform.scale(
-                    scale: .95,
-                    child: Switch(
-                      padding: EdgeInsets.zero,
-                      value: contact.status,
-                      activeTrackColor: const Color(0xFF00a650),
-                      activeThumbColor: Colors.white,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (val) {
-                        provider.toggleCustContact(
-                          clientId: item.id,
-                          custId: contact.contactId,
-                          newStatus: val,
-                        );
-                      },
-                    ),
+                  Switch(
+                    padding: EdgeInsets.zero,
+                    value: contact.status,
+                    activeTrackColor: const Color(0xFF00a650),
+                    activeThumbColor: Colors.white,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (val) {
+                      provider.toggleCustContact(
+                        clientId: item.id,
+                        custId: contact.contactId,
+                        newStatus: val,
+                      );
+                    },
                   ),
                 ],
               ),
@@ -874,17 +930,78 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     _imageButton(
                       image: Paths.email,
                       width: 28,
-                      onPressed: () {},
+                      onPressed: () {
+                        if (contact.emails.isNotEmpty) {
+                          tryLaunchUrl(
+                            url: 'mailto:${contact.emails.first}',
+                            message: 'Could not open email app',
+                          );
+                        } else {
+                          showToast(message: 'No email address available');
+                        }
+                      },
                     ),
                     _imageButton(
                       image: Paths.call,
                       width: 22,
-                      onPressed: () {},
+                      onPressed: () {
+                        if (widget.isFromAdmin) {
+                          navTo(
+                            context: context,
+                            page: AdminBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else if (widget.isFromStaff) {
+                          navTo(
+                            context: context,
+                            page: StaffBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else if (widget.isFromClient) {
+                          navTo(
+                            context: context,
+                            page: ClientBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else {
+                          navTo(
+                            context: context,
+                            page: CustBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        }
+                      },
                     ),
                     _imageButton(
                       image: Paths.chat,
                       width: 22,
-                      onPressed: () {},
+                      onPressed: () {
+                        if (widget.isFromAdmin) {
+                          navTo(
+                            context: context,
+                            page: AdminBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else if (widget.isFromStaff) {
+                          navTo(
+                            context: context,
+                            page: StaffBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else if (widget.isFromClient) {
+                          navTo(
+                            context: context,
+                            page: ClientBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        } else {
+                          navTo(
+                            context: context,
+                            page: CustBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        }
+                      },
                     ),
                     widget.isFromAdmin
                         ? _imageButton(

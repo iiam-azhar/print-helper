@@ -7,6 +7,7 @@ import '../models/settings_models.dart';
 import '../services/api_routes.dart';
 import '../services/api_service.dart';
 import '../widgets/toasts.dart';
+import '../utils/console_util.dart';
 
 class SettingsPro extends ChangeNotifier {
   bool loading = false;
@@ -113,7 +114,7 @@ class SettingsPro extends ChangeNotifier {
       await getClientCompanyTypes();
       await getRanks();
     } catch (e, st) {
-      debugPrint("LOAD SETTINGS ERROR: $e\n$st");
+      printData(title: "LOAD SETTINGS ERROR:", data: "$e\n$st", e: true);
       showToast(message: "Failed to load settings");
     } finally {
       _setLoading(false);
@@ -129,7 +130,7 @@ class SettingsPro extends ChangeNotifier {
         Uri.parse("${ApiRoutes.baseUrl}languages"),
         headers: {"Authorization": "Bearer $token"},
       );
-      debugPrint("LANGUAGE LIST: ${res.body}");
+      printData(title: "LANGUAGE LIST:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
         final idx = _sections.indexWhere(
@@ -142,10 +143,10 @@ class SettingsPro extends ChangeNotifier {
           notifyListeners();
         }
       } else {
-        debugPrint("LANG GET non-200: ${res.statusCode}");
+        printData(title: "LANG GET non-200:", data: res.statusCode, e: true);
       }
     } catch (e) {
-      debugPrint("GET LANG ERROR: $e");
+      printData(title: "GET LANG ERROR:", data: e, e: true);
     }
   }
 
@@ -157,7 +158,7 @@ class SettingsPro extends ChangeNotifier {
         Uri.parse("${ApiRoutes.baseUrl}account-types"),
         headers: {"Authorization": "Bearer $token"},
       );
-      debugPrint("ACCOUNT TYPES LIST: ${res.body}");
+      printData(title: "ACCOUNT TYPES LIST:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
         final idx = _sections.indexWhere(
@@ -170,10 +171,10 @@ class SettingsPro extends ChangeNotifier {
           notifyListeners();
         }
       } else {
-        debugPrint("ACCTYPE GET non-200: ${res.statusCode}");
+        printData(title: "ACCTYPE GET non-200:", data: res.statusCode, e: true);
       }
     } catch (e) {
-      debugPrint("GET ACCTYPES ERROR: $e");
+      printData(title: "GET ACCTYPES ERROR:", data: e, e: true);
     }
   }
 
@@ -185,7 +186,7 @@ class SettingsPro extends ChangeNotifier {
         Uri.parse("${ApiRoutes.baseUrl}customer-company-types"),
         headers: {"Authorization": "Bearer $token"},
       );
-      debugPrint("CUSTOMER COMPANY TYPES: ${res.body}");
+      printData(title: "CUSTOMER COMPANY TYPES:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
         final idx = _sections.indexWhere(
@@ -199,7 +200,7 @@ class SettingsPro extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("GET CUSTOMER COMPANY TYPES ERROR: $e");
+      printData(title: "GET CUSTOMER COMPANY TYPES ERROR:", data: e, e: true);
     }
   }
 
@@ -211,7 +212,7 @@ class SettingsPro extends ChangeNotifier {
         Uri.parse("${ApiRoutes.baseUrl}customer-ranks"),
         headers: {"Authorization": "Bearer $token"},
       );
-      debugPrint("CUSTOMER RANKS: ${res.body}");
+      printData(title: "CUSTOMER RANKS:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
         final idx = _sections.indexWhere(
@@ -226,7 +227,7 @@ class SettingsPro extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("GET CUSTOMER RANKS ERROR: $e");
+      printData(title: "GET CUSTOMER RANKS ERROR:", data: e, e: true);
     }
   }
 
@@ -238,7 +239,7 @@ class SettingsPro extends ChangeNotifier {
         Uri.parse("${ApiRoutes.baseUrl}skills"),
         headers: {"Authorization": "Bearer $token"},
       );
-      debugPrint("SKILLS LIST: ${res.body}");
+      printData(title: "SKILLS LIST:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
         final idx = _sections.indexWhere(
@@ -254,7 +255,7 @@ class SettingsPro extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("GET SKILLS ERROR: $e");
+      printData(title: "GET SKILLS ERROR:", data: e, e: true);
     }
   }
 
@@ -266,7 +267,7 @@ class SettingsPro extends ChangeNotifier {
         Uri.parse("${ApiRoutes.baseUrl}client-company-types"),
         headers: {"Authorization": "Bearer $token"},
       );
-      debugPrint("CLIENT COMPANY TYPES: ${res.body}");
+      printData(title: "CLIENT COMPANY TYPES:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
         final idx = _sections.indexWhere(
@@ -280,7 +281,7 @@ class SettingsPro extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("GET CLIENT COMPANY TYPES ERROR: $e");
+      printData(title: "GET CLIENT COMPANY TYPES ERROR:", data: e, e: true);
     }
   }
 
@@ -292,7 +293,7 @@ class SettingsPro extends ChangeNotifier {
         Uri.parse("${ApiRoutes.baseUrl}ranks"),
         headers: {"Authorization": "Bearer $token"},
       );
-      debugPrint("RANKS LIST: ${res.body}");
+      printData(title: "RANKS LIST:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
         final idx = _sections.indexWhere(
@@ -306,7 +307,7 @@ class SettingsPro extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("GET RANKS ERROR: $e");
+      printData(title: "GET RANKS ERROR:", data: e, e: true);
     }
   }
 
@@ -323,7 +324,7 @@ class SettingsPro extends ChangeNotifier {
         headers: {"Authorization": "Bearer $token"},
         payload: {"name": name},
       );
-      debugPrint("CREATE RANK RESPONSE: $response");
+      printData(title: "CREATE RANK RESPONSE:", data: response);
       if (response != null && response['id'] != null) {
         final idx = _sections.indexWhere((s) => s.id == sectionId);
         if (idx != -1) {
@@ -336,7 +337,7 @@ class SettingsPro extends ChangeNotifier {
         showToast(message: "Create failed");
       }
     } catch (e) {
-      debugPrint("CREATE RANK ERROR: $e");
+      printData(title: "CREATE RANK ERROR:", data: e, e: true);
     } finally {
       _setLoading(false);
     }
@@ -367,7 +368,7 @@ class SettingsPro extends ChangeNotifier {
         showToast(message: "Create failed");
       }
     } catch (e) {
-      debugPrint("CREATE CUSTOMER COMPANY TYPE ERROR: $e");
+      printData(title: "CREATE CUSTOMER COMPANY TYPE ERROR:", data: e, e: true);
     } finally {
       _setLoading(false);
     }
@@ -386,7 +387,7 @@ class SettingsPro extends ChangeNotifier {
         headers: {"Authorization": "Bearer $token"},
         payload: {"name": name},
       );
-      debugPrint("CREATE LANGUAGE RESPONSE: $response");
+      printData(title: "CREATE LANGUAGE RESPONSE:", data: response);
       if (response != null && response['id'] != null) {
         final idx = _sections.indexWhere((s) => s.id == sectionId);
         if (idx != -1) {
@@ -408,7 +409,7 @@ class SettingsPro extends ChangeNotifier {
         showToast(message: "Create failed");
       }
     } catch (e) {
-      debugPrint("CREATE LANGUAGE ERROR: $e");
+      printData(title: "CREATE LANGUAGE ERROR:", data: e, e: true);
       showToast(message: "Create failed");
     } finally {
       _setLoading(false);
@@ -428,7 +429,7 @@ class SettingsPro extends ChangeNotifier {
         headers: {"Authorization": "Bearer $token"},
         payload: {"name": name},
       );
-      debugPrint("CREATE ACCTYPE RESPONSE: $response");
+      printData(title: "CREATE ACCTYPE RESPONSE:", data: response);
       if (response != null && response['id'] != null) {
         final idx = _sections.indexWhere((s) => s.id == sectionId);
         if (idx != -1) {
@@ -450,7 +451,7 @@ class SettingsPro extends ChangeNotifier {
         showToast(message: "Create failed");
       }
     } catch (e) {
-      debugPrint("CREATE ACCTYPE ERROR: $e");
+      printData(title: "CREATE ACCTYPE ERROR:", data: e, e: true);
       showToast(message: "Create failed");
     } finally {
       _setLoading(false);
@@ -482,7 +483,7 @@ class SettingsPro extends ChangeNotifier {
         showToast(message: "Create failed");
       }
     } catch (e) {
-      debugPrint("CREATE CUSTOMER RANK ERROR: $e");
+      printData(title: "CREATE CUSTOMER RANK ERROR:", data: e, e: true);
     } finally {
       _setLoading(false);
     }
@@ -501,7 +502,7 @@ class SettingsPro extends ChangeNotifier {
         headers: {"Authorization": "Bearer $token"},
         payload: {"name": name},
       );
-      debugPrint("CREATE CLIENT COMPANY TYPE RESPONSE: $response");
+      printData(title: "CREATE CLIENT COMPANY TYPE RESPONSE:", data: response);
       if (response != null && response['id'] != null) {
         final idx = _sections.indexWhere((s) => s.id == sectionId);
         if (idx != -1) {
@@ -514,7 +515,7 @@ class SettingsPro extends ChangeNotifier {
         showToast(message: "Create failed");
       }
     } catch (e) {
-      debugPrint("CREATE CLIENT COMPANY TYPE ERROR: $e");
+      printData(title: "CREATE CLIENT COMPANY TYPE ERROR:", data: e, e: true);
     } finally {
       _setLoading(false);
     }
@@ -533,7 +534,7 @@ class SettingsPro extends ChangeNotifier {
         headers: {"Authorization": "Bearer $token"},
         payload: {"name": name},
       );
-      debugPrint("CREATE SKILL RESPONSE: $response");
+      printData(title: "CREATE SKILL RESPONSE:", data: response);
       if (response != null && response['id'] != null) {
         final idx = _sections.indexWhere((s) => s.id == sectionId);
         if (idx != -1) {
@@ -546,7 +547,7 @@ class SettingsPro extends ChangeNotifier {
         showToast(message: "Create failed");
       }
     } catch (e) {
-      debugPrint("CREATE SKILL ERROR: $e");
+      printData(title: "CREATE SKILL ERROR:", data: e, e: true);
     } finally {
       _setLoading(false);
     }
@@ -583,7 +584,7 @@ class SettingsPro extends ChangeNotifier {
         headers: {"Authorization": "Bearer $token"},
         payload: {"name": newName},
       );
-      debugPrint("UPDATE RESPONSE: $res");
+      printData(title: "UPDATE RESPONSE:", data: res);
       if (res != null && res is Map && res['errors'] != null) {
         final msg =
             (res['errors']['name'] as List<dynamic>?)?.first ??
@@ -597,7 +598,7 @@ class SettingsPro extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint("UPDATE ITEM ERROR: $e");
+      printData(title: "UPDATE ITEM ERROR:", data: e, e: true);
       showToast(message: "Update failed");
     } finally {
       _setLoading(false);
@@ -636,16 +637,16 @@ class SettingsPro extends ChangeNotifier {
         url,
         headers: {"Authorization": "Bearer $token"},
       );
-      debugPrint("DELETE ($itemId) STATUS: ${res.statusCode}");
+      printData(title: "DELETE ($itemId) STATUS:", data: res.statusCode);
       if (res.statusCode == 204 || res.statusCode == 200) {
         _sections[sIdx].items.removeWhere((i) => i.id == itemId);
         notifyListeners();
       } else {
-        debugPrint("DELETE failed body: ${res.body}");
+        printData(title: "DELETE failed body:", data: res.body, e: true);
         showToast(message: "Delete failed");
       }
     } catch (e) {
-      debugPrint("DELETE ERROR: $e");
+      printData(title: "DELETE ERROR:", data: e, e: true);
       showToast(message: "Delete failed");
     } finally {
       _setLoading(false);

@@ -67,8 +67,8 @@ class EditCustomerState extends State<EditCustomer> {
   void initState() {
     super.initState();
     contactForms.add(ContactFormModel());
-    debugPrint("customerId: ${widget.customerId}");
-    debugPrint("clientId: ${widget.clientId}");
+    printData(title: "customerId:", data: widget.customerId);
+    printData(title: "clientId:", data: widget.clientId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeData();
     });
@@ -154,8 +154,9 @@ class EditCustomerState extends State<EditCustomer> {
       contactForms.add(form);
     }
     if (contactForms.isEmpty) contactForms.add(ContactFormModel());
-    debugPrint(
-      "CONTACT IDS AFTER FILL: ${contactForms.map((e) => e.existingId).toList()}",
+    printData(
+      title: "CONTACT IDS AFTER FILL:",
+      data: contactForms.map((e) => e.existingId).toList(),
     );
   }
 
@@ -288,13 +289,17 @@ class EditCustomerState extends State<EditCustomer> {
         widget.isFromClient && pro.client?.brandingPrimaryColor != null
         ? hexToColor(pro.client!.brandingPrimaryColor)
         : AppColors.primary;
+    final hasPhoneField = model.phoneFields.any(
+      (field) => field.type.label == "Phone",
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: EdgeInsets.only(left: 15.w),
           child: TextWidget(
-            text: "Phone (s)",
+            text: hasPhoneField ? "Phone(s) with Country Code" : "Phone(s)",
             fontWeight: FontWeight.bold,
             fontSize: 13,
             color: AppColors.black,
@@ -319,7 +324,7 @@ class EditCustomerState extends State<EditCustomer> {
                       },
                       child: Container(
                         height: 45.h,
-                        width: 90.w,
+                        width: 70.w,
                         padding: EdgeInsets.symmetric(horizontal: 10.w),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16.r),
@@ -345,34 +350,40 @@ class EditCustomerState extends State<EditCustomer> {
                     ),
                     Spacers.sbw12(),
                     Expanded(
-                      child: Container(
-                        height: 45.h,
-                        padding: EdgeInsets.symmetric(horizontal: 16.w),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16.r),
-                          border: Border.all(
-                            color: Colors.grey.shade400,
-                            width: 1.3,
-                          ),
-                          color: Colors.white,
-                        ),
-                        child: TextField(
-                          controller: field.controller,
-                          keyboardType: TextInputType.phone,
-                          decoration: InputDecoration(
-                            border: InputBorder.none,
-                            hintText: field.type.label == "Phone"
-                                ? "Type Phone"
-                                : (field.type.label == "Land Phone"
-                                      ? "Landline"
-                                      : "other"),
-                            hintStyle: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 14.sp,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 45.h,
+                            padding: EdgeInsets.symmetric(horizontal: 16.w),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16.r),
+                              border: Border.all(
+                                color: Colors.grey.shade400,
+                                width: 1.3,
+                              ),
+                              color: Colors.white,
+                            ),
+                            child: TextField(
+                              controller: field.controller,
+                              keyboardType: TextInputType.phone,
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                hintText: field.type.label == "Phone"
+                                    ? "Type Phone No"
+                                    : (field.type.label == "Land Phone"
+                                          ? "Landline"
+                                          : "other"),
+                                hintStyle: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 14.sp,
+                                ),
+                              ),
+                              inputFormatters: [UsPhoneTextFormatter()],
                             ),
                           ),
-                          inputFormatters: [UsPhoneTextFormatter()],
-                        ),
+                        ],
                       ),
                     ),
                     Spacers.sbw12(),
@@ -849,6 +860,8 @@ class EditCustomerState extends State<EditCustomer> {
         ),
         Spacers.sb5(),
         CustomTextField(
+          alphaWithSpaceOnly:
+              regExpCondition.pattern == Regx.nameRegExp.pattern,
           regExpCondition: regExpCondition,
           regErrorText: regErrorText,
           errorText: errorText,
@@ -1236,8 +1249,8 @@ class EditCustomerState extends State<EditCustomer> {
                 Spacers.sb8(),
                 _roundedTextField(
                   controller: model.firstName,
-                  label: "*Name",
-                  hint: "Type Name",
+                  label: "*First Name",
+                  hint: "Type First Name",
                   errorText: "Required",
                   regErrorText: "Invalid",
                   regExpCondition: Regx.nameRegExp,
@@ -1245,8 +1258,8 @@ class EditCustomerState extends State<EditCustomer> {
                 Spacers.sb8(),
                 _roundedTextField(
                   controller: model.lastName,
-                  label: "*Lastname",
-                  hint: "Type Lastname",
+                  label: "*Last Name",
+                  hint: "Type Last Name",
                   errorText: "Required",
                   regErrorText: "Invalid",
                   regExpCondition: Regx.nameRegExp,

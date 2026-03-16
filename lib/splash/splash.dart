@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:print_helper/auth/login_screen.dart';
 import 'package:print_helper/providers/auth_pro.dart';
 import 'package:print_helper/widgets/image_widget.dart';
+import 'package:print_helper/services/call_device_service.dart';
 
 import '../../constants/strings.dart';
 import '../../services/helpers.dart';
@@ -41,6 +42,7 @@ class _SplashState extends State<Splash> {
             context,
             listen: false,
           ).loadUserFromPrefs();
+          await CallDeviceService.bootstrap(forceRegister: false);
           _navigateByRole(role);
         } else {
           navTo(context: context, page: const LoginScreen(), removeUntil: true);
