@@ -46,8 +46,25 @@ class ImageWidget extends StatelessWidget {
     }
   }
 
+  String _getCacheKey(String url) {
+    if (url.contains('amazonaws.com') ||
+        url.contains('X-Amz-') ||
+        url.contains('response-content-')) {
+      final index = url.indexOf('?');
+      if (index != -1) {
+        return url.substring(0, index);
+      }
+    }
+    return url;
+  }
+
+  bool _isSvg(String path) {
+    final cleanPath = path.toLowerCase().split('?').first;
+    return cleanPath.endsWith('.svg');
+  }
+
   Widget _showNetworkImage() {
-    if (image.endsWith('.svg')) {
+    if (_isSvg(image)) {
       const srcIn = BlendMode.srcIn;
       final clr = color == null ? null : ColorFilter.mode(color!, srcIn);
       return SvgPicture.network(
@@ -58,10 +75,13 @@ class ImageWidget extends StatelessWidget {
         alignment: alignment!,
         colorFilter: clr,
         placeholderBuilder: showLoad ? (context) => showLoader() : null,
+        errorBuilder:
+            (context, error, stackTrace) => errorWidget ?? _errorWidget(),
       );
     } else {
       return CachedNetworkImage(
         imageUrl: image,
+        cacheKey: _getCacheKey(image),
         fit: fit,
         height: height?.w,
         width: width?.w,
@@ -76,7 +96,7 @@ class ImageWidget extends StatelessWidget {
   Icon _errorWidget() => Icon(Icons.error, size: 26.sp);
 
   Widget _showAssetImage() {
-    if (image.endsWith('.svg')) {
+    if (_isSvg(image)) {
       const srcIn = BlendMode.srcIn;
       final clr = color == null ? null : ColorFilter.mode(color!, srcIn);
       return SvgPicture.asset(

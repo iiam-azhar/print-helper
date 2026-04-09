@@ -7,6 +7,7 @@ import 'package:print_helper/auth/login_screen.dart';
 import 'package:print_helper/providers/auth_pro.dart';
 import 'package:print_helper/widgets/image_widget.dart';
 import 'package:print_helper/services/call_device_service.dart';
+import 'package:print_helper/providers/files_pro.dart';
 
 import '../../constants/strings.dart';
 import '../../services/helpers.dart';
@@ -38,10 +39,17 @@ class _SplashState extends State<Splash> {
         final token = prefs.getString("token");
         final role = prefs.getString("role_name");
         if (token != null && token.isNotEmpty) {
-          await Provider.of<AuthPro>(
-            context,
-            listen: false,
-          ).loadUserFromPrefs();
+          final authPro = Provider.of<AuthPro>(context, listen: false);
+          await authPro.loadUserFromPrefs();
+
+          // Initialize real-time file updates
+          if (authPro.user?.id != null) {
+            Provider.of<FilesPro>(context, listen: false).initFilesSocket(
+              userId: authPro.user!.id.toString(),
+              context: context,
+            );
+          }
+
           await CallDeviceService.bootstrap(forceRegister: false);
           _navigateByRole(role);
         } else {

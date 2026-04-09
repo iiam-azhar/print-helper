@@ -1,3 +1,6 @@
+import 'package:print_helper/admin/chat/models/group_participants_model.dart';
+import 'package:print_helper/models/search_modals.dart';
+
 class GroupDetail {
   final int id;
   final String title;
@@ -8,7 +11,7 @@ class GroupDetail {
   final List<int> adminIds;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final List<GroupParticipant> participants;
+  final GroupParticipantsData participants;
   final int participantsCount;
 
   GroupDetail({
@@ -26,17 +29,12 @@ class GroupDetail {
   });
 
   factory GroupDetail.fromJson(Map<String, dynamic> json) {
-    final participants = (json['participants'] as List)
-        .map((e) => GroupParticipant.fromJson(e))
-        .toList();
+    final participantsData = GroupParticipantsData.fromJson(
+      json['participants'] ?? {},
+    );
 
-    // Collect admin IDs from top-level array OR from each participant's pivot
-    final topLevelAdminIds = List<int>.from(json['admin_ids'] ?? []);
-    final pivotAdminIds = participants
-        .where((p) => p.isAdmin)
-        .map((p) => p.id)
-        .toList();
-    final allAdminIds = {...topLevelAdminIds, ...pivotAdminIds}.toList();
+    // Collect admin IDs from top-level array
+    final allAdminIds = List<int>.from(json['admin_ids'] ?? []);
 
     return GroupDetail(
       id: json['id'],
@@ -48,9 +46,65 @@ class GroupDetail {
       adminIds: allAdminIds,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
-      participants: participants,
+      participants: participantsData,
       participantsCount: json['participants_count'] ?? 0,
     );
+  }
+}
+
+class GroupParticipantsData {
+  final List<SearchUsers> selectedStaff;
+  final List<ClientCompanyModel> selectedClients;
+  final List<SearchUsers> availableStaff;
+  final List<ClientCompanyModel> availableClients;
+
+  GroupParticipantsData({
+    required this.selectedStaff,
+    required this.selectedClients,
+    required this.availableStaff,
+    required this.availableClients,
+  });
+
+  factory GroupParticipantsData.fromJson(Map<String, dynamic> json) {
+    final selected = json['selected'] ?? {};
+    final available = json['available'] ?? {};
+
+    return GroupParticipantsData(
+      selectedStaff: (selected['staff'] as List? ?? []).map((e) {
+        e['userType'] = 'STAFF';
+        return SearchUsers.fromJson(e);
+      }).toList(),
+      selectedClients: (selected['clients'] as List? ?? [])
+          .map((e) => ClientCompanyModel.fromJson(e))
+          .toList(),
+      availableStaff: (available['staff'] as List? ?? []).map((e) {
+        e['userType'] = 'STAFF';
+        return SearchUsers.fromJson(e);
+      }).toList(),
+      availableClients: (available['clients'] as List? ?? [])
+          .map((e) => ClientCompanyModel.fromJson(e))
+          .toList(),
+    );
+  }
+
+  /// Returns a flat list of all selected participants (staff + client members)
+  List<SearchUsers> get allSelectedParticipants {
+    final Map<int, SearchUsers> deduplicated = {};
+
+    for (var u in selectedStaff) {
+      deduplicated[u.id] = u;
+    }
+
+    for (var client in selectedClients) {
+      for (var u in client.contacts) {
+        deduplicated[u.id] = u;
+      }
+      for (var u in client.customers) {
+        deduplicated[u.id] = u;
+      }
+    }
+
+    return deduplicated.values.toList();
   }
 }
 

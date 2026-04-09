@@ -45,6 +45,10 @@ dependencies:
   uuid: ^4.0.0
   video_player: ^2.10.3
   chewie: ^1.9.0
+  chunked_uploader: ^1.1.0
+  dio: ^5.4.0
+  crypto: ^3.0.6
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

@@ -293,37 +293,26 @@ class _ClientScreenState extends State<ClientScreen> {
     ClientPro provider,
     int index,
   ) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 15.h),
-      padding: EdgeInsets.all(16.w),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18.r),
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: .08),
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _topRow(context, item, provider, index),
-          Divider(color: AppColors.grey.withValues(alpha: .5), thickness: 1),
-          Spacers.sb10(),
-          ...List.generate(item.contacts.length, (i) {
-            return _contactCard(
-              item.contacts[i],
-              provider,
-              item,
-              i,
-              item.contacts.length,
-            );
-          }),
-        ],
-      ),
+    return _ExpandableClientCard(
+      item: item,
+      provider: provider,
+      index: index,
+      parentContext: context,
+      isFromAdmin: widget.isFromAdmin,
+      isFromStaff: widget.isFromStaff,
+      isFromClient: widget.isFromClient,
+      onChatTap: widget.onChatTap,
+      topRowBuilder: (isExpanded) =>
+          _topRow(context, item, provider, index, isExpanded),
+      contactsBuilder: () => List.generate(item.contacts.length, (i) {
+        return _contactCard(
+          item.contacts[i],
+          provider,
+          item,
+          i,
+          item.contacts.length,
+        );
+      }),
     );
   }
 
@@ -332,6 +321,7 @@ class _ClientScreenState extends State<ClientScreen> {
     ClientModel item,
     ClientPro provider,
     int index,
+    bool isExpanded,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -419,7 +409,7 @@ class _ClientScreenState extends State<ClientScreen> {
                           provider
                               .toggleStatus(item.id, val, context)
                               .whenComplete(() {
-                                if (!mounted) return;
+                                if (!context.mounted) return;
                                 provider.getClients(ctx: context, page: 1);
                               });
                         },
@@ -576,31 +566,47 @@ class _ClientScreenState extends State<ClientScreen> {
                 fontSize: 12,
               ),
             ),
-            GestureDetector(
-              onTap: () {
-                navTo(
-                  context: context,
-                  page: CustomersScreen(
-                    isFromAdmin: widget.isFromAdmin,
-                    id: item.id,
-                    isFromStaff: widget.isFromStaff,
-                    isFromClient: widget.isFromClient,
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    navTo(
+                      context: context,
+                      page: CustomersScreen(
+                        isFromAdmin: widget.isFromAdmin,
+                        id: item.id,
+                        isFromStaff: widget.isFromStaff,
+                        isFromClient: widget.isFromClient,
+                      ),
+                    );
+                  },
+                  child: Container(
+                    margin: EdgeInsets.only(top: 5.h),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10.w,
+                      vertical: 5.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(6.r),
+                    ),
+                    child: TextWidget(
+                      text:
+                          '${provider.clients[index].customersCount} Customer',
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
                   ),
-                );
-              },
-              child: Container(
-                margin: EdgeInsets.only(top: 5.h),
-                padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(6.r),
                 ),
-                child: TextWidget(
-                  text: '${provider.clients[index].customersCount} Customer',
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
+                Spacers.sbw8(),
+                Icon(
+                  isExpanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  color: Colors.black54,
+                  size: 20.sp,
                 ),
-              ),
+              ],
             ),
           ],
         ),
@@ -867,6 +873,95 @@ class _ClientScreenState extends State<ClientScreen> {
     return IconButton(
       onPressed: onPressed,
       icon: ImageWidget(image: image, width: width),
+    );
+  }
+}
+
+class _ExpandableClientCard extends StatefulWidget {
+  final ClientModel item;
+  final ClientPro provider;
+  final int index;
+  final BuildContext parentContext;
+  final bool isFromAdmin;
+  final bool isFromStaff;
+  final bool isFromClient;
+  final VoidCallback? onChatTap;
+  final Widget Function(bool isExpanded) topRowBuilder;
+  final List<Widget> Function() contactsBuilder;
+
+  const _ExpandableClientCard({
+    required this.item,
+    required this.provider,
+    required this.index,
+    required this.parentContext,
+    required this.isFromAdmin,
+    required this.isFromStaff,
+    required this.isFromClient,
+    this.onChatTap,
+    required this.topRowBuilder,
+    required this.contactsBuilder,
+  });
+
+  @override
+  State<_ExpandableClientCard> createState() => _ExpandableClientCardState();
+}
+
+class _ExpandableClientCardState extends State<_ExpandableClientCard> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 15.h),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18.r),
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .08),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isExpanded = !_isExpanded;
+              });
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              padding: EdgeInsets.all(16.w),
+              decoration: BoxDecoration(
+                color: _isExpanded
+                    ? const Color(0xffeff6ff)
+                    : Colors.transparent,
+                borderRadius: _isExpanded
+                    ? BorderRadius.vertical(top: Radius.circular(18.r))
+                    : BorderRadius.circular(18.r),
+              ),
+              child: widget.topRowBuilder(_isExpanded),
+            ),
+          ),
+          if (_isExpanded) ...[
+            // Padding(
+            //   padding: EdgeInsets.symmetric(horizontal: 16.w),
+            //   child: Divider(color: AppColors.grey.withValues(alpha: .5), thickness: 1),
+            // ),
+            Padding(
+              padding: EdgeInsets.only(left: 16.w, right: 16.w, bottom: 16.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [Spacers.sb10(), ...widget.contactsBuilder()],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

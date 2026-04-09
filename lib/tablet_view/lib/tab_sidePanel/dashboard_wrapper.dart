@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:print_helper/providers/client_pro.dart';
 import '../../../widgets/loaders.dart';
+import '../../../widgets/toasts.dart';
 import '../tab_settings/tab_settings.dart';
 import 'package:provider/provider.dart';
 import '../tab_admin/tab_accounts/tab_accounts_list.dart';
@@ -10,6 +12,7 @@ import '../tab_client/tab_clients_list.dart';
 import '../tab_chat/view/tab_chat_wrapper.dart';
 import 'package:print_helper/admin/chat/provider/chat_pro.dart';
 import '../tab_services/helpers.dart';
+import '../tab_files/tab_files_screen.dart';
 import 'sidepannel.dart';
 
 class DashboardWrapper extends StatefulWidget {
@@ -29,6 +32,8 @@ class DashboardWrapper extends StatefulWidget {
 class _DashboardWrapperState extends State<DashboardWrapper> {
   String currentPage = "";
   int? selectedClientId;
+  DateTime? _lastBackPress;
+  bool _backHandledByChild = false;
 
   @override
   void initState() {
@@ -87,24 +92,41 @@ class _DashboardWrapperState extends State<DashboardWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SideBar(
-          activePage: currentPage,
-          role: widget.role,
-          onMenuTap: (page) {
-            setState(() => currentPage = page);
-          },
-        ),
-        Container(width: 1, color: const Color(0xffe6e7e6)),
-        Expanded(child: _loadScreen(currentPage)),
-      ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (_backHandledByChild) {
+          _backHandledByChild = false;
+          return;
+        }
+        final now = DateTime.now();
+        if (_lastBackPress != null &&
+            now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
+          SystemNavigator.pop();
+        } else {
+          _lastBackPress = now;
+          showToast(message: 'Press back again to exit');
+        }
+      },
+      child: Row(
+        children: [
+          SideBar(
+            activePage: currentPage,
+            role: widget.role,
+            onMenuTap: (page) {
+              setState(() => currentPage = page);
+            },
+          ),
+          Container(width: 1, color: const Color(0xffe6e7e6)),
+          Expanded(child: _loadScreen(currentPage)),
+        ],
+      ),
     );
   }
 
   Widget _loadScreen(String page) {
     // STAFF ROLE SCREENS
-    debugPrint("${widget.role} roleeeeeeeeeeee");
+    debugPrint("${widget.role} role");
     if (widget.role == "CUSTOMER") {
       final pro = getAuthPro(context);
       debugPrint(pro.custClientId.toString());
@@ -132,7 +154,7 @@ class _DashboardWrapperState extends State<DashboardWrapper> {
           return const ChatWrapper();
         case "customers":
           final clientId = getAuthPro(context).user!.clientId;
-          debugPrint("$clientId idddddddddddddddddddddd");
+          debugPrint("$clientId id");
           if (clientId == null) {
             return Center(child: showLoader());
           }
@@ -149,7 +171,10 @@ class _DashboardWrapperState extends State<DashboardWrapper> {
         case "projects":
           return const SizedBox(); // ProjectsScreen()
         case "files":
-          return const SizedBox(); // FilesScreen()
+          return TabFilesScreen(
+            onMenuTap: (page) => setState(() => currentPage = page),
+            onBackHandled: () => _backHandledByChild = true,
+          );
         case "timetrack":
           return const SizedBox(); // TimeTrackScreen()
         case "clients":
@@ -199,7 +224,16 @@ class _DashboardWrapperState extends State<DashboardWrapper> {
           },
         );
       case "accounts":
-        return AccountsScreen();
+        return AccountsScreen(
+          onMenuTap: (newPage) {
+            setState(() => currentPage = newPage);
+          },
+        );
+      case "files":
+        return TabFilesScreen(
+          onMenuTap: (page) => setState(() => currentPage = page),
+          onBackHandled: () => _backHandledByChild = true,
+        );
       case "settings":
         return SettingsScreen();
       default:

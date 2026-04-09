@@ -11,6 +11,7 @@ class ReverbSocketService {
   PrivateChannel? _conversationChannel;
   PrivateChannel?
   _userChannel; // Added to keep track of user channel explicitly
+  Timer? _retryConnectTimer;
 
   // Subscriptions
   StreamSubscription? _messageSub;
@@ -24,6 +25,18 @@ class ReverbSocketService {
   StreamSubscription? _messageUpdatedSub; // Added for message edits
   StreamSubscription?
   _connectionEstablishedSub; // Prevents duplicate listeners on reconnect
+
+  // ----------------------------------------------------------------
+  // --- File/Folder Event Subscriptions ---
+  // ----------------------------------------------------------------
+  StreamSubscription? _folderCreatedSub;
+  StreamSubscription? _folderRenamedSub;
+  StreamSubscription? _folderDeletedSub;
+  StreamSubscription? _fileRenamedSub;
+  StreamSubscription? _fileDeletedSub;
+  StreamSubscription? _itemsDeletedSub;
+  StreamSubscription? _itemsMovedSub;
+  StreamSubscription? _itemsCopiedSub;
 
   bool _isConnected = false;
   final String? currentUserId;
@@ -52,6 +65,9 @@ class ReverbSocketService {
   final void Function(Map<String, dynamic>)?
   onUnreadCountUpdated; // For total unread counter badges
 
+  // 3. File Operation Callbacks
+  final void Function(Map<String, dynamic>)? onFileOperation;
+
   final VoidCallback onConnected;
 
   ReverbSocketService({
@@ -67,8 +83,32 @@ class ReverbSocketService {
     this.onGroupMemberRemoved,
     this.onConversationUpdated,
     this.onUnreadCountUpdated,
+    this.onFileOperation,
     this.currentUserId,
   });
+
+  void _handleConnectionError(
+    Object err,
+    void Function() refresh,
+    String source,
+  ) {
+    printData(title: source, data: err, e: true);
+    final message = err.toString().toLowerCase();
+    final isHostLookupFailure =
+        message.contains('failed host lookup') ||
+        message.contains('no address associated with hostname');
+
+    _retryConnectTimer?.cancel();
+
+    if (isHostLookupFailure) {
+      _retryConnectTimer = Timer(const Duration(seconds: 4), () {
+        refresh();
+      });
+      return;
+    }
+
+    refresh();
+  }
 
   /// ----------------------------------------------------------------
   /// 1. CONNECT USER CHANNEL (Global Events)
@@ -94,8 +134,7 @@ class ReverbSocketService {
     _client = PusherChannelsClient.websocket(
       options: options,
       connectionErrorHandler: (err, stack, refresh) {
-        printData(title: "Reverb User Error:", data: err, e: true);
-        refresh();
+        _handleConnectionError(err, refresh, "Reverb User Error:");
       },
     );
     _connectionEstablishedSub?.cancel();
@@ -110,6 +149,30 @@ class ReverbSocketService {
         "private-user.$userId",
         authorizationDelegate: auth,
       );
+
+      // --- DISCOVERY & BROADCAST HANDLING ---
+      // We use bindToAll() to catch everything, including the generic 'files.changed' event.
+      _userChannel!.bindToAll().listen((event) {
+        // 1. Log for debugging
+        if (event.name != 'pusher:pong' && event.name != 'pusher_internal:subscription_succeeded') {
+          printData(title: "🎈 REVERB EVENT:", data: "Name: ${event.name}, Data: ${event.data}");
+        }
+
+        // 2. Handle File System Mutations
+        if (event.name == 'files.changed' || event.name == '.files.changed') {
+          if (onFileOperation == null) return;
+          final data = _safeJsonDecode(event.data);
+          if (data != null) {
+            final action = data['action'] ?? event.name;
+            printData(
+              title: '📁 FILE EVENT: ${action.toString().toUpperCase()}',
+              data: data.toString(),
+            );
+            onFileOperation!(data);
+          }
+        }
+      });
+
       // EVENT: conversation.created
       // Triggered when someone else starts a chat with this user
       _conversationCreatedSub = _userChannel!
@@ -197,6 +260,7 @@ class ReverbSocketService {
         }
       });
 
+
       _userChannel!.subscribeIfNotUnsubscribed();
       onConnected();
     });
@@ -228,8 +292,7 @@ class ReverbSocketService {
       _client = PusherChannelsClient.websocket(
         options: options,
         connectionErrorHandler: (err, stack, refresh) {
-          printData(title: "Reverb Chat Error:", data: err, e: true);
-          refresh();
+          _handleConnectionError(err, refresh, "Reverb Chat Error:");
         },
       );
       _client.connect();
@@ -329,6 +392,7 @@ class ReverbSocketService {
   /// DISCONNECT SOCKET CLEANLY
   void disconnect() {
     printData(title: "🔌 Disconnecting Reverb socket", data: "");
+    _retryConnectTimer?.cancel();
     _connectionEstablishedSub?.cancel();
     _messageSub?.cancel();
     _typingSub?.cancel();
@@ -339,6 +403,14 @@ class ReverbSocketService {
     _conversationCreatedSub?.cancel();
     _unreadCountUpdatedSub?.cancel();
     _conversationUpdatedSub?.cancel();
+    _folderCreatedSub?.cancel();
+    _folderRenamedSub?.cancel();
+    _folderDeletedSub?.cancel();
+    _fileRenamedSub?.cancel();
+    _fileDeletedSub?.cancel();
+    _itemsDeletedSub?.cancel();
+    _itemsMovedSub?.cancel();
+    _itemsCopiedSub?.cancel();
     _conversationChannel?.unsubscribe();
     _userChannel?.unsubscribe();
     _conversationChannel = null;

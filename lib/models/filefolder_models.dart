@@ -1,3 +1,8 @@
+String _cleanUrl(String? url) {
+  if (url == null) return '';
+  return url.trim().replaceAll('`', '').trim();
+}
+
 class FileModel {
   final String id;
   final String filename;
@@ -43,8 +48,8 @@ class FileModel {
       uploadedBy.add(ownerImage);
     }
 
-    final filename =
-        (json['filename'] ?? json['name'] ?? json['title'] ?? '').toString();
+    final filename = (json['filename'] ?? json['name'] ?? json['title'] ?? '')
+        .toString();
     final extension = (json['extension'] ?? '').toString().toLowerCase();
     final rawType = (json['type'] ?? '').toString().toLowerCase();
     final resolvedType = rawType.isNotEmpty
@@ -59,16 +64,25 @@ class FileModel {
       id: (json['id'] ?? json['internal_path'] ?? json['path'] ?? filename)
           .toString(),
       filename: filename,
-      thumbnail: (json['thumbnail'] ?? json['path'] ?? json['storage_path'] ?? '')
-          .toString(),
+      thumbnail: _cleanUrl(
+        (json['thumbnail_url'] ??
+                json['thumbnail'] ??
+                json['preview_url'] ??
+                json['path'] ??
+                json['storage_path'] ??
+                '')
+            .toString(),
+      ),
       uploadedBy: uploadedBy,
       type: resolvedType,
       size: (json['size'] ?? '').toString(),
       createdAt: (json['created_at'] ?? '').toString(),
-      internalPath: (json['internal_path'] ?? '').toString(),
-      storagePath: (json['storage_path'] ?? json['path'] ?? '').toString(),
+      internalPath: _cleanUrl((json['internal_path'] ?? '').toString()),
+      storagePath: _cleanUrl(
+        (json['storage_path'] ?? json['path'] ?? '').toString(),
+      ),
       ownerName: ownerName,
-      ownerAvatar: ownerImage,
+      ownerAvatar: _cleanUrl(ownerImage),
     );
   }
 }
@@ -88,6 +102,8 @@ class FolderModel {
   final bool isSystem;
   final String ownerName;
   final String ownerAvatar;
+  final int fileCount;
+  final int sizeBytes;
 
   FolderModel({
     required this.title,
@@ -101,6 +117,8 @@ class FolderModel {
     required this.isSystem,
     required this.ownerName,
     required this.ownerAvatar,
+    required this.fileCount,
+    required this.sizeBytes,
   });
 
   factory FolderModel.fromJson(Map<String, dynamic> json) {
@@ -121,6 +139,8 @@ class FolderModel {
           '${(owner?['name'] ?? '').toString()} ${(owner?['last_name'] ?? '').toString()}'
               .trim(),
       ownerAvatar: (owner?['image'] ?? '').toString(),
+      fileCount: (json['file_count'] as num?)?.toInt() ?? 0,
+      sizeBytes: (json['size_bytes'] as num?)?.toInt() ?? 0,
     );
   }
 }

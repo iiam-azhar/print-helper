@@ -1,10 +1,10 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../../constants/paths.dart';
 import '../../models/chat_models.dart';
 import '../../../../providers/auth_pro.dart';
 import '../../../../widgets/image_widget.dart';
-import '../../../../widgets/spacers.dart';
 import '../../../../widgets/text_widget.dart';
 import 'package:provider/provider.dart';
 
@@ -16,9 +16,22 @@ void showMessageOptionsDialog({
   required VoidCallback onEdit,
   required VoidCallback onForward,
   required VoidCallback onDelete,
+  VoidCallback? onDownload,
 }) {
   final auth = context.read<AuthPro>();
   final bool isAdmin = auth.user?.roleName == 'ADMIN';
+  final canEdit = (msg.isMe || isAdmin) && msg.type == 'text';
+  final canDownload =
+      (msg.type == 'image' || msg.type == 'file') && onDownload != null;
+  final itemCount =
+      (canEdit ? 1 : 0) + 1 + (canDownload ? 1 : 0) + (isAdmin ? 1 : 0);
+  final screenSize = MediaQuery.of(context).size;
+  final menuWidth = 130.w;
+  final menuHeight = (itemCount * 38.h) + 16.h;
+  final preferredLeft = position.dx - 8.w;
+  final preferredTop = position.dy + size.height + 6.h;
+  final left = preferredLeft.clamp(8.w, screenSize.width - menuWidth - 8.w);
+  final top = preferredTop.clamp(8.h, screenSize.height - menuHeight - 8.h);
 
   showGeneralDialog(
     context: context,
@@ -44,14 +57,15 @@ void showMessageOptionsDialog({
         child: Stack(
           children: [
             Positioned(
-              top: position.dy + size.height + 6,
-              left: isAdmin ? position.dx - 150 : position.dx - 50,
+              top: top,
+              left: left,
               child: GestureDetector(
                 onTap: () {},
                 child: Container(
+                  width: menuWidth,
                   padding: EdgeInsets.symmetric(
-                    horizontal: 14.w,
-                    vertical: 10.h,
+                    horizontal: 12.w,
+                    vertical: 8.h,
                   ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.95),
@@ -64,12 +78,12 @@ void showMessageOptionsDialog({
                       ),
                     ],
                   ),
-                  child: Row(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (isAdmin && msg.type != 'voice') ...[
-                        Spacers.sbw8(),
-                        _popupIcon(
+                      if (canEdit)
+                        _popupOptionRow(
                           icon: Paths.edit,
                           label: "Edit",
                           onTap: () {
@@ -77,10 +91,7 @@ void showMessageOptionsDialog({
                             onEdit();
                           },
                         ),
-                        Spacers.sbw15(),
-                        Spacers.sbw2(),
-                      ],
-                      _popupIcon(
+                      _popupOptionRow(
                         icon: Paths.share,
                         label: "Forward",
                         onTap: () {
@@ -88,9 +99,17 @@ void showMessageOptionsDialog({
                           onForward();
                         },
                       ),
-                      if (isAdmin) ...[
-                        Spacers.sbw15(),
-                        _popupIcon(
+                      if (canDownload)
+                        _popupOptionRow(
+                          iconData: CupertinoIcons.cloud_download,
+                          label: "Download",
+                          onTap: () {
+                            Navigator.pop(context);
+                            onDownload();
+                          },
+                        ),
+                      if (isAdmin)
+                        _popupOptionRow(
                           icon: Paths.delete,
                           label: "Delete",
                           onTap: () {
@@ -98,7 +117,6 @@ void showMessageOptionsDialog({
                             onDelete();
                           },
                         ),
-                      ],
                     ],
                   ),
                 ),
@@ -111,26 +129,34 @@ void showMessageOptionsDialog({
   );
 }
 
-Widget _popupIcon({
-  required String icon,
+Widget _popupOptionRow({
+  String? icon,
+  IconData? iconData,
   required String label,
   required VoidCallback onTap,
 }) {
+  final Widget leading = iconData != null
+      ? Icon(iconData, size: 18, color: Colors.black87)
+      : ImageWidget(image: icon ?? '', width: 18, height: 18);
+
   return GestureDetector(
     onTap: onTap,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ImageWidget(image: icon, width: 22, height: 22),
-        Spacers.sb2(),
-        TextWidget(
-          text: label,
-          fontSize: 10,
-          fontWeight: FontWeight.w500,
-          color: Colors.black87,
-          decoration: TextDecoration.none,
-        ),
-      ],
+    child: Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 7.h),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          leading,
+          SizedBox(width: 8.w),
+          TextWidget(
+            text: label,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: Colors.black87,
+            decoration: TextDecoration.none,
+          ),
+        ],
+      ),
     ),
   );
 }

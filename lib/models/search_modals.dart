@@ -7,6 +7,7 @@ class SearchUsers {
   final int role;
   final bool isOnline;
   final DateTime? lastSeenAt;
+  final String userType;
 
   SearchUsers({
     required this.id,
@@ -17,6 +18,7 @@ class SearchUsers {
     required this.role,
     this.isOnline = false,
     this.lastSeenAt,
+    this.userType = 'STAFF',
   });
 
   factory SearchUsers.fromJson(Map<String, dynamic> json) {
@@ -28,6 +30,7 @@ class SearchUsers {
       image: json['image'],
       role: json['role'] ?? 0,
       isOnline: json['is_online'] ?? false,
+      userType: json['userType'] ?? 'STAFF',
       lastSeenAt: json['last_seen_at'] != null
           ? DateTime.tryParse(json['last_seen_at'].toString())
           : null,

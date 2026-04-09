@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:print_helper/splash/splash.dart';
 import 'package:print_helper/tablet_view/lib/tab_onboarding/tab_splash.dart';
+import 'package:print_helper/widgets/global_upload_overlay.dart';
 import 'constants/colors.dart';
 import 'constants/strings.dart';
 import 'services/navigation_service.dart';
@@ -53,6 +54,14 @@ class _MyAppState extends State<MyApp> {
               colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
               scaffoldBackgroundColor: AppColors.scaffold,
             ),
+            builder: (context, child) {
+              return Stack(
+                children: [
+                  if (child != null) child,
+                  const GlobalUploadOverlay(),
+                ],
+              );
+            },
             home: _isTablet(context) ? const TabSplash() : const Splash(),
           ),
         );

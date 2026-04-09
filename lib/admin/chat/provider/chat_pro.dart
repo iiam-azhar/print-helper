@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart' as dio_pkg;
 import 'package:flutter/material.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:print_helper/models/search_modals.dart';
 import 'package:print_helper/models/twilio_models.dart';
 import 'package:print_helper/services/helpers.dart';
@@ -13,6 +16,7 @@ import 'package:print_helper/widgets/toasts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/chat_group_model.dart';
+import '../models/group_participants_model.dart';
 import '../models/chat_models.dart';
 import '../../../models/profile_models.dart';
 import '../../../services/api_routes.dart';
@@ -20,7 +24,52 @@ import '../service/chat_push_notify.dart';
 import '../service/reverb_service.dart';
 import '../service/voice_recorder_service.dart';
 import '../../../utils/console_util.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/files_pro.dart';
 import '../../../widgets/loaders.dart';
+
+class ChatDuplicateFileMatch {
+  final String originalName;
+  final String? existingName;
+  final String? hash;
+  final int? size;
+  final String? mimeType;
+  final int? messageId;
+  final String? attachmentUrl;
+  final Map<String, dynamic> raw;
+
+  const ChatDuplicateFileMatch({
+    required this.originalName,
+    this.existingName,
+    this.hash,
+    this.size,
+    this.mimeType,
+    this.messageId,
+    this.attachmentUrl,
+    this.raw = const {},
+  });
+
+  String get displayName =>
+      (existingName != null && existingName!.trim().isNotEmpty)
+      ? existingName!.trim()
+      : originalName;
+
+  bool get canReshare =>
+      (attachmentUrl != null && attachmentUrl!.trim().isNotEmpty) ||
+      messageId != null;
+}
+
+class ChatDuplicateFileCheckResult {
+  final bool hasDuplicates;
+  final List<ChatDuplicateFileMatch> matches;
+  final Map<String, dynamic> raw;
+
+  const ChatDuplicateFileCheckResult({
+    required this.hasDuplicates,
+    required this.matches,
+    this.raw = const {},
+  });
+}
 
 class ChatPro extends ChangeNotifier {
   bool isConnecting = true;
@@ -35,6 +84,7 @@ class ChatPro extends ChangeNotifier {
       {}; // Deduplicates concurrent firings
   final List<ChatConversation> conversations = [];
   final List<ChatMessage> messages = [];
+  final Map<int, int> _pendingDeletedMessageIndexes = {};
   ReverbSocketService? _chatListSocket; // Keeps global user events (new chats)
   ReverbSocketService? _conversationSocket;
 
@@ -50,6 +100,13 @@ class ChatPro extends ChangeNotifier {
   bool isLoading = false;
   String? errorMessage;
   Timer? _debounce;
+
+  // --- Group Participants (Create/Edit Group) ---
+  bool isFetchingGroupParticipants = false;
+  List<SearchUsers> staffList = [];
+  List<ClientCompanyModel> clientCompanies = [];
+  ClientCompanyModel? selectedClientCompany;
+  String selectedClientFilter = 'All'; // 'All' | 'Contacts' | 'Customers'
 
   int _currentPage = 1;
   bool _isLoadingMore = false;
@@ -72,6 +129,10 @@ class ChatPro extends ChangeNotifier {
 
   final VoiceRecorderService _voiceRecorder = VoiceRecorderService();
   bool isRecordingVoice = false;
+
+  // Attachment upload state (keyed by temp message id)
+  final Map<int, double> uploadProgress = {};
+  final Map<int, String> localAttachmentPaths = {};
 
   // Twilio Numbers
   List<TwilioCredential> twilioNumbers = [];
@@ -467,6 +528,15 @@ class ChatPro extends ChangeNotifier {
       onUnreadCountUpdated: (data) {
         _handleUnreadCountUpdated(data);
       },
+      onFileOperation: (data) {
+        // Relay file system mutations to the FilesPro provider for instant patching
+        try {
+          final filesPro = Provider.of<FilesPro>(context, listen: false);
+          filesPro.handleFileSystemMutation(data);
+        } catch (e) {
+          printData(title: "⚠️ FilesPro Relay Error:", data: e, e: true);
+        }
+      },
     );
     _chatListSocket!.connectUserChannel(
       host: ApiRoutes.socketHost,
@@ -606,18 +676,23 @@ class ChatPro extends ChangeNotifier {
         messages[existingIndex] = msg;
       } else {
         if (msg.senderId == currentUserId && !isCallMessage) {
-          final optimisticIndex = messages.indexWhere(
-            (m) =>
-                m.isMe &&
-                m.conversationId == eventConversationId &&
-                m.type == msg.type &&
-                m.message == msg.message,
+          final optimisticIndex = _findOptimisticReplacementIndex(
+            incomingMessage: msg,
+            conversationId: eventConversationId,
           );
 
           if (optimisticIndex != -1) {
             messages[optimisticIndex] = msg;
           } else {
-            messages.insert(0, msg);
+            final duplicateIndex = _findLikelyDuplicateSelfMessageIndex(
+              incomingMessage: msg,
+              conversationId: eventConversationId,
+            );
+            if (duplicateIndex != -1) {
+              messages[duplicateIndex] = msg;
+            } else {
+              messages.insert(0, msg);
+            }
           }
         } else {
           messages.insert(0, msg);
@@ -652,17 +727,178 @@ class ChatPro extends ChangeNotifier {
     }
   }
 
+  int _findOptimisticReplacementIndex({
+    required ChatMessage incomingMessage,
+    required int conversationId,
+  }) {
+    final incomingType = incomingMessage.type;
+
+    // Text messages are safe to match by content.
+    if (incomingType == 'text') {
+      return messages.indexWhere(
+        (message) =>
+            message.isMe &&
+            message.conversationId == conversationId &&
+            message.type == 'text' &&
+            message.message == incomingMessage.message,
+      );
+    }
+
+    // Attachments are frequently sent with identical fallback text (e.g. 📷 Image),
+    // so match by "still optimistic" state instead of content.
+    if (incomingType == 'image' || incomingType == 'file') {
+      return messages.indexWhere(
+        (message) =>
+            message.isMe &&
+            message.conversationId == conversationId &&
+            (message.type == 'image' || message.type == 'file') &&
+            localAttachmentPaths.containsKey(message.id),
+      );
+    }
+
+    // Voice optimistic messages carry local file paths before server URL arrives.
+    if (incomingType == 'voice') {
+      return messages.indexWhere(
+        (message) =>
+            message.isMe &&
+            message.conversationId == conversationId &&
+            message.type == 'voice' &&
+            message.audioUrl != null &&
+            (message.audioUrl!.startsWith('/data') ||
+                message.audioUrl!.startsWith('file://')),
+      );
+    }
+
+    return -1;
+  }
+
+  int _findLikelyDuplicateSelfMessageIndex({
+    required ChatMessage incomingMessage,
+    required int conversationId,
+  }) {
+    return messages.indexWhere((message) {
+      if (!message.isMe) return false;
+      if (message.conversationId != conversationId) return false;
+
+      final incomingIsAttachment =
+          incomingMessage.type == 'image' || incomingMessage.type == 'file';
+      final currentIsAttachment =
+          message.type == 'image' || message.type == 'file';
+
+      if (incomingIsAttachment && currentIsAttachment) {
+        // treat image/file as equivalent attachment message families
+      } else if (message.type != incomingMessage.type) {
+        return false;
+      }
+
+      final ageGap = message.createdAt
+          .difference(incomingMessage.createdAt)
+          .inSeconds
+          .abs();
+      if (ageGap > 20) return false;
+
+      if (incomingIsAttachment) {
+        final incomingUrl = incomingMessage.attachmentUrl ?? '';
+        final currentUrl = message.attachmentUrl ?? '';
+        final incomingName = incomingMessage.attachmentName ?? '';
+        final currentName = message.attachmentName ?? '';
+
+        if (incomingUrl.isNotEmpty && currentUrl.isNotEmpty) {
+          return incomingUrl == currentUrl;
+        }
+
+        if (incomingName.isNotEmpty && currentName.isNotEmpty) {
+          return incomingName == currentName;
+        }
+      }
+
+      return message.message == incomingMessage.message;
+    });
+  }
+
+  Map<String, dynamic>? _messagePayloadFromResponseData(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      final nested = data['message'];
+      if (nested is Map<String, dynamic>) return nested;
+      if (nested is Map) return Map<String, dynamic>.from(nested);
+      return data;
+    }
+    if (data is Map) {
+      final map = Map<String, dynamic>.from(data);
+      final nested = map['message'];
+      if (nested is Map<String, dynamic>) return nested;
+      if (nested is Map) return Map<String, dynamic>.from(nested);
+      return map;
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _normalizeDeleteEnvelope(Map<String, dynamic> data) {
+    if (data['data'] is Map) {
+      return Map<String, dynamic>.from(data['data'] as Map);
+    }
+    return data;
+  }
+
+  bool _isTruthy(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final lower = value.trim().toLowerCase();
+      return lower == 'true' || lower == '1' || lower == 'yes';
+    }
+    return false;
+  }
+
+  ChatMessage? _buildPreservedDeletedMessage(Map<String, dynamic> rawData) {
+    final data = _normalizeDeleteEnvelope(rawData);
+    final shouldPreserve =
+        _isTruthy(data['preserve_message']) ||
+        _isTruthy(data['show_delete_card']) ||
+        data['status']?.toString().toLowerCase() == 'deleted';
+
+    if (!shouldPreserve) return null;
+
+    final nested = data['message'];
+    if (nested is! Map && nested is! Map<String, dynamic>) return null;
+
+    final payload = Map<String, dynamic>.from(nested as Map);
+    payload['id'] ??= data['message_id'] ?? data['id'] ?? data['messageId'];
+    payload['conversation_id'] ??=
+        data['conversation_id'] ?? data['conversationId'];
+    payload['user_id'] ??= data['user_id'];
+    payload['type'] = (payload['type'] ?? 'text').toString();
+    payload['message'] = (payload['message'] ?? 'This message was deleted')
+        .toString();
+    payload['created_at'] ??= DateTime.now().toUtc().toIso8601String();
+
+    if (payload['id'] == null || payload['conversation_id'] == null) {
+      return null;
+    }
+
+    final parsedCurrentUserId = int.tryParse(_currentUserId ?? '') ?? -1;
+    return ChatMessage.fromJson(payload, parsedCurrentUserId);
+  }
+
   // 2. ✅ Handle Message Deletion
   void _handleMessageDeleted(Map<String, dynamic> data) {
     try {
-      final payload = data['message'] is Map
-          ? Map<String, dynamic>.from(data['message'])
-          : Map<String, dynamic>.from(data);
+      final envelope = _normalizeDeleteEnvelope(data);
+      final preservedMessage = _buildPreservedDeletedMessage(envelope);
+
+      final payload = envelope['message'] is Map
+          ? Map<String, dynamic>.from(envelope['message'])
+          : Map<String, dynamic>.from(envelope);
 
       final dynamic rawMessageId =
-          payload['id'] ?? payload['message_id'] ?? payload['messageId'];
+          payload['id'] ??
+          envelope['message_id'] ??
+          payload['message_id'] ??
+          payload['messageId'];
       final dynamic rawConversationId =
-          payload['conversation_id'] ?? payload['conversationId'];
+          payload['conversation_id'] ??
+          envelope['conversation_id'] ??
+          payload['conversationId'];
 
       final messageId = int.tryParse(rawMessageId?.toString() ?? '');
       final conversationId = int.tryParse(rawConversationId?.toString() ?? '');
@@ -675,8 +911,39 @@ class ChatPro extends ChangeNotifier {
         return;
       }
 
+      if (preservedMessage != null) {
+        final pendingIndex = _pendingDeletedMessageIndexes.remove(messageId);
+        final existingIndex = messages.indexWhere((m) => m.id == messageId);
+        if (existingIndex != -1) {
+          messages[existingIndex] = preservedMessage;
+        } else if (conversationId != null &&
+            currentActiveConversationId == conversationId) {
+          final insertionIndex =
+              (pendingIndex != null &&
+                  pendingIndex >= 0 &&
+                  pendingIndex <= messages.length)
+              ? pendingIndex
+              : 0;
+          messages.insert(insertionIndex, preservedMessage);
+        }
+
+        if (conversationId != null) {
+          _syncConversationAfterMessageDeletion(
+            conversationId: conversationId,
+            deletedMessageId: messageId,
+          );
+          if (currentActiveConversationId != conversationId) {
+            unawaited(_refreshConversationLatestMessage(conversationId));
+          }
+        }
+
+        notifyListeners();
+        return;
+      }
+
       final before = messages.length;
       messages.removeWhere((m) => m.id == messageId);
+      _pendingDeletedMessageIndexes.remove(messageId);
       final removed = before != messages.length;
 
       if (conversationId != null) {
@@ -959,8 +1226,9 @@ class ChatPro extends ChangeNotifier {
     } finally {
       final rawId = data['conversation_id'];
       final conversationId = int.tryParse(rawId?.toString() ?? '');
-      if (conversationId != null)
+      if (conversationId != null) {
         _groupRemovalInProgress.remove(conversationId);
+      }
     }
   }
 
@@ -1891,32 +2159,74 @@ class ChatPro extends ChangeNotifier {
 
       if (data['success'] == true && data['data'] != null) {
         currentGroup = GroupDetail.fromJson(data['data']);
-        selectedUsers
-          ..clear()
-          ..addAll(
-            currentGroup!.participants.map(
-              (p) => SearchUsers(
-                id: p.id,
-                name: p.name,
-                lastName: p.lastName,
-                image: p.image,
-                role: p.role,
-              ),
-            ),
-          );
+
+        // 1. Set the selected users for the Edit UI
+        selectedUsers.clear();
+        selectedUsers.addAll(
+          currentGroup!.participants.allSelectedParticipants,
+        );
+
+        // 2. Set the lists of staff and client companies so the UI can display them
+        // We combine selected and available for the full list, deduplicating by ID
+        final allStaffMap = <int, SearchUsers>{};
+        for (var u in [
+          ...currentGroup!.participants.selectedStaff,
+          ...currentGroup!.participants.availableStaff,
+        ]) {
+          allStaffMap[u.id] = u;
+        }
+        staffList = allStaffMap.values.toList();
+
+        final allClientsMap = <int, ClientCompanyModel>{};
+        for (var c in [
+          ...currentGroup!.participants.selectedClients,
+          ...currentGroup!.participants.availableClients,
+        ]) {
+          if (allClientsMap.containsKey(c.id)) {
+            // Merge members (contacts + customers)
+            final existing = allClientsMap[c.id]!;
+            final mergedContactsMap = <int, SearchUsers>{};
+            for (var u in [...existing.contacts, ...c.contacts]) {
+              mergedContactsMap[u.id] = u;
+            }
+            final mergedCustomersMap = <int, SearchUsers>{};
+            for (var u in [...existing.customers, ...c.customers]) {
+              mergedCustomersMap[u.id] = u;
+            }
+            allClientsMap[c.id] = ClientCompanyModel(
+              id: c.id,
+              companyName: c.companyName,
+              email: c.email ?? existing.email,
+              image: c.image ?? existing.image,
+              contacts: mergedContactsMap.values.toList(),
+              customers: mergedCustomersMap.values.toList(),
+            );
+          } else {
+            allClientsMap[c.id] = c;
+          }
+        }
+        clientCompanies = allClientsMap.values.toList();
+
+        // 3. Auto-select the client company if any selected users are client members
+        if (currentGroup!.participants.selectedClients.isNotEmpty) {
+          final firstSelectedId =
+              currentGroup!.participants.selectedClients.first.id;
+          selectedClientCompany = allClientsMap[firstSelectedId];
+        }
 
         // Update the conversation in the list so the ChatWindow header reflects changes
         final index = conversations.indexWhere((c) => c.id == conversationId);
         if (index != -1) {
           final existing = conversations[index];
-          final updatedParticipants = currentGroup!.participants
+          final updatedParticipants = currentGroup!
+              .participants
+              .allSelectedParticipants
               .map(
                 (p) => ChatParticipant(
                   id: p.id,
                   name: p.name,
                   lastName: p.lastName,
-                  username:
-                      p.name, // Fallback since it's not in GroupParticipant
+                  username: p.name,
                   image: p.image,
                   isOnline: p.isOnline,
                   phoneNumbers: [], // Fallback
@@ -2032,6 +2342,12 @@ class ChatPro extends ChangeNotifier {
     searchResults.clear();
     isLoading = false;
     errorMessage = null;
+    // Clear group participant state
+    staffList.clear();
+    clientCompanies.clear();
+    selectedClientCompany = null;
+    selectedClientFilter = 'All';
+    isFetchingGroupParticipants = false;
     notifyListeners();
   }
 
@@ -2073,6 +2389,69 @@ class ChatPro extends ChangeNotifier {
 
   void removeSelectedUser(SearchUsers user) {
     selectedUsers.removeWhere((u) => u.id == user.id);
+    notifyListeners();
+  }
+
+  /// Fetches the full participants list (staff + client companies) for group creation.
+  Future<void> fetchGroupParticipants() async {
+    if (isFetchingGroupParticipants) return;
+    isFetchingGroupParticipants = true;
+    notifyListeners();
+    try {
+      final headers = await apiHeaders();
+      final url = Uri.parse(
+        '${ApiRoutes.baseUrl}${ApiRoutes.groupParticipants}',
+      );
+      final response = await http.get(url, headers: headers);
+      printData(
+        title: 'fetchGroupParticipants status:',
+        data: response.statusCode,
+      );
+      printData(title: 'fetchGroupParticipants body:', data: response.body);
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded['success'] == true && decoded['data'] != null) {
+          final parsed = GroupParticipantsResponse.fromJson(
+            decoded['data'] as Map<String, dynamic>,
+          );
+          staffList = parsed.staff;
+          clientCompanies = parsed.clients;
+        }
+      }
+    } catch (e) {
+      printData(title: 'fetchGroupParticipants error:', data: e, e: true);
+    } finally {
+      isFetchingGroupParticipants = false;
+      notifyListeners();
+    }
+  }
+
+  /// Selects a client company and resets the member filter.
+  /// If [company] is null (Clear), also removes all contacts/customers from selectedUsers.
+  void setClientCompany(ClientCompanyModel? company) {
+    selectedClientCompany = company;
+    selectedClientFilter = 'All';
+    // If we're setting a NEW company (not null and different from current),
+    // THEN we enforce the "one client per group" rule by clearing previous client users.
+    // If it's the SAME company, we don't clear anything.
+    if (company != null) {
+      // Check if any currently selected client users belong to a DIFFERENT company
+      // Since we only allow one client company, if we select a company, we should
+      // probably clear users that don't belong to THIS specific company if they are CONTACT/CUSTOMER.
+      // However, the requirement is "no need that jude diaz needed to be selected until when it manually removes".
+      // So we only clear if the company ID actually changes.
+
+      // We don't have a direct way to check which company a SearchUser belongs to easily without searching,
+      // but we can assume if selectedClientCompany changes, we might need to clear.
+      // BUT, if the user just clicks the same company in the list, we shouldn't clear.
+    }
+
+    notifyListeners();
+  }
+
+  /// Sets the filter for viewing members in the selected client company.
+  void setClientMemberFilter(String filter) {
+    selectedClientFilter = filter;
     notifyListeners();
   }
 
@@ -2424,6 +2803,803 @@ class ChatPro extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> sendAttachmentMessage({
+    required File file,
+    required int conversationId,
+    required int currentUserId,
+    String? caption,
+    String? overrideFileName,
+  }) async {
+    if (!await file.exists()) {
+      showToast(message: 'Selected file not found');
+      return false;
+    }
+
+    final fileName =
+        (overrideFileName != null && overrideFileName.trim().isNotEmpty)
+        ? overrideFileName.trim()
+        : _extractFileName(file.path);
+    final isImage = _isImageFile(fileName);
+    final messageText = (caption != null && caption.trim().isNotEmpty)
+        ? caption.trim()
+        : (isImage ? '📷 Image' : '📎 $fileName');
+    // Backend emits attachment realtime events as `type=file` (even for images).
+    // Keep optimistic type aligned with backend so replacement is deterministic.
+    const type = 'file';
+
+    // 1. Insert optimistic message immediately
+    final tempId = DateTime.now().millisecondsSinceEpoch;
+    localAttachmentPaths[tempId] = file.path;
+    uploadProgress[tempId] = 0.0;
+
+    final tempMessage = ChatMessage(
+      id: tempId,
+      conversationId: conversationId,
+      senderId: currentUserId,
+      message: messageText,
+      createdAt: DateTime.now(),
+      isMe: true,
+      type: type,
+      attachmentName: fileName,
+      attachmentMimeType: _mimeTypeFromName(fileName),
+      senderName: userProfile?.name ?? 'Me',
+      isRead: false,
+      isDelivered: false,
+    );
+    if (currentActiveConversationId == conversationId) {
+      messages.insert(0, tempMessage);
+    }
+
+    // 2. Update conversation list preview
+    final convIdx = conversations.indexWhere((c) => c.id == conversationId);
+    if (convIdx != -1) {
+      final old = conversations[convIdx];
+      conversations
+        ..removeAt(convIdx)
+        ..insert(
+          0,
+          ChatConversation(
+            id: old.id,
+            type: old.type,
+            title: old.title,
+            participants: old.participants,
+            latestMessage: ChatLatestMessage(
+              id: tempId,
+              message: messageText,
+              type: type,
+              createdAt: DateTime.now(),
+              userId: currentUserId,
+              userName: userProfile?.name ?? 'You',
+            ),
+            unreadCount: 0,
+            updatedAt: DateTime.now(),
+            isDefault: old.isDefault,
+            image: old.image,
+          ),
+        );
+    }
+    notifyListeners();
+
+    // 3. Upload using chat chunked flow:
+    //    init -> upload chunks -> (optional status) -> complete
+    try {
+      final dioClient = dio_pkg.Dio();
+      final jsonHeaders = await apiHeaders();
+
+      final int fileSize = await file.length();
+      const int requestedChunkSize = 1024 * 1024; // 1 MB
+
+      printData(
+        title: '📤 Chunk init',
+        data:
+            'name=$fileName size=$fileSize mime=${_mimeTypeFromName(fileName)} chunk_size=$requestedChunkSize',
+      );
+
+      final initResponse = await dioClient.post(
+        '${ApiRoutes.baseUrl}chat/conversations/$conversationId/files/chunk/init',
+        data: {
+          'name': fileName,
+          'size': fileSize,
+          'mime_type': _mimeTypeFromName(fileName),
+          'chunk_size': requestedChunkSize,
+        },
+        options: dio_pkg.Options(headers: jsonHeaders),
+      );
+
+      final initPayload = initResponse.data is Map
+          ? Map<String, dynamic>.from(initResponse.data as Map)
+          : <String, dynamic>{};
+      if (initPayload['success'] != true || initPayload['data'] is! Map) {
+        throw Exception('Chunk init failed');
+      }
+
+      final initData = Map<String, dynamic>.from(initPayload['data'] as Map);
+      final uploadId = initData['upload_id']?.toString() ?? '';
+      if (uploadId.isEmpty) {
+        throw Exception('Missing upload_id from chunk init');
+      }
+
+      final int chunkSize =
+          int.tryParse('${initData['chunk_size'] ?? requestedChunkSize}') ??
+          requestedChunkSize;
+      final int totalChunks =
+          int.tryParse('${initData['total_chunks'] ?? 0}') ??
+          ((fileSize + chunkSize - 1) ~/ chunkSize);
+
+      printData(
+        title: '📤 Chunk upload start',
+        data:
+            'upload_id=$uploadId chunk_size=$chunkSize total_chunks=$totalChunks',
+      );
+
+      final multipartHeaders = await apiHeaders();
+      multipartHeaders.remove('Content-Type');
+
+      final randomAccess = await file.open();
+      try {
+        for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          final int start = chunkIndex * chunkSize;
+          final int remaining = fileSize - start;
+          final int currentChunkSize = remaining < chunkSize
+              ? remaining
+              : chunkSize;
+
+          await randomAccess.setPosition(start);
+          final bytes = await randomAccess.read(currentChunkSize);
+
+          final formData = dio_pkg.FormData.fromMap({
+            'chunk_index': chunkIndex,
+            'chunk': dio_pkg.MultipartFile.fromBytes(
+              bytes,
+              filename: 'chunk_${chunkIndex.toString().padLeft(6, '0')}.part',
+              contentType: MediaType('application', 'octet-stream'),
+            ),
+          });
+
+          final chunkResponse = await dioClient.post(
+            '${ApiRoutes.baseUrl}chat/conversations/$conversationId/files/chunk/$uploadId',
+            data: formData,
+            options: dio_pkg.Options(headers: multipartHeaders),
+            onSendProgress: (sent, total) {
+              if (total <= 0) return;
+              final perChunk = sent / total;
+              final overall = (chunkIndex + perChunk) / totalChunks;
+              uploadProgress[tempId] = overall.clamp(0.0, 1.0);
+              notifyListeners();
+            },
+          );
+
+          final chunkPayload = chunkResponse.data is Map
+              ? Map<String, dynamic>.from(chunkResponse.data as Map)
+              : <String, dynamic>{};
+
+          if (chunkPayload['success'] != true) {
+            throw Exception(
+              chunkPayload['message']?.toString() ?? 'Chunk upload failed',
+            );
+          }
+
+          final chunkData = chunkPayload['data'] is Map
+              ? Map<String, dynamic>.from(chunkPayload['data'] as Map)
+              : <String, dynamic>{};
+          final progressPercent =
+              int.tryParse('${chunkData['progress'] ?? ''}') ??
+              (((chunkIndex + 1) / totalChunks) * 100).floor();
+          uploadProgress[tempId] = (progressPercent / 100).clamp(0.0, 1.0);
+          notifyListeners();
+        }
+      } finally {
+        await randomAccess.close();
+      }
+
+      final statusResponse = await dioClient.get(
+        '${ApiRoutes.baseUrl}chat/conversations/$conversationId/files/chunk/$uploadId/status',
+        options: dio_pkg.Options(headers: jsonHeaders),
+      );
+      final statusPayload = statusResponse.data is Map
+          ? Map<String, dynamic>.from(statusResponse.data as Map)
+          : <String, dynamic>{};
+      final statusData = statusPayload['data'] is Map
+          ? Map<String, dynamic>.from(statusPayload['data'] as Map)
+          : <String, dynamic>{};
+      final statusProgress = int.tryParse('${statusData['progress'] ?? ''}');
+      if (statusProgress != null) {
+        uploadProgress[tempId] = (statusProgress / 100).clamp(0.0, 1.0);
+        notifyListeners();
+      }
+
+      final dioResponse = await dioClient.post(
+        '${ApiRoutes.baseUrl}chat/conversations/$conversationId/files/chunk/$uploadId/complete',
+        options: dio_pkg.Options(headers: jsonHeaders),
+      );
+
+      printData(
+        title: '📥 Chunk complete response',
+        data: '${dioResponse.statusCode}: ${dioResponse.data}',
+      );
+
+      final data = dioResponse.data is Map<String, dynamic>
+          ? dioResponse.data as Map<String, dynamic>
+          : null;
+
+      if (data != null && data['success'] == true && data['data'] != null) {
+        final payload = _messagePayloadFromResponseData(data['data']);
+        if (payload == null) {
+          throw Exception('Missing message payload in chunk complete response');
+        }
+        final realMessage = ChatMessage.fromJson(payload, currentUserId);
+        final idx = messages.indexWhere((m) => m.id == tempId);
+        if (idx != -1) messages[idx] = realMessage;
+        uploadProgress.remove(tempId);
+        localAttachmentPaths.remove(tempId);
+        notifyListeners();
+        return true;
+      }
+
+      uploadProgress.remove(tempId);
+      localAttachmentPaths.remove(tempId);
+
+      notifyListeners();
+      return true;
+    } on dio_pkg.DioException catch (e) {
+      uploadProgress.remove(tempId);
+      localAttachmentPaths.remove(tempId);
+      messages.removeWhere((m) => m.id == tempId);
+
+      String errMsg = 'Failed to send attachment';
+      try {
+        final body = e.response?.data;
+        if (body is Map && body['message'] != null) {
+          errMsg = body['message'].toString();
+        }
+      } catch (_) {}
+
+      printData(
+        title: 'Attachment upload failed',
+        data: '${e.response?.statusCode}: ${e.response?.data}',
+        e: true,
+      );
+      showToast(message: errMsg);
+      notifyListeners();
+      return false;
+    } catch (e) {
+      uploadProgress.remove(tempId);
+      localAttachmentPaths.remove(tempId);
+      messages.removeWhere((m) => m.id == tempId);
+      printData(title: 'sendAttachmentMessage error', data: e, e: true);
+      showToast(message: 'Failed to send attachment');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<ChatDuplicateFileCheckResult?> checkExistingAttachment({
+    required File file,
+    required int conversationId,
+    String fileKey = 'file-1',
+  }) async {
+    if (!await file.exists()) {
+      printData(
+        title: '🧪 check-existing skipped',
+        data: 'File not found on disk: ${file.path}',
+        e: true,
+      );
+      return null;
+    }
+
+    try {
+      final fileName = _extractFileName(file.path);
+      final fileSize = await file.length();
+      final mimeType = _mimeTypeFromName(fileName);
+      final hash = await _sha256OfFileStream(file);
+      final headers = await apiHeaders();
+      final dioClient = dio_pkg.Dio();
+      final endpoint =
+          '${ApiRoutes.baseUrl}${ApiRoutes.checkExistingConversationFiles(conversationId)}';
+      final requestBody = {
+        'files': [
+          {
+            'key': fileKey,
+            'name': fileName,
+            'size': fileSize,
+            'mime_type': mimeType,
+            'hash': hash,
+          },
+        ],
+      };
+
+      printData(title: '🧪 check-existing request', data: 'POST $endpoint');
+      printData(title: '🧪 check-existing payload', data: requestBody);
+
+      final response = await dioClient.post(
+        endpoint,
+        data: requestBody,
+        options: dio_pkg.Options(headers: headers),
+      );
+
+      printData(
+        title: '🧪 check-existing response',
+        data: 'status=${response.statusCode} data=${response.data}',
+      );
+
+      final payload = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+      if (payload.isEmpty) {
+        printData(
+          title: '🧪 check-existing empty response',
+          data: 'Response payload is empty',
+          e: true,
+        );
+        return null;
+      }
+
+      final normalizedData = _normalizeDuplicatePayload(payload['data']);
+      final data = normalizedData ?? payload;
+      final matches = _extractDuplicateFileMatches(data);
+      final hasDuplicates =
+          _readBool(payload['has_duplicates']) ||
+          _readBool(data['has_duplicates']) ||
+          matches.isNotEmpty;
+
+      printData(
+        title: '🧪 check-existing parsed',
+        data:
+            'hasDuplicates=$hasDuplicates matches=${matches.length} conversationId=$conversationId file=$fileName',
+      );
+
+      return ChatDuplicateFileCheckResult(
+        hasDuplicates: hasDuplicates,
+        matches: matches,
+        raw: data,
+      );
+    } on dio_pkg.DioException catch (e) {
+      printData(
+        title: 'checkExistingAttachment failed',
+        data: '${e.response?.statusCode}: ${e.response?.data}',
+        e: true,
+      );
+      return null;
+    } catch (e) {
+      printData(title: 'checkExistingAttachment error', data: e, e: true);
+      return null;
+    }
+  }
+
+  Future<bool> reshareDuplicateAttachment({
+    required ChatDuplicateFileMatch match,
+    required File originalFile,
+    required String alternateFileName,
+    required int conversationId,
+    required int currentUserId,
+    String? caption,
+  }) async {
+    try {
+      // Get file statistics from original file
+      final fileSize = await originalFile.length();
+      final fileBytes = await originalFile.readAsBytes();
+      final fileHash = sha256.convert(fileBytes).toString();
+
+      // Get MIME type
+      String mimeType = match.mimeType ?? 'application/octet-stream';
+      if (mimeType.isEmpty) {
+        mimeType = _guessMimeType(alternateFileName);
+      }
+
+      // Use provided fileName or fallback to match data
+      final fileName = alternateFileName.isNotEmpty
+          ? alternateFileName
+          : (match.existingName != null &&
+                match.existingName!.trim().isNotEmpty)
+          ? match.existingName!.trim()
+          : match.originalName.isNotEmpty
+          ? match.originalName
+          : 'file';
+
+      if (fileName.isEmpty) {
+        printData(
+          title: '🧪 reshareDuplicateAttachment validation failed',
+          data: 'No valid file name available',
+          e: true,
+        );
+        showToast(message: 'File information incomplete');
+        return false;
+      }
+
+      final requestBody = {
+        'name': fileName,
+        'size': fileSize.toString(),
+        'mime_type': mimeType,
+        'hash': fileHash,
+        'message': caption ?? '',
+      };
+
+      final endpoint = ApiRoutes.restoreExistingConversationFile(
+        conversationId,
+      );
+
+      printData(title: '🧪 restore-existing request', data: 'POST $endpoint');
+      printData(title: '🧪 restore-existing payload', data: requestBody);
+
+      final headers = await apiHeaders();
+      final dioClient = dio_pkg.Dio();
+      final dioResponse = await dioClient.post(
+        '${ApiRoutes.baseUrl}$endpoint',
+        data: requestBody,
+        options: dio_pkg.Options(headers: headers),
+      );
+
+      printData(
+        title: '🧪 restore-existing response',
+        data: 'status=${dioResponse.statusCode} data=${dioResponse.data}',
+      );
+
+      final response = dioResponse.data is Map
+          ? Map<String, dynamic>.from(dioResponse.data as Map)
+          : null;
+
+      if (response == null) {
+        printData(
+          title: '🧪 restore-existing null/invalid response',
+          data: dioResponse.data,
+          e: true,
+        );
+        showToast(message: 'Failed to restore file');
+        return false;
+      }
+
+      final success = response['success'] == true;
+      final message = response['message'];
+      final messageStr = (message is String && message.isNotEmpty)
+          ? message
+          : '';
+
+      if (success) {
+        showToast(message: 'File restored successfully');
+        return true;
+      } else {
+        showToast(
+          message: messageStr.isNotEmpty
+              ? messageStr
+              : 'Failed to restore file',
+        );
+        return false;
+      }
+    } on dio_pkg.DioException catch (e) {
+      printData(
+        title: 'reshareDuplicateAttachment failed',
+        data: '${e.response?.statusCode}: ${e.response?.data}',
+        e: true,
+      );
+      showToast(message: 'Error restoring file');
+      return false;
+    } catch (e) {
+      printData(title: 'reshareDuplicateAttachment error', data: e, e: true);
+      showToast(message: 'Error restoring file');
+      return false;
+    }
+  }
+
+  Future<bool> forwardAttachmentMessage({
+    required String attachmentUrl,
+    required String fileName,
+    required int conversationId,
+    required int currentUserId,
+    String? mimeType,
+    String? caption,
+  }) async {
+    final tempDir = await getTemporaryDirectory();
+    final tempFile = File(
+      '${tempDir.path}${Platform.pathSeparator}chat_forward_${DateTime.now().millisecondsSinceEpoch}.bin',
+    );
+
+    try {
+      final dioClient = dio_pkg.Dio();
+      await dioClient.download(
+        _resolveAttachmentUrlForNetwork(attachmentUrl),
+        tempFile.path,
+        options: dio_pkg.Options(headers: await apiHeaders()),
+      );
+
+      return sendAttachmentMessage(
+        file: tempFile,
+        conversationId: conversationId,
+        currentUserId: currentUserId,
+        caption: caption,
+        overrideFileName: fileName,
+      );
+    } on dio_pkg.DioException catch (e) {
+      printData(
+        title: 'forwardAttachmentMessage failed',
+        data: '${e.response?.statusCode}: ${e.response?.data}',
+        e: true,
+      );
+      showToast(message: 'Failed to reshare attachment');
+      return false;
+    } catch (e) {
+      printData(title: 'forwardAttachmentMessage error', data: e, e: true);
+      showToast(message: 'Failed to reshare attachment');
+      return false;
+    } finally {
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+    }
+  }
+
+  bool _isImageFile(String fileName) {
+    final lower = fileName.toLowerCase();
+    return lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.gif');
+  }
+
+  String _mimeTypeFromName(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+      return 'image/jpeg';
+    }
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.doc')) return 'application/msword';
+    if (lower.endsWith('.docx')) {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+    if (lower.endsWith('.xls')) return 'application/vnd.ms-excel';
+    if (lower.endsWith('.xlsx')) {
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    }
+    return 'application/octet-stream';
+  }
+
+  String _extractFileName(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final segments = normalized.split('/');
+    return segments.isNotEmpty ? segments.last : path;
+  }
+
+  Future<String> _sha256OfFileStream(File file) async {
+    final digest = await sha256.bind(file.openRead()).first;
+    return digest.bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+  }
+
+  String _resolveAttachmentUrlForNetwork(String rawUrl) {
+    if (rawUrl.isEmpty || rawUrl.startsWith('http')) return rawUrl;
+    if (!rawUrl.startsWith('/')) return rawUrl;
+
+    final apiUri = Uri.parse(ApiRoutes.baseUrl);
+    final origin = apiUri.hasPort
+        ? '${apiUri.scheme}://${apiUri.host}:${apiUri.port}'
+        : '${apiUri.scheme}://${apiUri.host}';
+    return '$origin$rawUrl';
+  }
+
+  List<ChatDuplicateFileMatch> _extractDuplicateFileMatches(
+    Map<String, dynamic> payload,
+  ) {
+    final entries = <Map<String, dynamic>>[];
+
+    void addEntry(dynamic value) {
+      if (value is Map<String, dynamic>) {
+        entries.add(value);
+      } else if (value is Map) {
+        entries.add(Map<String, dynamic>.from(value));
+      } else if (value is List) {
+        for (final item in value) {
+          addEntry(item);
+        }
+      }
+    }
+
+    addEntry(payload['duplicates']);
+    addEntry(payload['matches']);
+    addEntry(payload['results']);
+    addEntry(payload['files']);
+    addEntry(payload['items']);
+    if (entries.isEmpty && _looksLikeDuplicateEntry(payload)) {
+      entries.add(payload);
+    }
+
+    final matches = <ChatDuplicateFileMatch>[];
+    for (final entry in entries) {
+      if (!_entryRepresentsDuplicate(entry)) continue;
+
+      final existing = _firstNestedMap(entry, const [
+        'existing_file',
+        'existing',
+        'duplicate',
+        'match',
+        'matched_file',
+      ]);
+      final message = _firstNestedMap(entry, const [
+        'message',
+        'existing_message',
+      ]);
+      final attachment = _firstNestedMap(entry, const ['attachment']);
+
+      final rawUrl = _firstNonEmptyString([
+        entry['url'],
+        entry['file_url'],
+        entry['image_url'],
+        existing?['url'],
+        existing?['file_url'],
+        existing?['image_url'],
+        attachment?['url'],
+        attachment?['file_url'],
+        attachment?['image_url'],
+        message?['url'],
+        message?['file_url'],
+        message?['image_url'],
+      ]);
+
+      matches.add(
+        ChatDuplicateFileMatch(
+          originalName:
+              _firstNonEmptyString([entry['name'], entry['file_name']]) ?? '',
+          existingName: _firstNonEmptyString([
+            existing?['name'],
+            existing?['file_name'],
+            attachment?['name'],
+            attachment?['file_name'],
+            message?['name'],
+            message?['file_name'],
+            entry['existing_name'],
+            entry['duplicate_name'],
+            entry['matched_name'],
+            entry['name'],
+            entry['file_name'],
+          ]),
+          hash: _firstNonEmptyString([existing?['hash'], entry['hash']]),
+          size: _firstInt([
+            existing?['size'],
+            attachment?['size'],
+            message?['size'],
+            entry['size'],
+          ]),
+          mimeType: _firstNonEmptyString([
+            existing?['mime_type'],
+            attachment?['mime_type'],
+            message?['mime_type'],
+            entry['mime_type'],
+          ]),
+          messageId: _firstInt([
+            existing?['message_id'],
+            message?['id'],
+            entry['message_id'],
+            entry['existing_message_id'],
+          ]),
+          attachmentUrl: rawUrl,
+          raw: entry,
+        ),
+      );
+    }
+
+    return matches;
+  }
+
+  Map<String, dynamic>? _normalizeDuplicatePayload(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    if (data is List) {
+      return {'items': data};
+    }
+    return null;
+  }
+
+  bool _entryRepresentsDuplicate(Map<String, dynamic> entry) {
+    if (entry.containsKey('exists')) {
+      final existsValue = _readBool(entry['exists']);
+      if (existsValue) return true;
+    }
+
+    if (_readBool(entry['duplicate']) ||
+        _readBool(entry['is_duplicate']) ||
+        _readBool(entry['already_exists']) ||
+        entry.containsKey('existing_file') ||
+        entry.containsKey('existing_message') ||
+        entry.containsKey('matched_file')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  bool _looksLikeDuplicateEntry(Map<String, dynamic> entry) {
+    return entry.containsKey('exists') ||
+        entry.containsKey('duplicate') ||
+        entry.containsKey('is_duplicate') ||
+        entry.containsKey('existing_file') ||
+        entry.containsKey('matches');
+  }
+
+  bool _readBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      return normalized == 'true' || normalized == '1' || normalized == 'yes';
+    }
+    return false;
+  }
+
+  Map<String, dynamic>? _firstNestedMap(
+    Map<String, dynamic> source,
+    List<String> keys,
+  ) {
+    for (final key in keys) {
+      final value = source[key];
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return Map<String, dynamic>.from(value);
+    }
+    return null;
+  }
+
+  String? _firstNonEmptyString(List<dynamic> values) {
+    for (final value in values) {
+      if (value == null) continue;
+      final text = value.toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return null;
+  }
+
+  int? _firstInt(List<dynamic> values) {
+    for (final value in values) {
+      if (value == null) continue;
+      if (value is int) return value;
+      final parsed = int.tryParse(value.toString());
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  String _guessMimeType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.doc') || lower.endsWith('.docx')) {
+      return 'application/msword';
+    }
+    if (lower.endsWith('.xls') || lower.endsWith('.xlsx')) {
+      return 'application/vnd.ms-excel';
+    }
+    if (lower.endsWith('.ppt') || lower.endsWith('.pptx')) {
+      return 'application/vnd.ms-powerpoint';
+    }
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.txt')) return 'text/plain';
+    if (lower.endsWith('.zip')) return 'application/zip';
+    if (lower.endsWith('.mp3')) return 'audio/mpeg';
+    if (lower.endsWith('.mp4')) return 'video/mp4';
+    return 'application/octet-stream';
+  }
+
+  ChatMessage? findExistingAttachmentMessage(ChatDuplicateFileMatch match) {
+    if (match.messageId != null) {
+      try {
+        return messages.firstWhere((message) => message.id == match.messageId);
+      } catch (_) {}
+    }
+
+    final desiredName = match.displayName.trim().toLowerCase();
+    if (desiredName.isEmpty) return null;
+
+    for (final message in messages) {
+      final currentName = (message.attachmentName ?? '').trim().toLowerCase();
+      if (currentName == desiredName) {
+        return message;
+      }
+    }
+    return null;
+  }
+
   Future<void> editMessage({
     required int messageId,
     required String newMessage,
@@ -2469,20 +3645,81 @@ class ChatPro extends ChangeNotifier {
   Future<void> deleteMessage({
     required int messageId,
     required int conversationId,
+    String? deleteScope,
   }) async {
     Loaders.show();
     final int index = messages.indexWhere((m) => m.id == messageId);
     ChatMessage? deletedMessage;
     if (index != -1) {
       deletedMessage = messages[index];
+      _pendingDeletedMessageIndexes[messageId] = index;
       messages.removeAt(index);
       notifyListeners();
     }
     try {
       final url = Uri.parse("${ApiRoutes.baseUrl}chat/messages/$messageId");
-      final res = await http.delete(url, headers: await apiHeaders());
-      printData(title: "Delete response", data: res.statusCode);
+      final request = http.Request('DELETE', url);
+      request.headers.addAll(await apiHeaders());
+      if (deleteScope != null && deleteScope.trim().isNotEmpty) {
+        request.body = jsonEncode({'delete_scope': deleteScope.trim()});
+      }
+
+      final sanitizedHeaders = Map<String, String>.from(request.headers);
+      if (sanitizedHeaders.containsKey('Authorization')) {
+        sanitizedHeaders['Authorization'] = 'Bearer ***';
+      }
+      if (sanitizedHeaders.containsKey('authorization')) {
+        sanitizedHeaders['authorization'] = 'Bearer ***';
+      }
+
+      printData(title: "Delete request url", data: url.toString());
+      printData(title: "Delete request method", data: request.method);
+      printData(title: "Delete request headers", data: sanitizedHeaders);
+      printData(
+        title: "Delete request body",
+        data: request.body.isEmpty ? "<empty>" : request.body,
+      );
+
+      final streamedResponse = await request.send();
+      final res = await http.Response.fromStream(streamedResponse);
+      printData(title: "Delete response status", data: res.statusCode);
+      printData(title: "Delete response headers", data: res.headers);
+      printData(
+        title: "Delete response body",
+        data: res.body.isEmpty ? "<empty>" : res.body,
+      );
       if (res.statusCode == 200 || res.statusCode == 204) {
+        Map<String, dynamic>? decodedResponse;
+        if (res.body.isNotEmpty) {
+          try {
+            final dynamic parsed = jsonDecode(res.body);
+            if (parsed is Map<String, dynamic>) {
+              decodedResponse = parsed;
+            } else if (parsed is Map) {
+              decodedResponse = Map<String, dynamic>.from(parsed);
+            }
+          } catch (_) {}
+        }
+
+        final preservedMessage = decodedResponse != null
+            ? _buildPreservedDeletedMessage(decodedResponse)
+            : null;
+
+        if (preservedMessage != null) {
+          final existingIndex = messages.indexWhere(
+            (m) => m.id == preservedMessage.id,
+          );
+          if (existingIndex != -1) {
+            messages[existingIndex] = preservedMessage;
+          } else if (index != -1 && index <= messages.length) {
+            messages.insert(index, preservedMessage);
+          } else {
+            messages.insert(0, preservedMessage);
+          }
+        }
+
+        _pendingDeletedMessageIndexes.remove(messageId);
+
         _syncConversationAfterMessageDeletion(
           conversationId: conversationId,
           deletedMessageId: messageId,
@@ -2490,19 +3727,29 @@ class ChatPro extends ChangeNotifier {
         notifyListeners();
         showToast(message: "Message deleted successfully");
       } else {
+        String backendMsg = "Failed to delete message";
+        try {
+          final decoded = jsonDecode(res.body);
+          if (decoded is Map && decoded['message'] is String) {
+            backendMsg = decoded['message'];
+          }
+        } catch (_) {}
         if (deletedMessage != null && index != -1) {
           messages.insert(index, deletedMessage);
+          _pendingDeletedMessageIndexes.remove(messageId);
           notifyListeners();
-          showToast(message: "Failed to delete message");
         }
+        showToast(message: backendMsg);
       }
     } catch (e) {
       printData(title: "deleteMessage error", data: e, e: true);
       // Revert on error
       if (deletedMessage != null && index != -1) {
         messages.insert(index, deletedMessage);
+        _pendingDeletedMessageIndexes.remove(messageId);
         notifyListeners();
       }
+      showToast(message: "Failed to delete message");
     } finally {
       Loaders.hide();
     }

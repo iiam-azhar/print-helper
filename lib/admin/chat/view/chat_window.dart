@@ -1,26 +1,30 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:print_helper/admin/chat/view/chat_profile.dart';
 import 'package:print_helper/admin/chat/view/groupchat/edit_group.dart';
 import 'package:print_helper/providers/auth_pro.dart';
 import 'package:print_helper/screens/call_screen.dart' as cs;
 import 'package:print_helper/services/helpers.dart';
+import 'package:print_helper/services/api_routes.dart';
 import 'package:print_helper/widgets/image_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:twilio_voice/twilio_voice.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:print_helper/services/call_device_service.dart';
 
 import '../../../constants/colors.dart';
 import '../../../constants/paths.dart';
+import '../../../services/call_device_service.dart';
 import '../../../utils/console_util.dart';
 import '../models/chat_models.dart';
 import '../provider/chat_pro.dart';
@@ -34,6 +38,11 @@ import 'components/mesg_options_dialog.dart';
 import 'components/voice_mesg_bubble.dart';
 import 'components/video_mesg_bubble.dart';
 import 'components/dialpad_dialog.dart';
+import 'components/cloud_files_picker_sheet.dart';
+
+enum _DuplicateAttachmentAction { reshare, rename, cancel }
+
+enum _DeleteScopeAction { self, everyone, cancel }
 
 class ChatScreen extends StatefulWidget {
   final int? conversationId;
@@ -65,6 +74,9 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isSearchMode = false;
   Timer? _searchDebounce;
   bool _isChatDisabled = false; // True when peer is deleted
+  bool _pendingDuplicateChecked = false;
+  int? _pendingDuplicateConversationId;
+  ChatDuplicateFileCheckResult? _pendingDuplicateResult;
   OverlayEntry? _groupOverlay;
   String selectedSmsNumber = "(323) 000-0000";
   final _scrollCtrl = ScrollController();
@@ -75,6 +87,8 @@ class _ChatScreenState extends State<ChatScreen> {
     "(323) 808-4052",
     "(415) 123-4567",
   ];
+
+  // 2. HELPER TO START EDITING
   void _startEditing(ChatMessage msg) {
     setState(() {
       _editingMessage = msg;
@@ -93,6 +107,49 @@ class _ChatScreenState extends State<ChatScreen> {
       _messageCtrl.clear();
     });
     _focusNode.unfocus();
+  }
+
+  void _clearPendingAttachmentMeta() {
+    _pendingDuplicateChecked = false;
+    _pendingDuplicateConversationId = null;
+    _pendingDuplicateResult = null;
+  }
+
+  int? _resolveConversationForDuplicateCheck(ChatPro pro) {
+    if (widget.conversationId != null && widget.conversationId! > 0) {
+      return widget.conversationId;
+    }
+    final existingId = pro.findPrivateConversationWithUser(
+      widget.receiverUserId,
+    );
+    if (existingId != null && existingId > 0) {
+      return existingId;
+    }
+    return null;
+  }
+
+  Future<void> runDuplicateCheckOnPickedAttachment({required File file}) async {
+    final pro = getChatPro(context);
+    final conversationId = _resolveConversationForDuplicateCheck(pro);
+    if (conversationId == null) {
+      if (!mounted) return;
+      setState(() {
+        _clearPendingAttachmentMeta();
+      });
+      return;
+    }
+
+    final duplicateResult = await pro.checkExistingAttachment(
+      file: file,
+      conversationId: conversationId,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _pendingDuplicateChecked = duplicateResult != null;
+      _pendingDuplicateConversationId = conversationId;
+      _pendingDuplicateResult = duplicateResult;
+    });
   }
 
   bool _isGranted(dynamic result) => result is bool ? result : true;
@@ -626,7 +683,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         fontWeight: FontWeight.w400,
                       ),
                     ]
-                  : target.numbers.map((item) {
+                  : target.numbers.map<Widget>((item) {
                       return Padding(
                         padding: EdgeInsets.only(bottom: 4.h),
                         child: GestureDetector(
@@ -842,8 +899,9 @@ class _ChatScreenState extends State<ChatScreen> {
     _recordTimer?.cancel();
     _recordDuration = Duration.zero;
     _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted)
+      if (mounted) {
         setState(() => _recordDuration += const Duration(seconds: 1));
+      }
     });
   }
 
@@ -942,6 +1000,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             }
 
                             return Column(
+                              key: ValueKey('chat_msg_${msg.id}'),
                               children: [
                                 if (showHeader) _dateHeader(msg.createdAt),
                                 _messageRow(
@@ -1213,7 +1272,10 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           )
         else
-          _actionIcon(icon: Icons.add_circle_outline_sharp, onTap: () {}),
+          _actionIcon(
+            icon: Icons.add_circle_outline_sharp,
+            onTap: _onAddAttachmentPressed,
+          ),
         Spacers.sbw12(),
         GestureDetector(
           key: const ValueKey('mic_btn'),
@@ -1381,39 +1443,39 @@ class _ChatScreenState extends State<ChatScreen> {
     _cancelEditing();
   }
 
-  // void _onSendPressed() async {
-  //   final text = _messageCtrl.text.trim();
-  //   if (text.isEmpty) return;
-  //   setState(() => _showEmojiPicker = false);
-  //   _focusNode.requestFocus();
-  //   final pro = getChatPro(context);
-  //   final authpro = getAuthPro(context);
-  //   int? conversationId = widget.conversationId;
-  //   // STEP 1: If no conversationId yet, check existing history
-  //   // if conversationId == null
-  //   conversationId ??= pro.findPrivateConversationWithUser(
-  //     widget.receiverUserId,
-  //   );
-  //   // STEP 2: Still no conversation → create it
-  //   if (conversationId == null) {
-  //     conversationId = await pro.createConvId(
-  //       type: 'private', // for non group
-  //       userIds: [widget.receiverUserId],
-  //       context: context,
-  //     );
-  //     if (conversationId == null) return;
-  //   }
-  //   _messageCtrl.clear();
-  //   // STEP 3: Send message (ONLY ONCE)
-  //   await pro.sendMessage(
-  //     text: text,
-  //     conversationId: conversationId,
-  //     currentUserId: authpro.user!.id,
-  //   );
-  //   _initScrollToBottom();
-  // }
-
   void _onSendPressed() async {
+    // void _onSendPressed() async {
+    //   final text = _messageCtrl.text.trim();
+    //   if (text.isEmpty) return;
+    //   setState(() => _showEmojiPicker = false);
+    //   _focusNode.requestFocus();
+    //   final pro = getChatPro(context);
+    //   final authpro = getAuthPro(context);
+    //   int? conversationId = widget.conversationId;
+    //   // STEP 1: If no conversationId yet, check existing history
+    //   // if conversationId == null
+    //   conversationId ??= pro.findPrivateConversationWithUser(
+    //     widget.receiverUserId,
+    //   );
+    //   // STEP 2: Still no conversation → create it
+    //   if (conversationId == null) {
+    //     conversationId = await pro.createConvId(
+    //       type: 'private', // for non group
+    //       userIds: [widget.receiverUserId],
+    //       context: context,
+    //     );
+    //     if (conversationId == null) return;
+    //   }
+    //   _messageCtrl.clear();
+    //   // STEP 3: Send message (ONLY ONCE)
+    //   await pro.sendMessage(
+    //     text: text,
+    //     conversationId: conversationId,
+    //     currentUserId: authpro.user!.id,
+    //   );
+    //   _initScrollToBottom();
+    // }
+
     if (_isChatDisabled) {
       showToast(message: "Messaging disabled for this chat");
       return;
@@ -1456,6 +1518,865 @@ class _ChatScreenState extends State<ChatScreen> {
       currentUserId: authpro.user!.id,
     );
     _initScrollToBottom();
+  }
+
+  void _onAddAttachmentPressed() {
+    _showAttachmentOptions();
+  }
+
+  Future<void> _showAttachmentOptions() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 20.h),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 42.w,
+                height: 4.h,
+                decoration: BoxDecoration(
+                  color: const Color(0xffd9d9d9),
+                  borderRadius: BorderRadius.circular(100.r),
+                ),
+              ),
+              SizedBox(height: 18.h),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextWidget(
+                  text: "Share files",
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.black,
+                ),
+              ),
+              SizedBox(height: 4.h),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextWidget(
+                  text: "Pick where you want to attach the file from",
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.grey,
+                ),
+              ),
+              SizedBox(height: 14.h),
+              _attachmentOptionTile(
+                icon: Icons.cloud_outlined,
+                title: "Attach cloud files",
+                subtitle: "Browse files already saved in cloud",
+                onTap: () => Navigator.pop(ctx, 'cloud'),
+              ),
+              SizedBox(height: 10.h),
+              _attachmentOptionTile(
+                icon: Icons.upload_file_outlined,
+                title: "Upload from this device",
+                subtitle: "Choose a document, image, or spreadsheet",
+                onTap: () => Navigator.pop(ctx, 'device'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (choice == 'cloud') {
+      _showCloudFilesPicker();
+    } else if (choice == 'device') {
+      await _pickFileFromDevice();
+    }
+  }
+
+  Widget _attachmentOptionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16.r),
+        onTap: onTap,
+        child: Ink(
+          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16.r),
+            border: Border.all(color: AppColors.fill),
+            color: Colors.white,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40.w,
+                height: 40.w,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                child: Icon(icon, size: 22, color: AppColors.primary),
+              ),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextWidget(
+                      text: title,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.black,
+                    ),
+                    SizedBox(height: 2.h),
+                    TextWidget(
+                      text: subtitle,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.grey,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                CupertinoIcons.chevron_right,
+                color: AppColors.grey,
+                size: 16,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickFileFromDevice() async {
+    if (_isChatDisabled) {
+      showToast(message: "Messaging disabled for this chat");
+      return;
+    }
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      type: FileType.custom,
+      allowedExtensions: [
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+        'gif',
+        'pdf',
+        'doc',
+        'docx',
+        'xls',
+        'xlsx',
+      ],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final pickedFile = result.files.single;
+    final path = pickedFile.path;
+    if (path == null || path.isEmpty) {
+      showToast(message: 'Unable to read selected file');
+      return;
+    }
+    final selectedFile = File(path);
+    _clearPendingAttachmentMeta();
+    await _showAttachmentPreviewSheet(
+      file: selectedFile,
+      fileName: pickedFile.name,
+    );
+  }
+
+  void _showCloudFilesPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CloudFilesPickerSheet(
+        conversationId: widget.conversationId,
+        receiverUserId: widget.receiverUserId,
+      ),
+    );
+  }
+
+  Future<void> _showAttachmentPreviewSheet({
+    required File file,
+    required String fileName,
+  }) async {
+    final isImage = _isImageFileName(fileName);
+    final captionCtrl = TextEditingController();
+    final chatPro = getChatPro(context);
+    final resolvedConversationId = _resolveConversationForDuplicateCheck(
+      chatPro,
+    );
+    ChatDuplicateFileCheckResult? duplicateResultForSheet =
+        (_pendingDuplicateChecked &&
+            _pendingDuplicateConversationId == resolvedConversationId)
+        ? _pendingDuplicateResult
+        : null;
+    bool isCheckingDuplicate =
+        resolvedConversationId != null && duplicateResultForSheet == null;
+    bool didScheduleDuplicateCheck = false;
+    bool preferReshareOlder = false;
+    bool hasDuplicateNotice = duplicateResultForSheet?.hasDuplicates ?? false;
+    ChatDuplicateFileMatch? duplicateMatchPreview =
+        hasDuplicateNotice &&
+            (duplicateResultForSheet?.matches.isNotEmpty ?? false)
+        ? duplicateResultForSheet!.matches.first
+        : null;
+    String renamedFileNamePreview = _buildRenamedFileName(
+      fileName,
+      duplicateResultForSheet?.matches ?? const [],
+    );
+
+    try {
+      final confirmed = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.black87,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            if (isCheckingDuplicate && !didScheduleDuplicateCheck) {
+              didScheduleDuplicateCheck = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                final result = await chatPro.checkExistingAttachment(
+                  file: file,
+                  conversationId: resolvedConversationId!,
+                );
+                if (!mounted || !ctx.mounted) return;
+                duplicateResultForSheet = result;
+                isCheckingDuplicate = false;
+                hasDuplicateNotice =
+                    duplicateResultForSheet?.hasDuplicates ?? false;
+                duplicateMatchPreview =
+                    hasDuplicateNotice &&
+                        (duplicateResultForSheet?.matches.isNotEmpty ?? false)
+                    ? duplicateResultForSheet!.matches.first
+                    : null;
+                renamedFileNamePreview = _buildRenamedFileName(
+                  fileName,
+                  duplicateResultForSheet?.matches ?? const [],
+                );
+                setState(() {
+                  _pendingDuplicateChecked = result != null;
+                  _pendingDuplicateConversationId = resolvedConversationId;
+                  _pendingDuplicateResult = result;
+                });
+                setSheetState(() {});
+              });
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: Container(
+                height: MediaQuery.of(ctx).size.height * 0.88,
+                decoration: const BoxDecoration(
+                  color: Color(0xff1a1a1a),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pop(ctx, false),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 26,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              fileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(color: Colors.white12, height: 1),
+                    Expanded(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              isImage
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(14),
+                                      child: Image.file(
+                                        file,
+                                        fit: BoxFit.contain,
+                                      ),
+                                    )
+                                  : Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        _buildDocPreview(fileName, size: 80),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          fileName,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        FutureBuilder<int>(
+                                          future: file.length(),
+                                          builder: (_, snap) => Text(
+                                            snap.hasData
+                                                ? _formatFileSize(snap.data!)
+                                                : '',
+                                            style: const TextStyle(
+                                              color: Colors.white54,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                              if (isCheckingDuplicate)
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.35,
+                                      ),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Center(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.72,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                        ),
+                                        padding: const EdgeInsets.all(16),
+                                        child: const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.4,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Color(0xffFFC107),
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (hasDuplicateNotice)
+                      Container(
+                        width: double.infinity,
+                        color: const Color(0xff4a3700),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Uploading a copy because a file with the same name is shared in this chat.',
+                                style: const TextStyle(
+                                  color: Color(0xffF9E07F),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            GestureDetector(
+                              onTap: () {
+                                preferReshareOlder = true;
+                                Navigator.pop(ctx, true);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: const Color(0xfff8f0d0),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Reshare older file instead',
+                                  style: TextStyle(
+                                    color: Color(0xfff8f0d0),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white12,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: TextField(
+                                controller: captionCtrl,
+                                style: const TextStyle(color: Colors.white),
+                                decoration: const InputDecoration(
+                                  hintText: 'Add a caption…',
+                                  hintStyle: TextStyle(color: Colors.white38),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: () => Navigator.pop(ctx, true),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: const BoxDecoration(
+                                color: Color(0xffFFC107),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.send,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      );
+
+      if (confirmed != true) return;
+      if (!mounted) return;
+
+      final pro = getChatPro(context);
+      final authpro = getAuthPro(context);
+      final caption = captionCtrl.text.trim();
+
+      int? conversationId = widget.conversationId;
+      if (conversationId == null) {
+        conversationId = pro.findPrivateConversationWithUser(
+          widget.receiverUserId,
+        );
+        if (conversationId == null) {
+          conversationId = await pro.createConvId(
+            type: 'private',
+            userIds: [widget.receiverUserId],
+            context: context,
+          );
+          if (conversationId != null) {
+            await pro.initConversationSocket(
+              conversationId: conversationId,
+              currentUserId: authpro.user!.id,
+            );
+          }
+        }
+      }
+      if (conversationId == null) return;
+
+      if (hasDuplicateNotice) {
+        if (preferReshareOlder && duplicateMatchPreview != null) {
+          await pro.reshareDuplicateAttachment(
+            match: duplicateMatchPreview!,
+            originalFile: file,
+            alternateFileName: fileName,
+            conversationId: conversationId,
+            currentUserId: authpro.user!.id,
+            caption: caption,
+          );
+        } else {
+          await pro.sendAttachmentMessage(
+            file: file,
+            conversationId: conversationId,
+            currentUserId: authpro.user!.id,
+            caption: caption,
+            overrideFileName: renamedFileNamePreview,
+          );
+        }
+        _clearPendingAttachmentMeta();
+        _initScrollToBottom();
+        return;
+      }
+
+      await _sendAttachmentWithDuplicateCheck(
+        file: file,
+        fileName: fileName,
+        caption: caption,
+        conversationId: conversationId,
+        currentUserId: authpro.user!.id,
+      );
+      _initScrollToBottom();
+    } catch (e, st) {
+      printData(
+        title: "ATTACHMENT PREVIEW SHEET ERROR:",
+        data: "$e\n$st",
+        e: true,
+      );
+    }
+  }
+
+  Future<void> _sendAttachmentWithDuplicateCheck({
+    required File file,
+    required String fileName,
+    required String caption,
+    required int conversationId,
+    required int currentUserId,
+  }) async {
+    final pro = getChatPro(context);
+    ChatDuplicateFileCheckResult? duplicateResult;
+
+    final canUsePrecheckedResult =
+        _pendingDuplicateChecked &&
+        _pendingDuplicateConversationId == conversationId;
+
+    if (canUsePrecheckedResult) {
+      duplicateResult = _pendingDuplicateResult;
+    } else {
+      Loaders.show();
+      duplicateResult = await pro.checkExistingAttachment(
+        file: file,
+        conversationId: conversationId,
+      );
+      Loaders.hide();
+    }
+
+    if (!mounted) return;
+
+    if (duplicateResult == null || !duplicateResult.hasDuplicates) {
+      await pro.sendAttachmentMessage(
+        file: file,
+        conversationId: conversationId,
+        currentUserId: currentUserId,
+        caption: caption,
+      );
+      _clearPendingAttachmentMeta();
+      return;
+    }
+
+    // Handle duplicates
+    final duplicate = duplicateResult.matches.isNotEmpty
+        ? duplicateResult.matches.first
+        : ChatDuplicateFileMatch(originalName: fileName);
+    final renamedFileName = _buildRenamedFileName(
+      fileName,
+      duplicateResult.matches,
+    );
+
+    final action = await _showDuplicateAttachmentSheet(
+      originalFileName: fileName,
+      duplicateName: duplicate.displayName,
+      renamedFileName: renamedFileName,
+      canReshare: duplicate.canReshare,
+    );
+
+    if (!mounted || action == _DuplicateAttachmentAction.cancel) return;
+    if (action == _DuplicateAttachmentAction.reshare) {
+      await pro.reshareDuplicateAttachment(
+        match: duplicate,
+        originalFile: file,
+        alternateFileName: fileName,
+        conversationId: conversationId,
+        currentUserId: currentUserId,
+        caption: caption,
+      );
+    } else {
+      await pro.sendAttachmentMessage(
+        file: file,
+        conversationId: conversationId,
+        currentUserId: currentUserId,
+        caption: caption,
+        overrideFileName: renamedFileName,
+      );
+    }
+    _clearPendingAttachmentMeta();
+  }
+
+  Future<_DuplicateAttachmentAction> _showDuplicateAttachmentSheet({
+    required String originalFileName,
+    required String duplicateName,
+    required String renamedFileName,
+    required bool canReshare,
+  }) async {
+    final action = await showModalBottomSheet<_DuplicateAttachmentAction>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 18.h),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextWidget(
+                  text: 'Duplicate File Detected',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black,
+                ),
+                SizedBox(height: 8.h),
+                TextWidget(
+                  text:
+                      'Choose whether to reshare the older copy or upload this file with a new name.',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.black54,
+                ),
+                SizedBox(height: 14.h),
+                _duplicateAttachmentInfoRow(
+                  label: 'Selected',
+                  value: originalFileName,
+                ),
+                SizedBox(height: 6.h),
+                _duplicateAttachmentInfoRow(
+                  label: 'Existing',
+                  value: duplicateName,
+                ),
+                SizedBox(height: 18.h),
+                if (canReshare)
+                  _duplicateActionTile(
+                    title: 'Reshare older file instead',
+                    subtitle:
+                        'Skip uploading a second copy and send the existing file again.',
+                    onTap: () =>
+                        Navigator.pop(ctx, _DuplicateAttachmentAction.reshare),
+                  ),
+                _duplicateActionTile(
+                  title: 'Send as $renamedFileName',
+                  subtitle:
+                      'Upload this file as a renamed copy, similar to image(1).jpg.',
+                  onTap: () =>
+                      Navigator.pop(ctx, _DuplicateAttachmentAction.rename),
+                ),
+                SizedBox(height: 8.h),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pop(ctx, _DuplicateAttachmentAction.cancel),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    return action ?? _DuplicateAttachmentAction.cancel;
+  }
+
+  Widget _duplicateAttachmentInfoRow({
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 60.w,
+          child: TextWidget(
+            text: label,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.black45,
+          ),
+        ),
+        Expanded(
+          child: TextWidget(
+            text: value,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Colors.black87,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _duplicateActionTile({
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 10.h),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18.r),
+        child: Container(
+          padding: EdgeInsets.all(14.w),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.black12),
+            borderRadius: BorderRadius.circular(18.r),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextWidget(
+                      text: title,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black,
+                    ),
+                    SizedBox(height: 4.h),
+                    TextWidget(
+                      text: subtitle,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.black54,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.black45, size: 22.sp),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _buildRenamedFileName(
+    String originalFileName,
+    List<ChatDuplicateFileMatch> matches,
+  ) {
+    final existingNames = <String>{originalFileName.toLowerCase()};
+    for (final match in matches) {
+      final existingName = match.displayName.trim();
+      if (existingName.isNotEmpty) {
+        existingNames.add(existingName.toLowerCase());
+      }
+    }
+
+    final dotIndex = originalFileName.lastIndexOf('.');
+    final baseName = dotIndex > 0
+        ? originalFileName.substring(0, dotIndex)
+        : originalFileName;
+    final extension = dotIndex > 0 ? originalFileName.substring(dotIndex) : '';
+
+    var suffix = 1;
+    while (true) {
+      final candidate = '$baseName($suffix)$extension';
+      if (!existingNames.contains(candidate.toLowerCase())) {
+        return candidate;
+      }
+      suffix++;
+    }
+  }
+
+  bool _isImageFileName(String fileName) {
+    final lower = fileName.toLowerCase();
+    return lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.gif');
+  }
+
+  Widget _buildDocPreview(String fileName, {double? size}) {
+    final lower = fileName.toLowerCase();
+    IconData iconData = Icons.insert_drive_file_rounded;
+    Color color = Colors.grey;
+
+    if (lower.endsWith('.pdf')) {
+      iconData = Icons.picture_as_pdf_rounded;
+      color = Colors.red.shade700;
+    } else if (lower.endsWith('.doc') || lower.endsWith('.docx')) {
+      iconData = Icons.description_rounded;
+      color = Colors.blue.shade700;
+    } else if (lower.endsWith('.txt')) {
+      iconData = Icons.text_snippet_rounded;
+      color = Colors.grey.shade700;
+    } else if (lower.endsWith('.zip') || lower.endsWith('.rar')) {
+      iconData = Icons.folder_zip_rounded;
+      color = Colors.orange.shade700;
+    } else if (lower.endsWith('.psd')) {
+      iconData = Icons.image_rounded;
+      color = Colors.deepPurple.shade700;
+    }
+
+    return Icon(iconData, size: size ?? 48.w, color: color);
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes <= 0) return "0 B";
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   Widget channelSelector() {
@@ -1618,9 +2539,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   PreferredSizeWidget _appBar(BuildContext context) {
     return AppBar(
-      backgroundColor: Colors.white,
       elevation: 1,
       surfaceTintColor: Colors.white,
+      backgroundColor: Colors.white,
+      leadingWidth: 42,
       leading: IconButton(
         icon: const Icon(
           Icons.arrow_back_ios_new,
@@ -1708,7 +2630,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
             Spacers.sb2(),
             Consumer<ChatPro>(
-              builder: (context, _, _) {
+              builder: (context, pro, _) {
                 return TextWidget(
                   text: _appBarSubtitle(context),
                   color: Colors.grey,
@@ -1721,49 +2643,6 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
       actions: [
-        Consumer<ChatPro>(
-          builder: (context, pro, _) {
-            if (widget.conversationId != null) {
-              final convo = pro.conversations.firstWhere(
-                (c) => c.id == widget.conversationId,
-                orElse: () => ChatConversation(
-                  id: -1,
-                  type: 'private',
-                  title: '',
-                  participants: const [],
-                  latestMessage: null,
-                  image: '',
-                  unreadCount: 0,
-                  updatedAt: DateTime.now(),
-                  isDefault: true,
-                ),
-              );
-              if (convo.type == 'group') {
-                final myId = getAuthPro(context, listen: false).user?.id;
-                final me = convo.participants.firstWhere(
-                  (p) => p.id == myId,
-                  orElse: () => ChatParticipant(
-                    name: '',
-                    username: '',
-                    lastName: '',
-                    isOnline: false,
-                    phoneNumbers: const [],
-                  ),
-                );
-                if (me.role == 'observer') return const SizedBox.shrink();
-              }
-            }
-            return IconButton(
-              icon: ImageIcon(
-                AssetImage(Paths.vc),
-                color: AppColors.black,
-                size: 30,
-              ),
-              onPressed: () {},
-            );
-          },
-        ),
-
         Consumer<ChatPro>(
           builder: (context, pro, _) {
             if (widget.conversationId != null) {
@@ -1862,6 +2741,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _messageRow(ChatMessage msg, {String? highlightQuery}) {
+    final shouldShowMessageOptions = !_isDeletedTextMessage(msg);
+
     return Align(
       alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Row(
@@ -1893,116 +2774,99 @@ class _ChatScreenState extends State<ChatScreen> {
               child: _bubble(msg, highlightQuery: highlightQuery),
             ),
           ),
-          Builder(
-            builder: (iconCtx) {
-              return GestureDetector(
-                onTap: () {
-                  final RenderBox box = iconCtx.findRenderObject() as RenderBox;
-                  final Offset pos = box.localToGlobal(Offset.zero);
-                  final Size size = box.size;
-                  showMessageOptionsDialog(
-                    context: context,
-                    position: pos,
-                    size: size,
-                    msg: msg,
-                    onEdit: () {
-                      _startEditing(msg);
-                    },
-                    onForward: () {
-                      _showForwardPopup(msg);
-                    },
-                    onDelete: () async {
-                      _deletePopup(msg);
-                    },
-                  );
-                },
+          if (shouldShowMessageOptions)
+            Builder(
+              builder: (iconCtx) {
+                return GestureDetector(
+                  onTap: () {
+                    final RenderBox box =
+                        iconCtx.findRenderObject() as RenderBox;
+                    final Offset pos = box.localToGlobal(Offset.zero);
+                    final Size size = box.size;
+                    showMessageOptionsDialog(
+                      context: context,
+                      position: pos,
+                      size: size,
+                      msg: msg,
+                      onEdit: () {
+                        _startEditing(msg);
+                      },
+                      onForward: () {
+                        _showForwardPopup(msg);
+                      },
+                      onDelete: () async {
+                        _deletePopup(msg);
+                      },
+                      onDownload: () {
+                        if (msg.type != 'image' && msg.type != 'file') return;
+                        if (msg.isMoved) {
+                          showToast(message: 'File has been deleted');
+                          return;
+                        }
+                        final localPath = getChatPro(
+                          context,
+                        ).localAttachmentPaths[msg.id];
+                        final remoteUrl =
+                            (msg.attachmentUrl != null &&
+                                msg.attachmentUrl!.isNotEmpty)
+                            ? _resolveAttachmentUrl(
+                                msg.attachmentUrl!,
+                                cacheBuster: '${msg.id}',
+                              )
+                            : null;
+                        _downloadChatAttachment(
+                          localPath: localPath,
+                          remoteUrl: remoteUrl,
+                          fileName: msg.attachmentName,
+                        );
+                      },
+                    );
+                  },
 
-                child: Container(
-                  width: 30.w,
-                  height: 30.h,
-                  margin: EdgeInsets.only(left: 8.w),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(13.r),
-                    border: Border.all(color: Colors.grey, width: 1),
+                  child: Container(
+                    width: 30.w,
+                    height: 30.h,
+                    margin: EdgeInsets.only(left: 8.w),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(13.r),
+                      border: Border.all(color: Colors.grey, width: 1),
+                    ),
+                    child: Icon(Icons.more_vert, size: 20.sp),
                   ),
-                  child: Icon(Icons.more_vert, size: 20.sp),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<dynamic> _deletePopup(ChatMessage msg) {
-    return showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.white,
-        title: TextWidget(
-          text: "Delete Message?",
-          color: Colors.black,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          decoration: TextDecoration.none,
-        ),
-        content: TextWidget(
-          text: "Are you sure you want to delete this message?",
-          color: Colors.black,
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
-          decoration: TextDecoration.none,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: TextWidget(
-              text: "Cancel",
-              color: Colors.grey,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.none,
+                );
+              },
             ),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await getChatPro(context).deleteMessage(
-                messageId: msg.id,
-                conversationId: msg.conversationId,
-              );
-            },
-            child: TextWidget(
-              text: "Delete",
-              color: Colors.red,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.none,
-            ),
-          ),
         ],
       ),
     );
   }
 
   Widget _bubble(ChatMessage msg, {String? highlightQuery}) {
+    if (_isDeletedTextMessage(msg)) {
+      return _deletedMessageBubble(msg);
+    }
+
     // ── Call-type message bubble ──
     if (msg.type == 'call') {
       return _callBubble(msg);
     }
-
+    // ── Video call-type message bubble ──
+    if (msg.type == 'video_call') {
+      return _videoCallBubble(msg);
+    }
     // ── Call recording bubble (voice msg with is_call_recording) ──
     if (msg.isCallRecording && msg.audioUrl != null) {
       return _callRecordingBubble(msg);
     }
-
     // ── Video message bubble ──
     if (msg.type == 'video' && msg.videoUrl != null) {
       return _videoBubble(msg);
     }
-
+    // ── Image / file attachment bubble ──
+    if (msg.type == 'image' || msg.type == 'file') {
+      return _attachmentBubble(msg);
+    }
     return Container(
       margin: EdgeInsets.only(bottom: 10.h),
       padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
@@ -2011,8 +2875,8 @@ class _ChatScreenState extends State<ChatScreen> {
         borderRadius: BorderRadius.circular(14.r),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Sender name (group chat)
           if (!msg.isMe && msg.senderName != null)
@@ -2053,6 +2917,933 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  bool _isDeletedTextMessage(ChatMessage msg) {
+    if (msg.type != 'text') return false;
+
+    final normalized = msg.message.trim().toLowerCase();
+    return normalized == 'this message was deleted' ||
+        normalized == 'you deleted this message' ||
+        normalized == 'message deleted';
+  }
+
+  Widget _deletedMessageBubble(ChatMessage msg) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 10.h),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.block, size: 15.sp, color: const Color(0xFF6F6F6F)),
+              SizedBox(width: 6.w),
+              Flexible(
+                child: Text(
+                  msg.message,
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF616161),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 4.h),
+          _metaRow(msg),
+        ],
+      ),
+    );
+  }
+
+  Future<dynamic> _deletePopup(ChatMessage msg) {
+    if (msg.type == 'image' || msg.type == 'file') {
+      return _showFileDeleteScopePopup(msg);
+    }
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.white,
+        title: const TextWidget(
+          text: "Delete Message?",
+          color: Colors.black,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.none,
+        ),
+        content: const TextWidget(
+          text: "Are you sure you want to delete this message?",
+          color: Colors.black,
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          decoration: TextDecoration.none,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const TextWidget(
+              text: "Cancel",
+              color: Colors.grey,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.none,
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await getChatPro(context).deleteMessage(
+                messageId: msg.id,
+                conversationId: msg.conversationId,
+                deleteScope: 'everyone',
+              );
+            },
+            child: const TextWidget(
+              text: "Delete",
+              color: Colors.red,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.none,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<_DeleteScopeAction> _showFileDeleteScopePopup(ChatMessage msg) async {
+    final action = await showDialog<_DeleteScopeAction>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 24.h),
+        child: Container(
+          width: 455.w,
+          padding: EdgeInsets.fromLTRB(22.w, 24.h, 22.w, 24.h),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18.r),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44.w,
+                    height: 44.w,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF3C4),
+                      borderRadius: BorderRadius.circular(14.r),
+                    ),
+                    child: Center(
+                      child: ImageWidget(
+                        image: Paths.delete,
+                        width: 18.w,
+                        height: 18.w,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 14.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextWidget(
+                          text: 'Delete File From Chat',
+                          color: Colors.black,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        SizedBox(height: 5.h),
+                        TextWidget(
+                          text: 'Choose how this file should be deleted.',
+                          color: const Color(0xFF667085),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 20.h),
+              _deleteScopeTile(
+                title: 'For myself only',
+                subtitle: 'Removes only from your chat folder.',
+                titleColor: const Color(0xFF1F2937),
+                subtitleColor: const Color(0xFF667085),
+                borderColor: const Color(0xFFC7CED8),
+                backgroundColor: Colors.white,
+                onTap: () => Navigator.pop(ctx, _DeleteScopeAction.self),
+              ),
+              SizedBox(height: 12.h),
+              _deleteScopeTile(
+                title: 'For everyone',
+                subtitle:
+                    'Removes from both chat folders and deletes the message.',
+                titleColor: const Color(0xFFEF3D32),
+                subtitleColor: const Color(0xFFEF3D32),
+                borderColor: const Color(0xFFF2ACA7),
+                backgroundColor: const Color(0xFFFFF5F4),
+                onTap: () => Navigator.pop(ctx, _DeleteScopeAction.everyone),
+              ),
+              SizedBox(height: 22.h),
+              Align(
+                alignment: Alignment.centerRight,
+                child: SizedBox(
+                  height: 40.h,
+                  child: OutlinedButton(
+                    onPressed: () =>
+                        Navigator.pop(ctx, _DeleteScopeAction.cancel),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      side: const BorderSide(
+                        color: Color(0xFFC7CED8),
+                        width: 1.2,
+                      ),
+                      padding: EdgeInsets.symmetric(horizontal: 18.w),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14.r),
+                      ),
+                    ),
+                    child: TextWidget(
+                      text: 'Cancel',
+                      color: const Color(0xFF344054),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted || action == null || action == _DeleteScopeAction.cancel) {
+      return _DeleteScopeAction.cancel;
+    }
+
+    await getChatPro(context).deleteMessage(
+      messageId: msg.id,
+      conversationId: msg.conversationId,
+      deleteScope: action == _DeleteScopeAction.self ? 'self' : 'everyone',
+    );
+
+    return action;
+  }
+
+  Widget _deleteScopeTile({
+    required String title,
+    required String subtitle,
+    required Color titleColor,
+    required Color subtitleColor,
+    required Color borderColor,
+    required Color backgroundColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14.r),
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(14.r),
+          border: Border.all(color: borderColor, width: 1.2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextWidget(
+              text: title,
+              color: titleColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+            SizedBox(height: 3.h),
+            TextWidget(
+              text: subtitle,
+              color: subtitleColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _attachmentBubble(ChatMessage msg) {
+    final pro = getChatPro(context);
+    final localPath = pro.localAttachmentPaths[msg.id];
+    final progress = pro.uploadProgress[msg.id];
+    final isUploading = progress != null;
+    final isImage = _isImageAttachmentMessage(msg);
+    final isMovedAttachment = msg.isMoved;
+    final resolvedThumbnailUrl =
+        (msg.thumbnailUrl != null && msg.thumbnailUrl!.isNotEmpty)
+        ? _resolveAttachmentUrl(msg.thumbnailUrl!, cacheBuster: '${msg.id}')
+        : null;
+    final resolvedRemoteUrl =
+        (msg.attachmentUrl != null && msg.attachmentUrl!.isNotEmpty)
+        ? _resolveAttachmentUrl(msg.attachmentUrl!, cacheBuster: '${msg.id}')
+        : null;
+    Widget previewContent;
+    if (isImage) {
+      Widget imageWidget;
+      if (localPath != null) {
+        imageWidget = Image.file(
+          File(localPath),
+          key: ValueKey('chat_img_local_${msg.id}_$localPath'),
+          width: double.infinity,
+          height: 200.h,
+          fit: BoxFit.cover,
+        );
+      } else if (resolvedThumbnailUrl != null &&
+          resolvedThumbnailUrl.isNotEmpty) {
+        imageWidget = ImageWidget(
+          key: ValueKey('chat_img_thumb_${msg.id}_$resolvedThumbnailUrl'),
+          image: resolvedThumbnailUrl,
+          width: double.infinity,
+          height: 200,
+          fit: BoxFit.cover,
+          errorWidget:
+              (resolvedRemoteUrl != null && resolvedRemoteUrl.isNotEmpty)
+              ? ImageWidget(
+                  key: ValueKey('chat_img_remote_${msg.id}_$resolvedRemoteUrl'),
+                  image: resolvedRemoteUrl,
+                  width: double.infinity,
+                  height: 200,
+                  fit: BoxFit.cover,
+                  errorWidget: Container(
+                    width: double.infinity,
+                    height: 200.h,
+                    color: Colors.grey.shade200,
+                    child: const Icon(
+                      Icons.broken_image,
+                      size: 48,
+                      color: Colors.grey,
+                    ),
+                  ),
+                )
+              : Container(
+                  width: double.infinity,
+                  height: 200.h,
+                  color: Colors.grey.shade200,
+                  child: const Icon(
+                    Icons.broken_image,
+                    size: 48,
+                    color: Colors.grey,
+                  ),
+                ),
+        );
+      } else if (resolvedRemoteUrl != null && resolvedRemoteUrl.isNotEmpty) {
+        imageWidget = ImageWidget(
+          key: ValueKey('chat_img_remote_${msg.id}_$resolvedRemoteUrl'),
+          image: resolvedRemoteUrl,
+          width: double.infinity,
+          height: 200,
+          fit: BoxFit.cover,
+          errorWidget: Container(
+            width: double.infinity,
+            height: 200.h,
+            color: Colors.grey.shade200,
+            child: const Icon(Icons.broken_image, size: 48, color: Colors.grey),
+          ),
+        );
+      } else {
+        imageWidget = Container(
+          width: double.infinity,
+          height: 200.h,
+          color: Colors.grey.shade200,
+          child: const Icon(Icons.image, size: 48, color: Colors.grey),
+        );
+      }
+      final rawImageName =
+          (msg.attachmentName != null && msg.attachmentName!.isNotEmpty)
+          ? msg.attachmentName!
+          : msg.message.replaceAll('📎 ', '');
+      previewContent = GestureDetector(
+        onTap: isMovedAttachment
+            ? null
+            : () {
+                _openImagePreview(initialMessageId: msg.id);
+              },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isMovedAttachment)
+              Padding(
+                padding: EdgeInsets.fromLTRB(8.w, 8.w, 8.w, 0),
+                child: _buildMovedFileBanner(msg, isImage: true),
+              )
+            else
+              Stack(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(8.w, 8.w, 8.w, 0),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14.r),
+                      child: imageWidget,
+                    ),
+                  ),
+                  if (isUploading)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(14.r),
+                            topRight: Radius.circular(14.r),
+                          ),
+                        ),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: CircularProgressIndicator(
+                                  value: progress,
+                                  color: Colors.white,
+                                  strokeWidth: 3.5,
+                                ),
+                              ),
+                              SizedBox(height: 8.h),
+                              Text(
+                                '${(progress * 100).toInt()}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(12.w, 6.h, 12.w, 3.h),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: Text(
+                      rawImageName,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (msg.expiresInDays != null)
+                    Padding(
+                      padding: EdgeInsets.only(top: 2.h),
+                      child: _buildExpiryLabel(msg, fontSize: 10),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // File type
+      final rawName =
+          (msg.attachmentName != null && msg.attachmentName!.isNotEmpty)
+          ? msg.attachmentName!
+          : msg.message.replaceAll('📎 ', '');
+      final resolvedThumbnailUrl =
+          (msg.thumbnailUrl != null && msg.thumbnailUrl!.isNotEmpty)
+          ? _resolveAttachmentUrl(msg.thumbnailUrl!, cacheBuster: '${msg.id}')
+          : null;
+      previewContent = Padding(
+        padding: EdgeInsets.fromLTRB(12.w, 10.h, 12.w, 4.h),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isMovedAttachment)
+              SizedBox(
+                width: 240.w,
+                child: _buildMovedFileBanner(msg, isImage: false),
+              )
+            else
+              Container(
+                width: 240.w,
+                height: 112.h,
+                decoration: BoxDecoration(
+                  color: const Color(0xffe9e9eb),
+                  borderRadius: BorderRadius.circular(10.r),
+                  border: Border.all(color: const Color(0xffcfcfd3), width: 1),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10.r),
+                  child: Center(
+                    child:
+                        (resolvedThumbnailUrl != null &&
+                            resolvedThumbnailUrl.isNotEmpty)
+                        ? Padding(
+                            padding: EdgeInsets.all(12.w),
+                            child: ImageWidget(
+                              image: resolvedThumbnailUrl,
+                              width: double.infinity,
+                              height: double.infinity,
+                              fit: BoxFit.contain,
+                              errorWidget: _buildDocPreview(rawName),
+                            ),
+                          )
+                        : _buildDocPreview(rawName),
+                  ),
+                ),
+              ),
+            SizedBox(height: 10.h),
+            SizedBox(
+              width: 240.w,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    rawName,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (msg.expiresInDays != null)
+                    Padding(
+                      padding: EdgeInsets.only(top: 2.h),
+                      child: _buildExpiryLabel(msg, fontSize: 11),
+                    ),
+                ],
+              ),
+            ),
+            if (isUploading) ...[
+              SizedBox(height: 6.h),
+              SizedBox(
+                width: 240.w,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.grey.shade300,
+                    color: AppColors.primary,
+                    minHeight: 4,
+                  ),
+                ),
+              ),
+              SizedBox(height: 3.h),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 10.h),
+      decoration: BoxDecoration(
+        color: msg.isMe ? Colors.white : AppColors.primary,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: isImage
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.start,
+        children: [
+          if (!msg.isMe && msg.senderName != null)
+            Padding(
+              padding: EdgeInsets.fromLTRB(12.w, 8.h, 12.w, 0),
+              child: TextWidget(
+                text: msg.senderName!,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+          previewContent,
+          Padding(
+            padding: EdgeInsets.fromLTRB(12.w, 0, 12.w, 6.h),
+            child: _metaRow(msg),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMovedFileBanner(ChatMessage msg, {required bool isImage}) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        color: const Color(0xffede8da),
+        borderRadius: BorderRadius.circular(10.r),
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(8.r),
+          border: Border.all(color: const Color(0xFFF3D670), width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'File does not exist',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xff8a6b05),
+              ),
+            ),
+            if (msg.movedByName != null) ...[
+              SizedBox(height: 4.h),
+              Text(
+                'Deleted by ${msg.movedByName}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xff8a6b05),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpiryLabel(ChatMessage msg, {required double fontSize}) {
+    if (msg.isMoved && msg.expiresInDays != null && !msg.isExpired) {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 3.h),
+        decoration: BoxDecoration(
+          color: const Color(0xfff3d670),
+          borderRadius: BorderRadius.circular(999.r),
+        ),
+        child: Text(
+          'Expires in ${msg.expiresInDays!.toStringAsFixed(0)} days',
+          style: TextStyle(
+            fontSize: fontSize,
+            color: const Color(0xff7c5c00),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+
+    return Text(
+      msg.isExpired
+          ? 'Expired'
+          : 'Expires in ${msg.expiresInDays!.toStringAsFixed(0)} days',
+      style: TextStyle(
+        fontSize: fontSize,
+        color: msg.isExpired ? Colors.red : Colors.grey.shade600,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  String _resolveAttachmentUrl(String rawUrl, {String? cacheBuster}) {
+    // Clean up URL: remove any surrounding spaces or backticks
+    String resolvedUrl = rawUrl.trim().replaceAll('`', '').trim();
+    if (resolvedUrl.isEmpty) return resolvedUrl;
+    if (!resolvedUrl.startsWith('http')) {
+      if (!resolvedUrl.startsWith('/')) return resolvedUrl;
+
+      final apiUri = Uri.parse(ApiRoutes.baseUrl);
+      final origin = apiUri.hasPort
+          ? '${apiUri.scheme}://${apiUri.host}:${apiUri.port}'
+          : '${apiUri.scheme}://${apiUri.host}';
+      resolvedUrl = '$origin$resolvedUrl';
+    }
+    if (cacheBuster == null || cacheBuster.isEmpty) {
+      return resolvedUrl;
+    }
+    // If it's already a full URL with query parameters (like S3 signed URLs),
+    // don't add the cache buster because it will invalidate the signature.
+    if (resolvedUrl.contains('?') && resolvedUrl.contains('X-Amz-Signature')) {
+      return resolvedUrl;
+    }
+    final uri = Uri.tryParse(resolvedUrl);
+    if (uri == null || !uri.hasScheme) return resolvedUrl;
+    final query = Map<String, String>.from(uri.queryParameters);
+    query['cb'] = cacheBuster;
+    return uri.replace(queryParameters: query).toString();
+  }
+
+  bool _isImageAttachmentMessage(ChatMessage msg) {
+    if (msg.type == 'image') return true;
+    final mime = (msg.attachmentMimeType ?? '').toLowerCase();
+    if (mime.startsWith('image/') || mime.startsWith('images/')) return true;
+    final byName = msg.attachmentName ?? '';
+    if (_isImageFileName(byName)) return true;
+    final byUrl = (msg.attachmentUrl ?? '').toLowerCase();
+    return byUrl.endsWith('.jpg') ||
+        byUrl.endsWith('.jpeg') ||
+        byUrl.endsWith('.png') ||
+        byUrl.endsWith('.webp') ||
+        byUrl.endsWith('.gif');
+  }
+
+  Future<void> _openImagePreview({required int initialMessageId}) {
+    final pro = context.read<ChatPro>();
+    final imageItems = <Map<String, dynamic>>[];
+
+    for (final message in pro.messages) {
+      if (!_isImageAttachmentMessage(message)) continue;
+      if (message.isMoved) continue;
+
+      final local = pro.localAttachmentPaths[message.id];
+      final remote =
+          (message.attachmentUrl != null && message.attachmentUrl!.isNotEmpty)
+          ? _resolveAttachmentUrl(
+              message.attachmentUrl!,
+              cacheBuster: '${message.id}',
+            )
+          : null;
+
+      if ((local == null || local.isEmpty) &&
+          (remote == null || remote.isEmpty)) {
+        continue;
+      }
+
+      imageItems.add({
+        'id': message.id,
+        'local': local,
+        'remote': remote,
+        'name': message.attachmentName,
+      });
+    }
+
+    if (imageItems.isEmpty) return Future.value();
+
+    int currentIndex = imageItems.indexWhere(
+      (e) => e['id'] == initialMessageId,
+    );
+    if (currentIndex < 0) currentIndex = 0;
+
+    final pageController = PageController(initialPage: currentIndex);
+
+    return showDialog(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setStateDialog) {
+            return Scaffold(
+              backgroundColor: Colors.black,
+              body: SafeArea(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: PageView.builder(
+                        controller: pageController,
+                        itemCount: imageItems.length,
+                        onPageChanged: (index) {
+                          setStateDialog(() => currentIndex = index);
+                        },
+                        itemBuilder: (context, index) {
+                          final item = imageItems[index];
+                          final String? local = item['local'] as String?;
+                          final String? remote = item['remote'] as String?;
+
+                          return Center(
+                            child: InteractiveViewer(
+                              minScale: 0.8,
+                              maxScale: 4,
+                              child: (local != null && local.isNotEmpty)
+                                  ? Image.file(File(local), fit: BoxFit.contain)
+                                  : ImageWidget(
+                                      image: remote ?? '',
+                                      fit: BoxFit.contain,
+                                      showLoad: true,
+                                    ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: Material(
+                        color: Colors.black54,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () {
+                            final item = imageItems[currentIndex];
+                            _downloadChatAttachment(
+                              localPath: item['local'] as String?,
+                              remoteUrl: item['remote'] as String?,
+                              fileName: item['name'] as String?,
+                            );
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(
+                              Icons.download,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Material(
+                        color: Colors.black54,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => Navigator.of(ctx).pop(),
+                          child: const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 16,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(20.r),
+                          ),
+                          child: Text(
+                            '${currentIndex + 1} / ${imageItems.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _downloadChatAttachment({
+    required String? localPath,
+    required String? remoteUrl,
+    String? fileName,
+  }) async {
+    try {
+      if (Platform.isAndroid) {
+        final status = await Permission.storage.request();
+        if (!status.isGranted) {
+          final photos = await Permission.photos.request();
+          if (!photos.isGranted) {
+            showToast(message: "Storage permission denied");
+            return;
+          }
+        }
+      }
+
+      Loaders.show();
+
+      Directory saveDir;
+      if (Platform.isAndroid) {
+        final downloadsDir = Directory('/storage/emulated/0/Download');
+        if (await downloadsDir.exists()) {
+          saveDir = downloadsDir;
+        } else {
+          saveDir = (await getExternalStorageDirectory())!;
+        }
+      } else {
+        saveDir = await getApplicationDocumentsDirectory();
+      }
+
+      String ext = 'jpg';
+      if (fileName != null && fileName.contains('.')) {
+        ext = fileName.split('.').last;
+      } else if (remoteUrl != null) {
+        final urlPath = Uri.parse(remoteUrl).path;
+        if (urlPath.contains('.')) {
+          ext = urlPath.split('.').last.split('?').first;
+        }
+      }
+
+      final name = 'chat_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final savePath = '${saveDir.path}/$name';
+
+      if (localPath != null && localPath.isNotEmpty) {
+        await File(localPath).copy(savePath);
+      } else if (remoteUrl != null && remoteUrl.isNotEmpty) {
+        await Dio().download(remoteUrl, savePath);
+      } else {
+        Loaders.hide();
+        showToast(message: "No file to download");
+        return;
+      }
+
+      Loaders.hide();
+      showToast(message: "File saved to Downloads");
+    } catch (e, st) {
+      Loaders.hide();
+      printData(
+        title: "DOWNLOAD CHAT ATTACHMENT ERROR:",
+        data: "$e\n$st",
+        e: true,
+      );
+      showToast(message: "Failed to save file");
+    }
+  }
+
   String formatMessageTime(String dateTime) {
     final dt = DateTime.parse(dateTime);
     return DateFormat("dd/MM/yyyy • h:mma").format(dt).toLowerCase();
@@ -2060,6 +3851,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// Special bubble for call-type messages
   Widget _callBubble(ChatMessage msg) {
+    final callOutcome = (msg.callOutcome ?? '').toLowerCase();
+    final callStatus = (msg.callStatus ?? '').toLowerCase();
+    final messageLower = msg.message.toLowerCase();
+    final isDeclined =
+        callOutcome == 'rejected' ||
+        callStatus == 'canceled' ||
+        messageLower.contains('declined');
     final isMissed = msg.isMissedCall == true;
     // Build the title — use user name from message
     String callerLabel;
@@ -2068,19 +3866,23 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       callerLabel = msg.senderName ?? 'Unknown';
     }
-    final title = isMissed
-        ? "Missed Called From $callerLabel"
-        : "Called From $callerLabel";
+    final title = isDeclined
+        ? msg.message
+        : (isMissed
+              ? "Missed Called From $callerLabel"
+              : "Called From $callerLabel");
     // Format phone numbers
     final from = msg.callFromNumber != null
         ? _formatPhone(msg.callFromNumber!)
         : '—';
-    final to = msg.callToNumber != null ? _formatPhone(msg.callToNumber!) : '—';
+    final to = msg.callToNumber != null
+        ? _formatPhone(msg.callToNumber!)
+        : 'You';
     // Date/time
     final dateStr = DateFormat(
       'MM/dd/yyyy • h:mma',
     ).format(msg.createdAt).toLowerCase();
-    final bgColor = isMissed
+    final bgColor = (isMissed || isDeclined)
         ? const Color(0xffFFDDDD)
         : const Color(0xffD4EDDA);
     return Container(
@@ -2094,13 +3896,12 @@ class _ChatScreenState extends State<ChatScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title row with icon
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ImageWidget(
-                image: isMissed ? Paths.close : Paths.call3,
-                width: isMissed ? 18 : 22,
+                image: (isMissed || isDeclined) ? Paths.close : Paths.call3,
+                width: (isMissed || isDeclined) ? 18 : 22,
               ),
               SizedBox(width: 6.w),
               Expanded(
@@ -2151,7 +3952,109 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  /// Call recording bubble (voice message with is_call_recording)
+  Widget _videoCallBubble(ChatMessage msg) {
+    final callOutcome = (msg.callOutcome ?? '').toLowerCase();
+    final callStatus = (msg.callStatus ?? '').toLowerCase();
+    final messageLower = msg.message.toLowerCase();
+    final isDeclined =
+        callOutcome == 'rejected' ||
+        callStatus == 'canceled' ||
+        messageLower.contains('declined');
+    final isMissed = msg.isMissedCall == true;
+    // Build the title — use user name from message
+    String callerLabel;
+    if (msg.isMe) {
+      callerLabel = "You";
+    } else {
+      callerLabel = msg.senderName ?? 'Unknown';
+    }
+    final title = isDeclined
+        ? msg.message
+        : (isMissed
+              ? "Missed Video Call From $callerLabel"
+              : "Video Call From $callerLabel");
+    // Format phone numbers
+    final from = msg.callFromNumber != null
+        ? _formatPhone(msg.callFromNumber!)
+        : '—';
+    final to = msg.callToNumber != null
+        ? _formatPhone(msg.callToNumber!)
+        : 'You';
+    // Date/time
+    final dateStr = DateFormat(
+      'MM/dd/yyyy • h:mma',
+    ).format(msg.createdAt).toLowerCase();
+    final bgColor = (isMissed || isDeclined)
+        ? const Color(0xffFFDDDD)
+        : const Color(0xffD4EDDA);
+    return Container(
+      margin: EdgeInsets.only(bottom: 10.h),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ImageWidget(
+                image: (isMissed || isDeclined) ? Paths.close : Paths.call3,
+                width: (isMissed || isDeclined) ? 18 : 22,
+              ),
+              SizedBox(width: 6.w),
+              Expanded(
+                child: TextWidget(
+                  text: title,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8.h),
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10.r),
+            ),
+            child: Column(
+              children: [
+                TextWidget(
+                  text: "From: $from  •  To: $to",
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black54,
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 3.h),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextWidget(
+                    text: dateStr,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.black45,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Call recording bubble (voice message with is_call_recording) ──
   Widget _callRecordingBubble(ChatMessage msg) {
     // Build title based on direction
     final toNames = _toUserNames(msg);
@@ -2162,13 +4065,13 @@ class _ChatScreenState extends State<ChatScreen> {
       final senderName = msg.senderName ?? 'Unknown';
       title = "$senderName Called You";
     }
-
     // Format phone numbers
     final from = msg.callFromNumber != null
         ? _formatPhone(msg.callFromNumber!)
         : '—';
-    final to = msg.callToNumber != null ? _formatPhone(msg.callToNumber!) : '—';
-
+    final to = msg.callToNumber != null
+        ? _formatPhone(msg.callToNumber!)
+        : 'You';
     // Date/time
     final dateStr = DateFormat(
       'MM/dd/yyyy • h:mma',
@@ -2277,7 +4180,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
           SizedBox(height: 4.h),
           // Time + ticks
-          _metaRow(msg),
         ],
       ),
     );
@@ -2307,8 +4209,9 @@ class _ChatScreenState extends State<ChatScreen> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+
           if (msg.isMe) ...[
-            SizedBox(width: 4.w),
+            SizedBox(width: 5.w),
             Icon(iconData, size: 14.sp, color: iconColor),
           ],
         ],

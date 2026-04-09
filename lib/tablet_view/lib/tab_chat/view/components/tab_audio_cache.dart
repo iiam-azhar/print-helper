@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import '../../../../../../utils/extensions.dart';
 
 class AudioCacheService {
   AudioCacheService._();
@@ -15,7 +16,7 @@ class AudioCacheService {
   Future<File> _downloadIfNeeded(String url) async {
     final tempDir = await getTemporaryDirectory();
     // Safely extract filename
-    final fileName = Uri.parse(url).pathSegments.last;
+    final fileName = Uri.parse(url).fileName;
     // FIX: Use p.join() to create a valid Windows path (e.g., C:\Users\Temp\file.mp3)
     // instead of manually adding '/' which breaks MPV on Windows.
     final filePath = p.join(tempDir.path, fileName);
@@ -62,7 +63,7 @@ class AudioCacheService {
         throw Exception('Download failed');
       }
       final fileName =
-          '${DateTime.now().millisecondsSinceEpoch}_${url.split('/').last}';
+          '${DateTime.now().millisecondsSinceEpoch}_${Uri.parse(url).fileName}';
       // Use p.join for the final file path too
       final file = File(p.join(downloadDir.path, fileName));
       await file.writeAsBytes(response.bodyBytes);

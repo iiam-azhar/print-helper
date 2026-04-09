@@ -48,10 +48,7 @@ void showMessageOptionsDialog({
               child: GestureDetector(
                 onTap: () {},
                 child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.95),
                     borderRadius: BorderRadius.circular(16),
@@ -111,16 +108,21 @@ void showMessageOptionsDialog({
 }
 
 Widget _popupIcon({
-  required String icon,
+  String? icon,
+  IconData? iconData,
   required String label,
   required VoidCallback onTap,
 }) {
+  final Widget leading = iconData != null
+      ? Icon(iconData, size: 22, color: Colors.black87)
+      : ImageWidget(image: icon ?? '', width: 22, height: 22);
+
   return GestureDetector(
     onTap: onTap,
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ImageWidget(image: icon, width: 22, height: 22),
+        leading,
         Spacers.sb2(),
         TextWidget(
           text: label,

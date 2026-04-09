@@ -19,6 +19,7 @@ import '../utils/console_util.dart';
 import 'package:print_helper/tablet_view/lib/tab_auth/tab_login_screen.dart';
 import 'package:print_helper/tablet_view/lib/tab_sidePanel/dashboard_wrapper.dart';
 import '../admin/chat/provider/chat_pro.dart';
+import 'package:print_helper/providers/files_pro.dart';
 
 class AuthPro extends ChangeNotifier {
   Map<String, String> get headers => {'Content-type': 'application/json'};
@@ -50,6 +51,15 @@ class AuthPro extends ChangeNotifier {
         printData(title: "Customer Client ID:", data: user!.custClientId);
         printData(title: "Customer ID:", data: user!.customerId);
         await CallDeviceService.bootstrap(forceRegister: true);
+
+        // Initialize real-time file updates
+        if (user?.id != null) {
+          Provider.of<FilesPro>(ctx, listen: false).initFilesSocket(
+            userId: user!.id.toString(),
+            context: ctx,
+          );
+        }
+
         notifyListeners();
         showToast(message: "Login successful");
         return true;
@@ -93,9 +103,13 @@ class AuthPro extends ChangeNotifier {
         await CallDeviceService.bootstrap(forceRegister: true);
         notifyListeners();
 
-        // 🔄 CRITICAL: Reset chat provider to disconnect old sockets and clear state
+        // 🔄 CRITICAL: Reset providers to disconnect old sockets and clear state
         final chatPro = Provider.of<ChatPro>(context, listen: false);
         chatPro.resetForUserSwitch();
+
+        final filesPro = Provider.of<FilesPro>(context, listen: false);
+        filesPro.disconnectFilesSocket();
+        filesPro.initFilesSocket(userId: user.id.toString(), context: context);
 
         _navigateByRole(user.roleName, context);
       } else {
@@ -213,6 +227,19 @@ class AuthPro extends ChangeNotifier {
         printData(
           title: "LOGOUT",
           data: "Error disconnecting chat: $e",
+          e: true,
+        );
+      }
+
+      // 2b. Disconnect file sockets
+      try {
+        final filesPro = Provider.of<FilesPro>(context, listen: false);
+        filesPro.disconnectFilesSocket();
+        printData(title: "LOGOUT", data: "Files socket disconnected");
+      } catch (e) {
+        printData(
+          title: "LOGOUT",
+          data: "Error disconnecting files: $e",
           e: true,
         );
       }

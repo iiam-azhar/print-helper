@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 DateTime parseDateLocal(String? dateString) {
   if (dateString == null || dateString.isEmpty) return DateTime.now();
   String dateStr = dateString.toString();
@@ -245,15 +247,50 @@ class ChatMessage {
       type: json['type'] ?? 'text',
       audioUrl: _extractVoiceUrl(json),
       audioDuration: json['voice_duration'],
-      callAttachments: json['type'] == 'call' && json['attachments'] is Map
-          ? Map<String, dynamic>.from(json['attachments'])
-          : null,
+      callAttachments: _extractCallAttachments(json),
       videoUrl: _extractVideoUrl(json),
       videoDuration: _extractVideoDuration(json),
       videoSize: _extractVideoSize(json),
       videoMimeType: _extractVideoMimeType(json),
       isVideoCallRecording: _isVideoCallRecording(json),
     );
+  }
+
+  static Map<String, dynamic>? _extractAttachmentsMap(
+    Map<String, dynamic> json,
+  ) {
+    final attachments = json['attachments'];
+    if (attachments == null) return null;
+    if (attachments is Map<String, dynamic>) return attachments;
+    if (attachments is Map) return Map<String, dynamic>.from(attachments);
+    if (attachments is List && attachments.isNotEmpty) {
+      final first = attachments.first;
+      if (first is Map<String, dynamic>) return first;
+      if (first is Map) return Map<String, dynamic>.from(first);
+    }
+    if (attachments is String && attachments.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(attachments);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        if (decoded is List && decoded.isNotEmpty) {
+          final first = decoded.first;
+          if (first is Map<String, dynamic>) return first;
+          if (first is Map) return Map<String, dynamic>.from(first);
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static Map<String, dynamic>? _extractCallAttachments(
+    Map<String, dynamic> json,
+  ) {
+    final type = json['type']?.toString();
+    if (type != 'call' && type != 'video_call' && type != 'voice') {
+      return null;
+    }
+    return _extractAttachmentsMap(json);
   }
 
   /// Helper to extract voice URL with multiple fallback options
@@ -372,7 +409,9 @@ class ChatMessage {
 
   /// Getter to extract to_users from call attachments
   List<Map<String, dynamic>>? get toUsers {
-    if (type != 'call' || callAttachments == null) return null;
+    if ((type != 'call' && type != 'video_call') || callAttachments == null) {
+      return null;
+    }
     if (callAttachments!['to_users'] is List) {
       return (callAttachments!['to_users'] as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
@@ -383,14 +422,39 @@ class ChatMessage {
 
   /// Getter for call from number
   String? get callFromNumber {
-    if (type != 'call' || callAttachments == null) return null;
+    if ((type != 'call' && type != 'video_call') || callAttachments == null) {
+      return null;
+    }
     return callAttachments!['from_number']?.toString();
   }
 
   /// Getter for call to number
   String? get callToNumber {
-    if (type != 'call' || callAttachments == null) return null;
+    if ((type != 'call' && type != 'video_call') || callAttachments == null) {
+      return null;
+    }
     return callAttachments!['to_number']?.toString();
+  }
+
+  bool? get isMissedCall {
+    if ((type != 'call' && type != 'video_call') || callAttachments == null) {
+      return null;
+    }
+    return callAttachments!['is_missed'] == true;
+  }
+
+  String? get callOutcome {
+    if ((type != 'call' && type != 'video_call') || callAttachments == null) {
+      return null;
+    }
+    return callAttachments!['call_outcome']?.toString();
+  }
+
+  String? get callStatus {
+    if ((type != 'call' && type != 'video_call') || callAttachments == null) {
+      return null;
+    }
+    return callAttachments!['call_status']?.toString();
   }
 
   ChatMessage copyWith({

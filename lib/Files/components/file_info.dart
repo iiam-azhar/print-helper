@@ -17,6 +17,10 @@ class FileInformationSheet extends StatelessWidget {
   final String addedDate;
   final String addedBy;
   final String addedByAvatar;
+  final VoidCallback? onShare;
+  final VoidCallback? onDownload;
+  final VoidCallback? onRename;
+  final VoidCallback? onDelete;
 
   const FileInformationSheet({
     super.key,
@@ -30,6 +34,10 @@ class FileInformationSheet extends StatelessWidget {
     this.addedBy = "Jesus Martinez",
     this.addedByAvatar = "assets/images/ppls.png",
     this.type = "image",
+    this.onShare,
+    this.onDownload,
+    this.onRename,
+    this.onDelete,
   });
 
   @override
@@ -52,9 +60,22 @@ class FileInformationSheet extends StatelessWidget {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  ImageWidget(
-                    image: type == "image" ? file : Paths.folder,
-                    height: 140,
+                  Center(
+                    child: Container(
+                      width: 120.w,
+                      height: 120.h,
+                      padding: EdgeInsets.all(6.w),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.black12),
+                        color: Colors.white,
+                      ),
+                      child: ImageWidget(
+                        image: type == "image" ? file : Paths.folder,
+                        height: double.infinity,
+                        width: double.infinity,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
                   ),
                   Spacers.sb20(),
                   _actions(),
@@ -64,6 +85,75 @@ class FileInformationSheet extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actions() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(color: Colors.black12),
+        color: Colors.white,
+      ),
+      child: Column(
+        children: [
+          _actionRow(
+            CupertinoIcons.cloud_download,
+            "Download",
+            Icons.edit_square,
+            "Rename",
+            leftOnTap: onDownload,
+            rightOnTap: onRename,
+          ),
+          const Divider(height: 1),
+          _actionRow(
+            Icons.share_outlined,
+            "Share",
+            CupertinoIcons.delete,
+            "Delete",
+            leftOnTap: onShare,
+            rightOnTap: onDelete,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionRow(
+    IconData leftIcon,
+    String leftText,
+    IconData rightIcon,
+    String rightText, {
+    VoidCallback? leftOnTap,
+    VoidCallback? rightOnTap,
+  }) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 14.h),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Spacers.sbw15(),
+          Expanded(child: _actionButton(leftIcon, leftText, onTap: leftOnTap)),
+          Spacers.sbw30(),
+          Expanded(
+            child: _actionButton(rightIcon, rightText, onTap: rightOnTap),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButton(IconData icon, String text, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(icon, size: 25.sp),
+          Spacers.sbw8(),
+          TextWidget(text: text, fontSize: 13, fontWeight: FontWeight.w400),
         ],
       ),
     );
@@ -83,9 +173,9 @@ class FileInformationSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           infoItem(type == "image" ? "File name" : "Folder name", folderName),
-          type == "image" ? SizedBox() : Spacers.sb5(),
+          type == "image" ? const SizedBox() : Spacers.sb5(),
           type == "image"
-              ? SizedBox()
+              ? const SizedBox()
               : infoItem("Folder file count", fileCount),
           Spacers.sb5(),
           infoItem(type == "image" ? "File size" : "Folder size", fileSize),
@@ -118,55 +208,6 @@ class FileInformationSheet extends StatelessWidget {
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Container _actions() {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18.r),
-        border: Border.all(color: Colors.black12),
-        color: Colors.white,
-      ),
-      child: Column(
-        children: [
-          actionRow(
-            CupertinoIcons.cloud_download,
-            "Download",
-            Icons.edit_square,
-            "Rename",
-          ),
-          Divider(height: 1),
-          actionRow(
-            Icons.share_outlined,
-            "Share",
-            CupertinoIcons.delete,
-            "Delete",
-          ),
-          Divider(height: 1),
-          type == "folder"
-              ? singleActionRow(Icons.drive_folder_upload_outlined, "Move")
-              : actionRow(
-                  Icons.drive_folder_upload_outlined,
-                  "Move",
-                  Icons.copy,
-                  "Copy",
-                ),
-        ],
-      ),
-    );
-  }
-
-  Widget singleActionRow(IconData icon, text) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 14.h),
-      child: Row(
-        children: [
-          Spacers.sbw15(),
-          Expanded(child: actionButton(icon, text)),
         ],
       ),
     );
@@ -213,37 +254,6 @@ class FileInformationSheet extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  Widget actionRow(
-    IconData leftIcon,
-    String leftText,
-    IconData rightIcon,
-    String rightText,
-  ) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 14.h),
-      child: Row(
-        crossAxisAlignment: .start,
-        children: [
-          Spacers.sbw15(),
-          Expanded(child: actionButton(leftIcon, leftText)),
-          Spacers.sbw30(),
-          Expanded(child: actionButton(rightIcon, rightText)),
-        ],
-      ),
-    );
-  }
-
-  Widget actionButton(IconData icon, String text) {
-    return Row(
-      mainAxisAlignment: .start,
-      children: [
-        Icon(icon, size: 25.sp),
-        Spacers.sbw8(),
-        TextWidget(text: text, fontSize: 13, fontWeight: FontWeight.w400),
-      ],
     );
   }
 

@@ -11,6 +11,7 @@ import 'package:print_helper/providers/setting_pro.dart';
 import 'package:print_helper/admin/chat/service/chat_push_notify.dart';
 import 'package:print_helper/utils/no_ssl_http_override.dart';
 import 'package:print_helper/services/call_device_service.dart';
+import 'package:print_helper/services/download_service.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'utils/console_util.dart';
@@ -43,6 +44,7 @@ Future<void> main() async {
   HttpOverrides.global = MyHttpOverrides();
   // 4. Initialize Local Notifications
   await NotificationService.instance.init();
+  await DownloadService.instance.init();
   // 5. System UI settings
   SysChromes.setSystemChromes();
   // 5.1 Lock orientation based on physical device size
@@ -60,15 +62,16 @@ Future<void> _setOrientationByPhysicalDeviceSize() async {
   final devicePixelRatio = view.devicePixelRatio;
   final shortestSide = physicalShortestSide / devicePixelRatio;
 
-  if (shortestSide < 600) {
-    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  if (shortestSide >= 600) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     return;
   }
 
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
+  // Non-tablet devices keep the platform default orientation behavior.
+  await SystemChrome.setPreferredOrientations([]);
 }
 
 Future<void> _initFirebaseMessaging() async {

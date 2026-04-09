@@ -51,11 +51,22 @@ extension StringExtension on String {
 
 extension UriExtensions on Uri {
   String get fileName {
-    return pathSegments.isNotEmpty ? pathSegments.last : '';
+    String name = pathSegments.isNotEmpty ? pathSegments.last : 'file_${DateTime.now().millisecondsSinceEpoch}';
+    // Remove query parameters if they're somehow included (though Uri.parse shouldn't)
+    if (name.contains('?')) {
+      name = name.split('?').first;
+    }
+    // Limit length to avoid OS errors (errno 36)
+    if (name.length > 100) {
+      final ext = name.contains('.') ? name.split('.').last : '';
+      final base = name.contains('.') ? name.split('.').first : name;
+      name = "${base.substring(0, 50)}_${DateTime.now().millisecondsSinceEpoch}${ext.isNotEmpty ? '.$ext' : ''}";
+    }
+    return name;
   }
 
   String get fileType {
-    final url = toString();
+    final url = toString().split('?').first;
     return url.split('.').last;
   }
 }

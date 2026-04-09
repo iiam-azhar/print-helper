@@ -50,6 +50,7 @@ class _ChatListState extends State<ChatList> {
     _listRefreshTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
       if (!mounted) return;
       final pro = getChatPro(context);
+      if (pro.isChatScreenOpen) return;
       if (_searchController.text.trim().isNotEmpty) return;
       await pro.loadConversations(showLoading: false);
     });
@@ -155,8 +156,8 @@ class _ChatListState extends State<ChatList> {
               chat.type == 'private' && chat.participants.isNotEmpty
               ? chat.participants.first
               : null;
-          final isDeletedUser = participant?.id == null;
           return GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () async {
               _clearSearch();
               await navTo(
@@ -175,132 +176,162 @@ class _ChatListState extends State<ChatList> {
               final chatPro = getChatPro(context);
               chatPro.markConversAsRead(chat.id);
             },
-            child: ListTile(
-              leading: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(50.r),
-                  border: Border.all(color: Color(0xffe6e7e6)),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(50.r),
-                  child: ImageWidget(
-                    image: chat.type == 'private'
-                        // PRIVATE CHAT
-                        ? (chat.image.isNotEmpty ? chat.image : Paths.user)
-                        // GROUP CHAT
-                        : (chat.image.isNotEmpty ? chat.image : Paths.other),
-                    height: 40,
-                    width: 40,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              title: Row(
-                crossAxisAlignment: .center,
-                mainAxisAlignment: .start,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    flex: 5,
-                    child: TextWidget(
-                      text: chat.title,
-                      color: Color(0xff414345),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (chat.type == 'private')
-                    Expanded(
-                      flex: 3,
-                      child: TextWidget(
-                        text: isDeletedUser
-                            ? 'Deleted User'
-                            : '@${participant?.username ?? 'deleted user'}',
-                        color: isDeletedUser ? Colors.red : Color(0xff414345),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 10,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    )
-                  else if (chat.type == 'group' &&
-                      chat.latestMessage?.userName != null)
-                    Expanded(
-                      flex: 3,
-                      child: TextWidget(
-                        text: '@${chat.latestMessage?.userName ?? 'Unknown'}',
-                        color: Color(0xff414345),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 10,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  chat.latestMessage != null
-                      ? Expanded(
-                          flex: 3,
-                          child: Column(
-                            children: [
-                              TextWidget(
-                                text: chat.latestMessage != null
-                                    ? DateFormat(
-                                        'dd MMM yyyy',
-                                      ).format(chat.latestMessage!.createdAt)
-                                    : '',
-                                color: Colors.grey,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 10,
-                              ),
-                            ],
+                  Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Color(0xffe6e7e6)),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(50.r),
+                          child: ImageWidget(
+                            image: chat.type == 'private'
+                                ? (chat.image.isNotEmpty
+                                      ? chat.image
+                                      : Paths.user)
+                                : (chat.image.isNotEmpty
+                                      ? chat.image
+                                      : Paths.other),
+                            height: 48,
+                            width: 48,
+                            fit: BoxFit.cover,
                           ),
-                        )
-                      : Spacer(flex: 3),
-                ],
-              ),
-              subtitle: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
+                        ),
+                      ),
+                      if (participant != null && participant.isOnline)
+                        Positioned(
+                          bottom: 2,
+                          right: 2,
+                          child: Container(
+                            height: 12,
+                            width: 12,
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  Spacers.sbw12(),
                   Expanded(
-                    flex: 2,
-                    child: _buildLatestMessageSubtitle(
-                      chat.latestMessage,
-                      isSelfCaller:
-                          chat.latestMessage?.userId != null &&
-                          chat.latestMessage!.userId == currentUserId,
-                      calleeFallback:
-                          chat.type == 'private' && chat.participants.isNotEmpty
-                          ? '${chat.participants.first.name} ${chat.participants.first.lastName}'
-                                .trim()
-                          : null,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Flexible(
+                                    child: TextWidget(
+                                      text: chat.title,
+                                      color: Color(0xff111111),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (chat.type == 'group') ...[
+                                    SizedBox(width: 8.w),
+                                    Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8.w,
+                                        vertical: 2.h,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Color(0xFFFFF3C4),
+                                        borderRadius: BorderRadius.circular(
+                                          12.r,
+                                        ),
+                                      ),
+                                      child: TextWidget(
+                                        text:
+                                            'Group ${chat.participants.length} Users',
+                                        color: Color(0xFF8B6B00),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            if (chat.latestMessage != null)
+                              TextWidget(
+                                text: DateFormat('dd MMM. yyyy')
+                                    .format(chat.latestMessage!.createdAt)
+                                    .toLowerCase(),
+                                color: Color(0xff9e9e9e),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                          ],
+                        ),
+                        SizedBox(height: 4.h),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (chat.latestMessage?.userName != null)
+                              Padding(
+                                padding: EdgeInsets.only(right: 4.w),
+                                child: Text(
+                                  '@${chat.latestMessage!.userName}:',
+                                  style: TextStyle(
+                                    color: Color(0xff888888),
+                                    fontStyle: FontStyle.italic,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            Expanded(
+                              child: _buildLatestMessageSubtitle(
+                                chat.latestMessage,
+                                isSelfCaller:
+                                    chat.latestMessage?.userId != null &&
+                                    chat.latestMessage!.userId == currentUserId,
+                                calleeFallback:
+                                    chat.type == 'private' &&
+                                        chat.participants.isNotEmpty
+                                    ? '${chat.participants.first.name} ${chat.participants.first.lastName}'
+                                          .trim()
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 8.h),
+                        _buildChipsMobile(chat),
+                      ],
                     ),
                   ),
                   if (chat.unreadCount > 0)
                     Container(
-                      constraints: BoxConstraints(
-                        minWidth: 25.w,
-                        minHeight: 20.w,
-                      ),
-                      margin: EdgeInsets.only(top: 5.w, right: 4.w),
+                      margin: EdgeInsets.only(left: 8.w, top: 2.h),
                       padding: EdgeInsets.symmetric(
-                        horizontal: 8.w,
-                        vertical: 4.w,
+                        horizontal: 6.w,
+                        vertical: 2.h,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.green,
                         borderRadius: BorderRadius.circular(50.r),
                       ),
-                      child: Center(
-                        child: TextWidget(
-                          text: chat.unreadCount > 999
-                              ? '999+'
-                              : chat.unreadCount.toString(),
-                          fontSize: 10,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: TextWidget(
+                        text: chat.unreadCount > 999
+                            ? '999+'
+                            : chat.unreadCount.toString(),
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                 ],
@@ -310,6 +341,97 @@ class _ChatListState extends State<ChatList> {
         },
       ),
     );
+  }
+
+  Widget _buildChipsMobile(ChatConversation chat) {
+    List<Widget> chips = [];
+    Set<String> addedCustomers = {};
+    Set<String> addedClients = {};
+    Set<String> addedRoles = {};
+
+    List<ChatParticipant> participantsToCheck = chat.type == 'private'
+        ? (chat.participants.isNotEmpty ? [chat.participants.first] : [])
+        : chat.participants;
+
+    for (var p in participantsToCheck) {
+      // Customer
+      final customer = p.customerCompanyName;
+      if (customer != null &&
+          customer.isNotEmpty &&
+          !addedCustomers.contains(customer)) {
+        addedCustomers.add(customer);
+        chips.add(
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+            decoration: BoxDecoration(
+              color: Color(0xFFFFF3C4), // Yellow-ish
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: TextWidget(
+              text: 'Customer: $customer',
+              color: Color(0xFF8B6B00), // Dark yellow/brown
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+      }
+
+      // Client
+      final client = p.clientCompanyName ?? p.customerClientCompanyName;
+      if (client != null &&
+          client.isNotEmpty &&
+          !addedClients.contains(client)) {
+        addedClients.add(client);
+        chips.add(
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+            decoration: BoxDecoration(
+              color: Color(0xFFE4E9FF), // Light blue
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: TextWidget(
+              text: 'Client: $client',
+              color: Colors.blue[700]!, // Blue text
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+      }
+
+      // Role
+      final role = p.accountTypeName;
+      if (role != null && role.isNotEmpty) {
+        String displayRole = role;
+        if (role.toLowerCase() == 'staff') {
+          displayRole = 'Specialist';
+        }
+        if (!addedRoles.contains(displayRole)) {
+          addedRoles.add(displayRole);
+          bool isAdmin = role.toLowerCase() == 'admin';
+          chips.add(
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+              decoration: BoxDecoration(
+                color: isAdmin ? Colors.black : Color(0xfff1f1f2),
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              child: TextWidget(
+                text: displayRole,
+                color: isAdmin ? Colors.white : Color(0xff414345),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    if (chips.isEmpty) return SizedBox.shrink();
+
+    return Wrap(spacing: 6.w, runSpacing: 6.h, children: chips);
   }
 
   AppBar _appBar(BuildContext context) {
@@ -494,12 +616,18 @@ class _ChatListState extends State<ChatList> {
     }
 
     final isCallMsg =
-        msg.type == 'call' || (msg.type == 'voice' && msg.isCallRecording);
+        msg.type == 'call' ||
+        msg.type == 'video_call' ||
+        (msg.type == 'voice' && msg.isCallRecording);
 
     if (isCallMsg) {
+      final callOutcome = (msg.callOutcome ?? '').toLowerCase();
+      final isVideoCall = msg.type == 'video_call';
+      final isRejected = callOutcome == 'rejected';
       final isMissed =
-          msg.callOutcome == 'missed' ||
-          msg.callOutcome == 'no-answer' ||
+          callOutcome == 'missed' ||
+          callOutcome == 'no-answer' ||
+          isRejected ||
           (msg.callOutcome == null && msg.type == 'call');
 
       // Caller: 'You' if current user, else sender's name
@@ -523,9 +651,9 @@ class _ChatListState extends State<ChatList> {
       final iconColor = isMissed ? Colors.red : Colors.green;
       final textColor = isMissed ? Colors.red : Colors.green;
 
-      final label = calleeName != null
-          ? '$callerName → $calleeName'
-          : callerName;
+      final label = isRejected
+          ? (isVideoCall ? 'Rejected video call' : 'Rejected call')
+          : (calleeName != null ? '$callerName → $calleeName' : callerName);
 
       return Align(
         alignment: Alignment.centerLeft,
@@ -544,7 +672,9 @@ class _ChatListState extends State<ChatList> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                isMissed ? Icons.phone_missed : Icons.phone_forwarded,
+                isRejected
+                    ? Icons.close
+                    : (isMissed ? Icons.phone_missed : Icons.phone_forwarded),
                 size: 11.sp,
                 color: iconColor,
               ),
@@ -577,6 +707,49 @@ class _ChatListState extends State<ChatList> {
           Flexible(
             child: TextWidget(
               text: 'Voice message',
+              color: Colors.black54,
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (msg.type == 'file' || msg.type == 'image') {
+      if (msg.isAttachmentMoved) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.delete_outline, size: 14.sp, color: Colors.black54),
+            SizedBox(width: 4.w),
+            Flexible(
+              child: TextWidget(
+                text: 'Deleted file',
+                color: Colors.black54,
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      }
+      final attachmentLabel =
+          (msg.attachmentName != null && msg.attachmentName!.trim().isNotEmpty)
+          ? msg.attachmentName!.trim()
+          : (msg.message.trim().isNotEmpty ? msg.message.trim() : 'Attachment');
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.attach_file, size: 14.sp, color: Colors.black54),
+          SizedBox(width: 4.w),
+          Flexible(
+            child: TextWidget(
+              text: attachmentLabel,
               color: Colors.black54,
               fontWeight: FontWeight.w500,
               fontSize: 13,

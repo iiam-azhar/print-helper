@@ -64,12 +64,17 @@ class _FabMenuState extends State<FabMenu> with SingleTickerProviderStateMixin {
     setState(() {});
   }
 
-  void _close() {
+  void _close({bool immediate = false}) {
     open = false;
-    _anim.reverse();
-    Future.delayed(const Duration(milliseconds: 180), () {
+    if (immediate) {
       _removeOverlay();
-    });
+      _anim.value = 0;
+    } else {
+      _anim.reverse();
+      Future.delayed(const Duration(milliseconds: 180), () {
+        _removeOverlay();
+      });
+    }
     setState(() {});
   }
 
@@ -131,7 +136,10 @@ class _FabMenuState extends State<FabMenu> with SingleTickerProviderStateMixin {
         FloatingActionButton(
           mini: true,
           backgroundColor: AppColors.primary,
-          onPressed: widget.onCamera,
+          onPressed: () {
+            _close(immediate: true);
+            widget.onCamera?.call();
+          },
           child: Icon(CupertinoIcons.camera, size: 24.sp, color: Colors.black),
         ),
         Spacers.sb10(),
@@ -166,7 +174,7 @@ class _FabMenuState extends State<FabMenu> with SingleTickerProviderStateMixin {
   Widget _item(IconData icon, String label, VoidCallback? onTap) {
     return InkWell(
       onTap: () {
-        _close();
+        _close(immediate: true);
         if (onTap != null) onTap();
       },
       child: Padding(

@@ -140,9 +140,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
                 navTo(context: context, page: const SettingsScreen());
               },
             ),
-
             Spacers.sb15(),
-
             Padding(
               padding: const EdgeInsets.only(left: 18),
               child: Row(
@@ -157,9 +155,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
                 ],
               ),
             ),
-
             const Spacer(),
-
             Container(
               margin: const EdgeInsets.only(left: 18),
               decoration: const BoxDecoration(
@@ -175,7 +171,6 @@ class _CustomDrawerState extends State<CustomDrawer> {
                 onTap: () {
                   final authPro = Provider.of<AuthPro>(context, listen: false);
                   authPro.logout(context);
-                  print("1111111111111");
                 },
               ),
             ),

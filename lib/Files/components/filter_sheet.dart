@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:print_helper/widgets/custom_button.dart';
 import 'package:print_helper/widgets/spacers.dart';
 import 'package:print_helper/widgets/text_widget.dart';
 
+import '../../providers/files_pro.dart';
 import '../../constants/paths.dart';
 import '../../widgets/image_widget.dart';
 
 class FilterFilesSheet extends StatefulWidget {
+  static const String clearFiltersKey = '__clear_filters__';
+
   const FilterFilesSheet({super.key});
 
   @override
@@ -17,18 +21,113 @@ class FilterFilesSheet extends StatefulWidget {
 
 class _FilterFilesSheetState extends State<FilterFilesSheet> {
   final fileName = TextEditingController();
-  final companyName = TextEditingController();
-  final contactName = TextEditingController();
-  final contactLastName = TextEditingController();
-  final projectName = TextEditingController();
-  final projectID = TextEditingController();
-  final taskName = TextEditingController();
+  final clientCompanyName = TextEditingController();
+  final clientContactName = TextEditingController();
+  final clientContactLastName = TextEditingController();
+  final customerCompanyName = TextEditingController();
+  final customerContactName = TextEditingController();
+  final customerContactLastName = TextEditingController();
+  final staffName = TextEditingController();
+  final staffLastName = TextEditingController();
 
   String? sortBy;
   String? fileExt;
 
-  DateTime fromDate = DateTime.now();
-  DateTime toDate = DateTime.now();
+  DateTime? fromDate;
+  DateTime? toDate;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final filesPro = context.read<FilesPro>();
+      filesPro.getFileFilterOptions();
+
+      final active = filesPro.activeFilters;
+      sortBy = active['sort_by']?.toString().trim().isNotEmpty == true
+          ? active['sort_by'].toString().trim()
+          : null;
+      fileExt = active['file_extension']?.toString().trim().isNotEmpty == true
+          ? active['file_extension'].toString().trim()
+          : null;
+      fileName.text = (active['filename'] ?? '').toString();
+      clientCompanyName.text = (active['client_company_name'] ?? '').toString();
+      clientContactName.text = (active['client_contact_name'] ?? '').toString();
+      clientContactLastName.text = (active['client_contact_lastname'] ?? '')
+          .toString();
+      customerCompanyName.text = (active['customer_company_name'] ?? '')
+          .toString();
+      customerContactName.text = (active['customer_contact_name'] ?? '')
+          .toString();
+      customerContactLastName.text = (active['customer_contact_lastname'] ?? '')
+          .toString();
+      staffName.text = (active['staff_name'] ?? '').toString();
+      staffLastName.text = (active['staff_lastname'] ?? '').toString();
+      fromDate = DateTime.tryParse((active['date_from'] ?? '').toString());
+      toDate = DateTime.tryParse((active['date_to'] ?? '').toString());
+
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    fileName.dispose();
+    clientCompanyName.dispose();
+    clientContactName.dispose();
+    clientContactLastName.dispose();
+    customerCompanyName.dispose();
+    customerContactName.dispose();
+    customerContactLastName.dispose();
+    staffName.dispose();
+    staffLastName.dispose();
+    super.dispose();
+  }
+
+  String _formatApiDate(DateTime value) =>
+      DateFormat('yyyy-MM-dd').format(value);
+
+  void _clearForm() {
+    fileName.clear();
+    clientCompanyName.clear();
+    clientContactName.clear();
+    clientContactLastName.clear();
+    customerCompanyName.clear();
+    customerContactName.clear();
+    customerContactLastName.clear();
+    staffName.clear();
+    staffLastName.clear();
+    setState(() {
+      sortBy = null;
+      fileExt = null;
+      fromDate = null;
+      toDate = null;
+    });
+  }
+
+  Map<String, String> _buildFilters() {
+    final filters = <String, String>{
+      'sort_by': sortBy ?? '',
+      'filename': fileName.text.trim(),
+      'file_extension': fileExt ?? '',
+      'client_company_name': clientCompanyName.text.trim(),
+      'client_contact_name': clientContactName.text.trim(),
+      'client_contact_lastname': clientContactLastName.text.trim(),
+      'customer_company_name': customerCompanyName.text.trim(),
+      'customer_contact_name': customerContactName.text.trim(),
+      'customer_contact_lastname': customerContactLastName.text.trim(),
+      'staff_name': staffName.text.trim(),
+      'staff_lastname': staffLastName.text.trim(),
+      'date_from': fromDate != null ? _formatApiDate(fromDate!) : '',
+      'date_to': toDate != null ? _formatApiDate(toDate!) : '',
+    };
+
+    filters.removeWhere((key, value) => value.trim().isEmpty);
+    return filters;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +153,12 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
               Expanded(
                 child: CustomButton(
                   title: 'Clear',
-                  onTap: () {},
+                  onTap: () {
+                    _clearForm();
+                    Navigator.pop(context, {
+                      FilterFilesSheet.clearFiltersKey: true,
+                    });
+                  },
                   stadium: false,
                   height: 43,
                   showBorder: true,
@@ -69,7 +173,9 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
               Expanded(
                 child: CustomButton(
                   title: 'Save',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pop(context, _buildFilters());
+                  },
                   stadium: false,
                   height: 43,
                   showBorder: false,
@@ -90,40 +196,55 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
   }
 
   Widget _filterBody() {
+    final filesPro = context.watch<FilesPro>();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Column(
         children: [
-          _dropdown("Sort by", sortBy, [
-            "Name",
-            "Date",
-            "Size",
-          ], (v) => setState(() => sortBy = v)),
+          _dropdown(
+            "Sort by",
+            sortBy,
+            filesPro.sortByOptions,
+            filesPro.sortByPlaceholder,
+            (v) => setState(() => sortBy = v?.isEmpty == true ? null : v),
+          ),
           Spacers.sb15(),
           _input("File name", fileName),
           Spacers.sb15(),
-          _dropdown("File Extention", fileExt, ["pdf", "psd", "jpg", "png"], (
-            v,
-          ) {
-            setState(() => fileExt = v);
-          }),
+          _dropdown(
+            "File Extension",
+            fileExt,
+            filesPro.fileExtensionOptions,
+            filesPro.fileExtensionPlaceholder,
+            (v) => setState(() => fileExt = v?.isEmpty == true ? null : v),
+          ),
           Spacers.sb15(),
-          _input("Customer’s Company Name", companyName),
-          Spacers.sb15(),
-
-          _input("Contact Name", contactName),
-          Spacers.sb15(),
-
-          _input("Contact Lastname", contactLastName),
+          _input("Client's Company Name", clientCompanyName),
           Spacers.sb15(),
 
-          _input("Project Name", projectName),
+          _input("Client's Contact Name", clientContactName),
           Spacers.sb15(),
 
-          _input("Project ID", projectID),
+          _input("Client's Contact Lastname", clientContactLastName),
           Spacers.sb15(),
 
-          _input("Task Name", taskName),
+          _input("Customer's Company Name", customerCompanyName),
+          Spacers.sb15(),
+
+          _input("Customer's Contact Name", customerContactName),
+          Spacers.sb15(),
+
+          _input("Customer's Contact Lastname", customerContactLastName),
+          Spacers.sb15(),
+
+          Row(
+            children: [
+              Expanded(child: _input("Staff Name", staffName)),
+              Spacers.sbw10(),
+              Expanded(child: _input("Staff Lastname", staffLastName)),
+            ],
+          ),
           Spacers.sb20(),
 
           /// Date Range Card
@@ -204,7 +325,8 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
   Widget _dropdown(
     String label,
     String? value,
-    List<String> items,
+    List<Map<String, String>> items,
+    String placeholder,
     ValueChanged<String?> onChanged,
   ) {
     return Column(
@@ -222,13 +344,15 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
             child: DropdownButton<String>(
               value: value,
               isExpanded: true,
-              hint: Text("Select"),
+              dropdownColor: Colors.white,
+              borderRadius: BorderRadius.circular(12.r),
+              hint: Text(placeholder),
               items: items
                   .map(
                     (e) => DropdownMenuItem(
-                      value: e,
+                      value: e['value'] ?? '',
                       child: TextWidget(
-                        text: e,
+                        text: e['label'] ?? '',
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
@@ -283,7 +407,7 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
     );
   }
 
-  Widget _dateField(String label, DateTime value, Function(DateTime) onPick) {
+  Widget _dateField(String label, DateTime? value, Function(DateTime) onPick) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -305,7 +429,7 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
                 context: context,
                 firstDate: DateTime(2000),
                 lastDate: DateTime(2050),
-                initialDate: value,
+                initialDate: value ?? DateTime.now(),
               );
               if (picked != null) onPick(picked);
             },
@@ -320,7 +444,9 @@ class _FilterFilesSheetState extends State<FilterFilesSheet> {
                 children: [
                   Expanded(
                     child: TextWidget(
-                      text: DateFormat('MMM dd, yyyy').format(value),
+                      text: value == null
+                          ? 'dd-mm-yyyy'
+                          : DateFormat('MMM dd, yyyy').format(value),
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),

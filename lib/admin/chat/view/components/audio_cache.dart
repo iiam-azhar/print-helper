@@ -3,11 +3,12 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../../../../utils/console_util.dart';
+import '../../../../utils/extensions.dart';
 
 class AudioCacheService {
   static Future<File> getCachedAudio(String url) async {
     final dir = await getTemporaryDirectory();
-    final fileName = url.split('/').last;
+    final fileName = Uri.parse(url).fileName;
     final file = File('${dir.path}/$fileName');
 
     if (await file.exists()) return file;
@@ -41,7 +42,7 @@ class AudioCacheService {
       }
       // Generate filename with timestamp to avoid duplicates
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final originalFileName = url.split('/').last;
+      final originalFileName = Uri.parse(url).fileName;
       final fileName = '${timestamp}_$originalFileName';
       final file = File('${downloadDir.path}/$fileName');
       // Download the file

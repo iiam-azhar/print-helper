@@ -13,6 +13,11 @@ DateTime parseDateLocal(String? dateString) {
   return DateTime.parse(dateStr).toLocal();
 }
 
+String _cleanUrl(String? url) {
+  if (url == null) return '';
+  return url.trim().replaceAll('`', '').trim();
+}
+
 class ChatConversation {
   final int id;
   final String type; // private | group
@@ -82,6 +87,10 @@ class ChatParticipant {
 
   /// Participant role inside a group conversation: 'member' | 'observer'
   final String? role;
+  final String? accountTypeName;
+  final String? clientCompanyName;
+  final String? customerCompanyName;
+  final String? customerClientCompanyName;
 
   ChatParticipant({
     this.id,
@@ -95,6 +104,10 @@ class ChatParticipant {
     this.personalPhone,
     required this.phoneNumbers,
     this.role,
+    this.accountTypeName,
+    this.clientCompanyName,
+    this.customerCompanyName,
+    this.customerClientCompanyName,
   });
 
   factory ChatParticipant.fromJson(Map<String, dynamic> json) {
@@ -103,17 +116,22 @@ class ChatParticipant {
       name: json['name'] ?? '',
       username: json['username'] ?? '',
       lastName: json['last_name'] ?? '',
-      image: json['image'],
+      image: _cleanUrl(json['image']?.toString()),
       isOnline: json['is_online'] ?? false,
       lastSeenAt: json['last_seen_at'] != null
           ? parseDateLocal(json['last_seen_at'])
           : null,
-      phone: json['phone'],
-      personalPhone: json['personal_phone'],
+      phone: json['phone']?.toString(),
+      personalPhone: json['personal_phone']?.toString(),
       phoneNumbers: (json['phone_numbers'] as List? ?? [])
           .map((e) => e.toString())
           .toList(),
-      role: json['role'],
+      role: json['participant_role']?.toString() ?? json['role']?.toString(),
+      accountTypeName: json['account_type_name']?.toString(),
+      clientCompanyName: json['client_company_name']?.toString(),
+      customerCompanyName: json['customer_company_name']?.toString(),
+      customerClientCompanyName: json['customer_client_company_name']
+          ?.toString(),
     );
   }
 }
@@ -152,6 +170,9 @@ class ChatLatestMessage {
   isCallRecording; // true when voice latest message is a call recording
   final String? callOutcome; // 'attended', 'missed', 'no-answer', etc.
   final List<Map<String, dynamic>>? toUsers; // list of {id, name, image}
+  final String? attachmentName;
+  final String? attachmentMimeType;
+  final bool isAttachmentMoved;
 
   ChatLatestMessage({
     required this.id,
@@ -164,17 +185,21 @@ class ChatLatestMessage {
     this.isCallRecording = false,
     this.callOutcome,
     this.toUsers,
+    this.attachmentName,
+    this.attachmentMimeType,
+    this.isAttachmentMoved = false,
   });
 
   factory ChatLatestMessage.fromJson(Map<String, dynamic> json) {
     final user = json['user'];
+    final message = (json['message'] ?? '').toString();
 
     // Parse attachments for call data
     bool isCallRecording = false;
     String? callOutcome;
     List<Map<String, dynamic>>? toUsers;
     final type = json['type'] ?? 'text';
-    if (type == 'voice' || type == 'call') {
+    if (type == 'voice' || type == 'call' || type == 'video_call') {
       var att = json['attachments'];
       Map<String, dynamic>? attMap;
       if (att is Map<String, dynamic>) {
@@ -191,11 +216,15 @@ class ChatLatestMessage {
               .toList();
         }
       }
+
+      callOutcome ??= _deriveCallOutcomeFromMessage(message);
     }
+
+    final latestAttachment = _getAttachmentsMap(json);
 
     return ChatLatestMessage(
       id: json['id'] is int ? json['id'] : int.parse(json['id'].toString()),
-      message: json['message'] ?? '',
+      message: message,
       type: type,
       createdAt: parseDateLocal(json['created_at']),
       userId: user != null && user['id'] != null ? user['id'] as int : null,
@@ -204,7 +233,46 @@ class ChatLatestMessage {
       isCallRecording: isCallRecording,
       callOutcome: callOutcome,
       toUsers: toUsers,
+      attachmentName:
+          latestAttachment?['name']?.toString() ??
+          latestAttachment?['file_name']?.toString() ??
+          latestAttachment?['filename']?.toString() ??
+          latestAttachment?['original_name']?.toString(),
+      attachmentMimeType:
+          latestAttachment?['mime_type']?.toString() ??
+          latestAttachment?['file_mime_type']?.toString(),
+      isAttachmentMoved: latestAttachment?['is_moved'] == true,
     );
+  }
+
+  static Map<String, dynamic>? _getAttachmentsMap(Map<String, dynamic> json) {
+    final attachments = json['attachments'];
+    if (attachments == null) return null;
+    if (attachments is Map<String, dynamic>) return attachments;
+    if (attachments is Map) return Map<String, dynamic>.from(attachments);
+    if (attachments is List && attachments.isNotEmpty) {
+      final first = attachments.first;
+      if (first is Map<String, dynamic>) return first;
+      if (first is Map) return Map<String, dynamic>.from(first);
+    }
+    return null;
+  }
+
+  static String? _deriveCallOutcomeFromMessage(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('declined') || lower.contains('rejected')) {
+      return 'rejected';
+    }
+    if (lower.contains('missed') || lower.contains('no answer')) {
+      return 'no-answer';
+    }
+    if (lower.contains('canceled') || lower.contains('cancelled')) {
+      return 'canceled';
+    }
+    if (lower.contains('attended') || lower.contains('answered')) {
+      return 'attended';
+    }
+    return null;
   }
 }
 
@@ -336,6 +404,18 @@ class ChatMessage {
   final int? audioDuration; // seconds (optional)
   final List<double>? voiceWaveform; // wave data
 
+  // Generic image/file attachment fields
+  final String? attachmentUrl;
+  final String? attachmentName;
+  final int? attachmentSize;
+  final String? attachmentMimeType;
+  final String? thumbnailUrl;
+  final double? expiresInDays;
+  final bool isExpired;
+  final bool isMoved;
+  final DateTime? movedAt;
+  final String? movedByName;
+
   // Video-type fields
   final String? videoUrl; // video message URL
   final int? videoDuration; // seconds
@@ -375,6 +455,16 @@ class ChatMessage {
     this.type = 'text',
     this.audioUrl,
     this.audioDuration,
+    this.attachmentUrl,
+    this.attachmentName,
+    this.attachmentSize,
+    this.attachmentMimeType,
+    this.thumbnailUrl,
+    this.expiresInDays,
+    this.isExpired = false,
+    this.isMoved = false,
+    this.movedAt,
+    this.movedByName,
     this.isRead,
     this.isDelivered,
     this.deliveredAt,
@@ -415,7 +505,7 @@ class ChatMessage {
       senderName: user != null
           ? "${user['name'] ?? ''} ${user['last_name'] ?? ''}".trim()
           : null,
-      senderAvatar: user != null ? user['image'] : null,
+      senderAvatar: user != null ? _cleanUrl(user['image']?.toString()) : null,
       isRead: json['is_read'],
       isDelivered: json['is_delivered'],
       deliveredAt: json['delivered_at'] != null
@@ -423,8 +513,18 @@ class ChatMessage {
           : null,
       readAt: json['read_at'] != null ? parseDateLocal(json['read_at']) : null,
       type: json['type'] ?? 'text',
-      audioUrl: _extractVoiceUrl(json),
+      audioUrl: _cleanUrl(_extractVoiceUrl(json)),
       audioDuration: json['voice_duration'],
+      attachmentUrl: _cleanUrl(_extractAttachmentUrl(json)),
+      attachmentName: _extractAttachmentName(json),
+      attachmentSize: _extractAttachmentSize(json),
+      attachmentMimeType: _extractAttachmentMimeType(json),
+      thumbnailUrl: _cleanUrl(_extractThumbnailUrl(json)),
+      expiresInDays: _extractExpiresInDays(json),
+      isExpired: _isExpired(json),
+      isMoved: _isMoved(json),
+      movedAt: _extractMovedAt(json),
+      movedByName: _extractMovedByName(json),
       isCallRecording: _isCallRecording(json),
       callOutcome: _callOrRecordingField(json, 'call_outcome'),
       isMissedCall: _isCallOrRecording(json)
@@ -481,7 +581,7 @@ class ChatMessage {
 
   /// Whether this JSON represents a call-type OR voice call-recording message
   static bool _isCallOrRecording(Map<String, dynamic> json) {
-    if (json['type'] == 'call') return true;
+    if (json['type'] == 'call' || json['type'] == 'video_call') return true;
     if (json['type'] == 'voice') {
       final att = _getAttachmentsMap(json);
       if (att != null && att['is_call_recording'] == true) return true;
@@ -532,6 +632,85 @@ class ChatMessage {
     }
 
     return null;
+  }
+
+  static String? _extractAttachmentUrl(Map<String, dynamic> json) {
+    if (json['type'] != 'image' && json['type'] != 'file') return null;
+
+    final att = _getAttachmentsMap(json);
+    if (att == null) return null;
+
+    return att['file_url']?.toString() ??
+        att['image_url']?.toString() ??
+        att['url']?.toString() ??
+        att['file']?.toString() ??
+        att['path']?.toString();
+  }
+
+  static String? _extractAttachmentName(Map<String, dynamic> json) {
+    if (json['type'] != 'image' && json['type'] != 'file') return null;
+
+    final att = _getAttachmentsMap(json);
+    if (att == null) return null;
+
+    return att['name']?.toString() ??
+        att['file_name']?.toString() ??
+        att['filename']?.toString() ??
+        att['original_name']?.toString();
+  }
+
+  static int? _extractAttachmentSize(Map<String, dynamic> json) {
+    if (json['type'] != 'image' && json['type'] != 'file') return null;
+
+    final att = _getAttachmentsMap(json);
+    if (att == null || att['size'] == null) return null;
+    return int.tryParse(att['size'].toString());
+  }
+
+  static String? _extractAttachmentMimeType(Map<String, dynamic> json) {
+    if (json['type'] != 'image' && json['type'] != 'file') return null;
+
+    final att = _getAttachmentsMap(json);
+    if (att == null) return null;
+    return att['mime_type']?.toString() ?? att['file_mime_type']?.toString();
+  }
+
+  static String? _extractThumbnailUrl(Map<String, dynamic> json) {
+    if (json['type'] != 'image' && json['type'] != 'file') return null;
+
+    final att = _getAttachmentsMap(json);
+    if (att == null) return null;
+    return att['thumbnail_url']?.toString() ??
+        att['thumbnail']?.toString() ??
+        att['preview_url']?.toString();
+  }
+
+  static double? _extractExpiresInDays(Map<String, dynamic> json) {
+    final att = _getAttachmentsMap(json);
+    if (att == null || att['expires_in_days'] == null) return null;
+    return double.tryParse(att['expires_in_days'].toString());
+  }
+
+  static bool _isExpired(Map<String, dynamic> json) {
+    final att = _getAttachmentsMap(json);
+    return att != null && att['is_expired'] == true;
+  }
+
+  static bool _isMoved(Map<String, dynamic> json) {
+    final att = _getAttachmentsMap(json);
+    return att != null && att['is_moved'] == true;
+  }
+
+  static DateTime? _extractMovedAt(Map<String, dynamic> json) {
+    final att = _getAttachmentsMap(json);
+    if (att == null || att['moved_at'] == null) return null;
+    return parseDateLocal(att['moved_at']?.toString());
+  }
+
+  static String? _extractMovedByName(Map<String, dynamic> json) {
+    final att = _getAttachmentsMap(json);
+    if (att == null) return null;
+    return att['moved_by_name']?.toString();
   }
 
   /// Helper to extract video URL from attachments
@@ -604,6 +783,16 @@ class ChatMessage {
       type: type,
       audioUrl: audioUrl,
       audioDuration: audioDuration,
+      attachmentUrl: attachmentUrl,
+      attachmentName: attachmentName,
+      attachmentSize: attachmentSize,
+      attachmentMimeType: attachmentMimeType,
+      thumbnailUrl: thumbnailUrl,
+      expiresInDays: expiresInDays,
+      isExpired: isExpired,
+      isMoved: isMoved,
+      movedAt: movedAt,
+      movedByName: movedByName,
       createdAt: createdAt,
       isMe: isMe,
       senderName: senderName,
@@ -621,7 +810,7 @@ class ChatMessage {
       callStatus: callStatus,
       callerUsers: callerUsers,
       toUsers: toUsers,
-      voiceWaveform: voiceWaveform ?? this.voiceWaveform,
+      voiceWaveform: voiceWaveform ?? voiceWaveform,
       videoUrl: videoUrl,
       videoDuration: videoDuration,
       videoSize: videoSize,

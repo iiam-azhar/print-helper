@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:print_helper/admin/chat/models/group_participants_model.dart';
 import 'package:print_helper/admin/chat/provider/chat_pro.dart';
 import 'package:print_helper/utils/console_util.dart';
 import 'package:print_helper/widgets/custom_button.dart';
@@ -13,7 +14,6 @@ import '../../../../constants/paths.dart';
 import '../../../../models/search_modals.dart';
 import '../../../../services/helpers.dart';
 import '../../../../widgets/image_widget.dart';
-import '../../../../widgets/loaders.dart';
 import '../../../../widgets/spacers.dart';
 import '../../../../widgets/text_widget.dart';
 import '../../../../widgets/toasts.dart';
@@ -26,28 +26,37 @@ class CreateChatGroup extends StatefulWidget {
   State<CreateChatGroup> createState() => CreateChatGroupState();
 }
 
-class CreateChatGroupState extends State<CreateChatGroup> {
-  final _formKey = GlobalKey<FormState>();
-  final _searchCntrler = TextEditingController();
+class CreateChatGroupState extends State<CreateChatGroup>
+    with SingleTickerProviderStateMixin {
   final _groupNameCntrler = TextEditingController();
+  final _staffSearchCntrler = TextEditingController();
+  final _clientCompanySearchCntrler = TextEditingController();
+  final _clientMemberSearchCntrler = TextEditingController();
+
+  late TabController _tabController;
   bool pickingFile = false;
   File? selectedImage;
 
   @override
   void initState() {
     super.initState();
-    // Clear any leftover selected users / search results from a previous session
+    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<ChatPro>().clearGroupCreationState();
+        final pro = context.read<ChatPro>();
+        pro.clearGroupCreationState();
+        pro.fetchGroupParticipants();
       }
     });
   }
 
   @override
   void dispose() {
-    _searchCntrler.dispose();
+    _tabController.dispose();
     _groupNameCntrler.dispose();
+    _staffSearchCntrler.dispose();
+    _clientCompanySearchCntrler.dispose();
+    _clientMemberSearchCntrler.dispose();
     super.dispose();
   }
 
@@ -112,45 +121,46 @@ class CreateChatGroupState extends State<CreateChatGroup> {
             child: Column(
               children: [
                 _header(context),
-                // ── Scrollable body: everything between header and buttons ──
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: EdgeInsets.symmetric(horizontal: 16.w),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Spacers.sb20(),
-                          _profileImageSection(),
-                          Spacers.sb20(),
-                          _buildLabel("Group Name"),
-                          Spacers.sb8(),
-                          _groupNameField(),
-                          Spacers.sb15(),
-                          _buildLabel("Add Members"),
-                          Spacers.sb8(),
-                          _searchField(),
-                          Spacers.sb8(),
-                          // Search results: constrained height with internal scroll
-                          Consumer<ChatPro>(
-                            builder: (context, pro, _) {
-                              final isSearching =
-                                  pro.isLoading ||
-                                  pro.searchResults.isNotEmpty ||
-                                  _searchCntrler.text.isNotEmpty;
-                              if (!isSearching) return const SizedBox.shrink();
-                              return _buildSearchArea(pro);
-                            },
-                          ),
-                          // Selected members list below search results
-                          Consumer<ChatPro>(
-                            builder: (context, pro, _) =>
-                                _buildSelectedMembersList(pro),
-                          ),
-                          Spacers.sb20(),
-                        ],
-                      ),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16.w,
+                      vertical: 0,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Spacers.sb20(),
+                        _profileImageSection(),
+                        Spacers.sb20(),
+                        _buildLabel("Group Name"),
+                        Spacers.sb8(),
+                        _groupNameField(),
+                        Spacers.sb15(),
+                        _buildLabel("Add Members"),
+                        Spacers.sb8(),
+                        _tabBar(),
+                        Spacers.sb12(),
+                        // TabBarView-style content driven by index (no fixed height needed)
+                        AnimatedBuilder(
+                          animation: _tabController,
+                          builder: (context, _) {
+                            if (_tabController.index == 0) {
+                              return _staffsTab();
+                            } else {
+                              return _clientsTab();
+                            }
+                          },
+                        ),
+                        // Added Members
+                        Consumer<ChatPro>(
+                          builder: (context, pro, _) =>
+                              _buildSelectedMembersList(pro),
+                        ),
+                        Spacers.sb20(),
+                      ],
                     ),
                   ),
                 ),
@@ -274,122 +284,526 @@ class CreateChatGroupState extends State<CreateChatGroup> {
     );
   }
 
-  // ─── Search Field ───────────────────────────────────────────────────────────
+  // ─── Tab Bar ────────────────────────────────────────────────────────────────
 
-  Widget _searchField() {
+  Widget _tabBar() {
+    return Container(
+      height: 42.h,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(12.r),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        indicator: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10.r),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        labelColor: Colors.black,
+        unselectedLabelColor: Colors.grey.shade600,
+        labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.sp),
+        unselectedLabelStyle: TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 13.sp,
+        ),
+        tabs: const [
+          Tab(text: 'Specialist'),
+          Tab(text: 'Clients'),
+        ],
+      ),
+    );
+  }
+
+  // ─── STAFFS TAB ─────────────────────────────────────────────────────────────
+
+  Widget _staffsTab() {
     return Consumer<ChatPro>(
       builder: (context, pro, _) {
-        return TextField(
-          controller: _searchCntrler,
-          onChanged: pro.onSearchChanged,
-          decoration: _inputDecoration("Search users").copyWith(
-            suffixIcon: _searchCntrler.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.close, color: Colors.grey),
-                    onPressed: () {
-                      _searchCntrler.clear();
-                      pro.onSearchChanged('');
-                    },
-                  )
-                : null,
-          ),
-          style: TextStyle(fontSize: 14.sp, color: Colors.black87),
+        // Filter list against search
+        final query = _staffSearchCntrler.text.toLowerCase();
+        final filtered = pro.staffList.where((u) {
+          if (query.isEmpty) return true;
+          return u.fullName.toLowerCase().contains(query) ||
+              (u.email?.toLowerCase().contains(query) ?? false);
+        }).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextWidget(
+              text: 'Search Staffs',
+              fontSize: 13,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+            Spacers.sb6(),
+            _searchTextField(
+              controller: _staffSearchCntrler,
+              hint: 'Search staffs',
+              onChanged: (_) => setState(() {}),
+            ),
+            Spacers.sb10(),
+            if (pro.isFetchingGroupParticipants)
+              _loadingCard()
+            else if (filtered.isEmpty)
+              _emptyCard('No staffs found')
+            else
+              _staffList(filtered, pro),
+          ],
         );
       },
     );
   }
 
-  // ─── Search Results ─────────────────────────────────────────────────────────
-
-  Widget _buildSearchArea(ChatPro pro) {
-    // Search results / placeholder
-    if (_searchCntrler.text.isEmpty && pro.searchResults.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    if (pro.isLoading) return _placeholderCard(null, loading: true);
-    if (pro.searchResults.isEmpty && _searchCntrler.text.isNotEmpty) {
-      return _placeholderCard("No results found");
-    }
-
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: 220.h),
-      child: ListView.separated(
-        shrinkWrap: true,
-        padding: EdgeInsets.zero,
-        itemCount: pro.searchResults.length,
-        separatorBuilder: (_, _) => Spacers.sb5(),
-        itemBuilder: (context, index) {
-          final user = pro.searchResults[index];
+  Widget _staffList(List<SearchUsers> staffs, ChatPro pro) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Column(
+        children: List.generate(staffs.length, (index) {
+          final user = staffs[index];
           final isSelected = pro.selectedUsers.any((u) => u.id == user.id);
-          return GestureDetector(
-            onTap: () => pro.toggleUserSelection(user),
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12.r),
-                border: Border.all(
-                  color: isSelected ? AppColors.btnClr : Colors.grey.shade300,
-                  width: isSelected ? 1.5 : 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(50.r),
-                    child: ImageWidget(
-                      image: user.image != null && user.image!.isNotEmpty
-                          ? user.image!
-                          : Paths.user,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  Spacers.sbw10(),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextWidget(
-                          text: user.fullName,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 14,
-                          color: Colors.black87,
-                        ),
-                        if (user.email != null && user.email!.isNotEmpty)
-                          TextWidget(
-                            text: user.email!,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w400,
-                            color: Colors.grey.shade500,
-                          ),
-                      ],
-                    ),
-                  ),
-                  if (isSelected)
-                    Container(
-                      padding: EdgeInsets.all(4.w),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.green.shade50,
-                      ),
-                      child: const Icon(
-                        Icons.check,
-                        size: 14,
-                        color: Colors.green,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        },
+          final isLast = index == staffs.length - 1;
+          return _staffTile(user, isSelected, isLast, pro);
+        }),
       ),
     );
   }
 
-  // ─── Selected Members List ──────────────────────────────────────────────────
+  Widget _staffTile(
+    SearchUsers user,
+    bool isSelected,
+    bool isLast,
+    ChatPro pro,
+  ) {
+    return GestureDetector(
+      onTap: () => pro.toggleUserSelection(user),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.btnClr.withValues(alpha: 0.06)
+              : Colors.transparent,
+          border: isLast
+              ? null
+              : Border(
+                  bottom: BorderSide(color: Colors.grey.shade100, width: 1),
+                ),
+          borderRadius: isLast
+              ? BorderRadius.only(
+                  bottomLeft: Radius.circular(14.r),
+                  bottomRight: Radius.circular(14.r),
+                )
+              : null,
+        ),
+        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+        child: Row(
+          children: [
+            _userAvatar(user, size: 42),
+            Spacers.sbw12(),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextWidget(
+                    text: user.fullName,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: Colors.black87,
+                  ),
+                  if (user.email != null && user.email!.isNotEmpty)
+                    TextWidget(
+                      text: user.email!,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.grey.shade500,
+                    ),
+                ],
+              ),
+            ),
+            _checkOrAddIcon(isSelected),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── CLIENTS TAB ─────────────────────────────────────────────────────────────
+
+  Widget _clientsTab() {
+    return Consumer<ChatPro>(
+      builder: (context, pro, _) {
+        if (pro.isFetchingGroupParticipants) return _loadingCard();
+
+        if (pro.selectedClientCompany == null) {
+          return _clientCompanyListView(pro);
+        } else {
+          return _clientDetailView(pro);
+        }
+      },
+    );
+  }
+
+  // State 1: Company selection
+  Widget _clientCompanyListView(ChatPro pro) {
+    final query = _clientCompanySearchCntrler.text.toLowerCase();
+    final filtered = pro.clientCompanies.where((c) {
+      if (query.isEmpty) return true;
+      return c.companyName.toLowerCase().contains(query);
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextWidget(
+          text: 'Search Client Companies',
+          fontSize: 13,
+          color: Colors.grey.shade600,
+          fontWeight: FontWeight.w500,
+        ),
+        Spacers.sb6(),
+        _searchTextField(
+          controller: _clientCompanySearchCntrler,
+          hint: 'Search client companies',
+          onChanged: (_) => setState(() {}),
+        ),
+        Spacers.sb10(),
+        if (filtered.isEmpty)
+          _emptyCard('No clients found')
+        else
+          _clientCompanyList(filtered, pro),
+      ],
+    );
+  }
+
+  Widget _clientCompanyList(List<ClientCompanyModel> companies, ChatPro pro) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Column(
+        children: List.generate(companies.length, (index) {
+          final company = companies[index];
+          final isSelected = pro.selectedClientCompany?.id == company.id;
+          final isLast = index == companies.length - 1;
+          return _clientCompanyTile(company, isSelected, isLast, pro);
+        }),
+      ),
+    );
+  }
+
+  Widget _clientCompanyTile(
+    ClientCompanyModel company,
+    bool isSelected,
+    bool isLast,
+    ChatPro pro,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        pro.setClientCompany(company);
+        _clientMemberSearchCntrler.clear();
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFF0F9F0) : Colors.transparent,
+          border: Border(
+            left: isSelected
+                ? const BorderSide(color: Colors.green, width: 3)
+                : BorderSide.none,
+            bottom: isLast
+                ? BorderSide.none
+                : BorderSide(color: Colors.grey.shade100, width: 1),
+          ),
+          borderRadius: isLast
+              ? BorderRadius.only(
+                  bottomLeft: Radius.circular(14.r),
+                  bottomRight: Radius.circular(14.r),
+                )
+              : null,
+        ),
+        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+        child: Row(
+          children: [
+            _companyAvatar(company),
+            Spacers.sbw12(),
+            Expanded(
+              child: TextWidget(
+                text: company.companyName,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: Colors.black87,
+              ),
+            ),
+            Container(
+              width: 22.w,
+              height: 22.w,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? Colors.green : Colors.grey.shade300,
+                  width: 1.5,
+                ),
+                color: isSelected ? Colors.green : Colors.transparent,
+              ),
+              child: isSelected
+                  ? Icon(Icons.check, size: 13.sp, color: Colors.white)
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // State 2: Client detail view (contacts + customers)
+  Widget _clientDetailView(ChatPro pro) {
+    final company = pro.selectedClientCompany!;
+    final query = _clientMemberSearchCntrler.text.toLowerCase();
+
+    // Build the combined list based on filter
+    List<SearchUsers> members = [];
+    if (pro.selectedClientFilter == 'All') {
+      members = [...company.contacts, ...company.customers];
+    } else if (pro.selectedClientFilter == 'Contacts') {
+      members = company.contacts;
+    } else {
+      members = company.customers;
+    }
+
+    if (query.isNotEmpty) {
+      members = members
+          .where((u) => u.fullName.toLowerCase().contains(query))
+          .toList();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Company list with selection highlight
+        _clientCompanyListView(pro),
+        Spacers.sb12(),
+        // Selected client card + Clear button
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextWidget(
+                      text: 'SELECTED CLIENT',
+                      fontSize: 10,
+                      color: Colors.grey.shade500,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    Spacers.sb2(),
+                    TextWidget(
+                      text: company.companyName,
+                      fontSize: 14,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () => pro.setClientCompany(null),
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 12.w,
+                    vertical: 7.h,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8.r),
+                    border: Border.all(color: Colors.red.shade100),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.close,
+                        size: 14.sp,
+                        color: Colors.red.shade600,
+                      ),
+                      Spacers.sbw4(),
+                      TextWidget(
+                        text: 'Clear',
+                        fontSize: 12,
+                        color: Colors.red.shade600,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Spacers.sb10(),
+        // Member search
+        _searchTextField(
+          controller: _clientMemberSearchCntrler,
+          hint: 'Search users by name...',
+          prefixIcon: Icons.search,
+          onChanged: (_) => setState(() {}),
+        ),
+        Spacers.sb10(),
+        // Filter chips: All / Contacts / Customers
+        _filterChips(pro),
+        Spacers.sb10(),
+        // Members list
+        if (members.isEmpty)
+          _emptyCard('No members found')
+        else
+          _clientMembersList(members, pro),
+        Spacers.sb8(),
+        // "Only one client per group" notice
+        Row(
+          children: [
+            Icon(Icons.circle, size: 8.sp, color: Colors.red.shade400),
+            Spacers.sbw6(),
+            TextWidget(
+              text: 'ONLY ONE CLIENT PER GROUP',
+              fontSize: 10,
+              color: Colors.red.shade400,
+              fontWeight: FontWeight.w600,
+            ),
+          ],
+        ),
+        Spacers.sb4(),
+      ],
+    );
+  }
+
+  Widget _filterChips(ChatPro pro) {
+    const filters = ['All', 'Contacts', 'Customers'];
+    return Row(
+      children: filters.map((f) {
+        final isActive = pro.selectedClientFilter == f;
+        return Padding(
+          padding: EdgeInsets.only(right: 8.w),
+          child: GestureDetector(
+            onTap: () => pro.setClientMemberFilter(f),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 7.h),
+              decoration: BoxDecoration(
+                color: isActive ? Colors.black87 : Colors.white,
+                borderRadius: BorderRadius.circular(20.r),
+                border: Border.all(
+                  color: isActive ? Colors.black87 : Colors.grey.shade300,
+                ),
+              ),
+              child: TextWidget(
+                text: f,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : Colors.grey.shade700,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _clientMembersList(List<SearchUsers> members, ChatPro pro) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Column(
+        children: List.generate(members.length, (index) {
+          final user = members[index];
+          final isSelected = pro.selectedUsers.any((u) => u.id == user.id);
+          final isLast = index == members.length - 1;
+          return _clientMemberTile(user, isSelected, isLast, pro);
+        }),
+      ),
+    );
+  }
+
+  Widget _clientMemberTile(
+    SearchUsers user,
+    bool isSelected,
+    bool isLast,
+    ChatPro pro,
+  ) {
+    return GestureDetector(
+      onTap: () => pro.toggleUserSelection(user),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          border: isLast
+              ? null
+              : Border(
+                  bottom: BorderSide(color: Colors.grey.shade100, width: 1),
+                ),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+        child: Row(
+          children: [
+            _userAvatar(user, size: 42),
+            Spacers.sbw12(),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextWidget(
+                    text: user.fullName,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: Colors.black87,
+                  ),
+                  Spacers.sb2(),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 7.w,
+                      vertical: 2.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: user.userType == 'CONTACT'
+                          ? Colors.blue.shade50
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(4.r),
+                    ),
+                    child: TextWidget(
+                      text: user.userType,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: user.userType == 'CONTACT'
+                          ? Colors.blue.shade600
+                          : Colors.orange.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _checkOrAddIcon(isSelected),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Added Members ──────────────────────────────────────────────────────────
 
   Widget _buildSelectedMembersList(ChatPro pro) {
     if (pro.selectedUsers.isEmpty) return const SizedBox.shrink();
@@ -397,54 +811,65 @@ class CreateChatGroupState extends State<CreateChatGroup> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Spacers.sb15(),
-        _buildLabel("Added Members (${pro.selectedUsers.length})"),
+        _buildLabel("Added Users"),
         Spacers.sb8(),
-        ...pro.selectedUsers.map((user) => _selectedMemberTile(user, pro)),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14.r),
+          ),
+          child: Column(
+            children: List.generate(pro.selectedUsers.length, (index) {
+              final user = pro.selectedUsers[index];
+              final isLast = index == pro.selectedUsers.length - 1;
+              return _selectedMemberTile(user, pro, isLast);
+            }),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _selectedMemberTile(SearchUsers user, ChatPro pro) {
-    final statusText = user.isOnline
-        ? 'Online'
-        : user.lastSeenAt != null
-        ? 'Last seen ${_formatLastSeen(user.lastSeenAt!)}'
-        : user.email ?? '';
+  Widget _selectedMemberTile(SearchUsers user, ChatPro pro, bool isLast) {
+    final isStaff = user.userType == 'STAFF';
+    final statusText = isStaff
+        ? (user.isOnline
+              ? 'Online'
+              : user.lastSeenAt != null
+              ? 'Last seen ${_formatLastSeen(user.lastSeenAt!)}'
+              : user.email ?? '')
+        : user.userType;
 
     return Container(
-      margin: EdgeInsets.only(bottom: 2.h),
-      color: Colors.white,
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : Border(bottom: BorderSide(color: Colors.grey.shade100, width: 1)),
+      ),
       padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
       child: Row(
         children: [
-          // Avatar with online dot
+          // Avatar with online dot for staff
           Stack(
             clipBehavior: Clip.none,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(50.r),
-                child: ImageWidget(
-                  image: user.image != null && user.image!.isNotEmpty
-                      ? user.image!
-                      : Paths.user,
-                  width: 44,
-                  height: 44,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 12.w,
-                  height: 12.w,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: user.isOnline ? Colors.green : Colors.grey.shade400,
-                    border: Border.all(color: Colors.white, width: 2),
+              _userAvatar(user, size: 44),
+              if (isStaff)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 12.w,
+                    height: 12.w,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: user.isOnline
+                          ? Colors.green
+                          : Colors.grey.shade400,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           Spacers.sbw12(),
@@ -463,24 +888,30 @@ class CreateChatGroupState extends State<CreateChatGroup> {
                   text: statusText,
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
-                  color: user.isOnline ? Colors.green : Colors.grey,
+                  color: (isStaff && user.isOnline)
+                      ? Colors.green
+                      : Colors.grey.shade500,
                 ),
               ],
             ),
           ),
           GestureDetector(
             onTap: () => pro.removeSelectedUser(user),
-            child: ImageWidget(
-              image: Paths.delete,
-              width: 18.w,
-              height: 18.h,
-              fit: BoxFit.cover,
+            child: Container(
+              padding: EdgeInsets.all(6.w),
+              child: ImageWidget(
+                image: Paths.delete,
+                width: 20.w,
+                height: 20.w,
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
+  // ─── Helpers ────────────────────────────────────────────────────────────────
 
   String _formatLastSeen(DateTime lastSeen) {
     final now = DateTime.now();
@@ -490,7 +921,6 @@ class CreateChatGroupState extends State<CreateChatGroup> {
     if (diff.inDays < 1) return '${diff.inHours}h ago';
     if (diff.inDays == 1) return 'yesterday';
     if (diff.inDays < 7) return '${diff.inDays}d ago';
-    // Show actual date for older
     final month = [
       'Jan',
       'Feb',
@@ -508,24 +938,159 @@ class CreateChatGroupState extends State<CreateChatGroup> {
     return '$month ${lastSeen.day}';
   }
 
-  Widget _placeholderCard(String? text, {bool loading = false}) {
+  Widget _userAvatar(SearchUsers user, {double size = 42}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(50.r),
+      child: ImageWidget(
+        image: user.image != null && user.image!.isNotEmpty
+            ? user.image!
+            : Paths.user,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
+  Widget _companyAvatar(ClientCompanyModel company) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(50.r),
+      child: ImageWidget(
+        image: company.image != null && company.image!.isNotEmpty
+            ? company.image!
+            : Paths.user,
+        width: 42,
+        height: 42,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
+  Widget _checkOrAddIcon(bool isSelected) {
+    if (isSelected) {
+      return Container(
+        width: 28.w,
+        height: 28.w,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.grey.shade300, width: 1.5),
+        ),
+        child: Icon(Icons.check, size: 14.sp, color: Colors.grey.shade600),
+      );
+    }
+    return Container(
+      width: 28.w,
+      height: 28.w,
+      decoration: const BoxDecoration(
+        color: AppColors.btnClr,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(Icons.add, size: 16.sp, color: Colors.white),
+    );
+  }
+
+  Widget _loadingCard() {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(vertical: 30.h),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _emptyCard(String msg) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: 30.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14.r),
       ),
       child: Center(
-        child: loading
-            ? showLoader()
-            : TextWidget(
-                text: text ?? '',
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-                color: Colors.grey.shade500,
-              ),
+        child: TextWidget(
+          text: msg,
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          color: Colors.grey.shade500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabel(String text) {
+    return TextWidget(
+      text: text,
+      color: Colors.black87,
+      fontWeight: FontWeight.w700,
+      fontSize: 14,
+    );
+  }
+
+  Widget _searchTextField({
+    required TextEditingController controller,
+    required String hint,
+    required ValueChanged<String> onChanged,
+    IconData? prefixIcon,
+  }) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14.sp),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+        prefixIcon: prefixIcon != null
+            ? Icon(prefixIcon, size: 18.sp, color: Colors.grey.shade400)
+            : null,
+        suffixIcon: controller.text.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.close, color: Colors.grey),
+                onPressed: () {
+                  controller.clear();
+                  onChanged('');
+                },
+              )
+            : null,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12.r),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12.r),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12.r),
+          borderSide: const BorderSide(color: AppColors.grey),
+        ),
+      ),
+      style: TextStyle(fontSize: 14.sp, color: Colors.black87),
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14.sp),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12.r),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12.r),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12.r),
+        borderSide: const BorderSide(color: AppColors.grey),
       ),
     );
   }
@@ -571,39 +1136,6 @@ class CreateChatGroupState extends State<CreateChatGroup> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ─── Helpers ────────────────────────────────────────────────────────────────
-
-  Widget _buildLabel(String text) {
-    return TextWidget(
-      text: text,
-      color: Colors.black87,
-      fontWeight: FontWeight.w700,
-      fontSize: 14,
-    );
-  }
-
-  InputDecoration _inputDecoration(String hint) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14.sp),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.r),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.r),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.r),
-        borderSide: const BorderSide(color: AppColors.grey),
       ),
     );
   }

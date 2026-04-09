@@ -51,7 +51,11 @@ class Paths {
   static const String share = 'assets/images/share.png';
   static const String call3 = 'assets/images/11.png';
   static const String close = 'assets/images/5.png';
-  static const String vc6 = 'assets/images/video-call_6.png';
+  static const String docx = 'assets/images/Docx.png';
+  static const String txt = 'assets/images/txt.png';
+  static const String zip = 'assets/images/Zip.png';
+  static const String pdf = 'assets/images/pdf.png';
+
 
 
 

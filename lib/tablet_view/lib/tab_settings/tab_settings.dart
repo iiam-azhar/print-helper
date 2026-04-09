@@ -10,6 +10,7 @@ import '../tab_widgets/loaders.dart';
 import '../tab_widgets/tab_text_widget.dart';
 import '../tab_widgets/tab_spacers.dart';
 import '../tab_constants/colors.dart';
+import 'tab_file_settings.dart';
 import 'tab_twilio_credentials.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -108,7 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               child: TwilioCredentialsWeb(),
                             )
                           : _activeTab == 2
-                          ? Container()
+                          ? const FileSettingsTablet()
                           : Container(
                               padding: EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -153,7 +154,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Spacers.sbw10(),
             _tabItem("Twilio", index: 1),
             Spacers.sbw10(),
-            _tabItem("Other", index: 2),
+            _tabItem("File", index: 2),
           ],
         ),
       ),

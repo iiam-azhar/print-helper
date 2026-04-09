@@ -17,6 +17,7 @@ class FileInformationSheet extends StatelessWidget {
   final String addedDate;
   final String addedBy;
   final String addedByAvatar;
+  final VoidCallback? onShare;
 
   const FileInformationSheet({
     super.key,
@@ -30,6 +31,7 @@ class FileInformationSheet extends StatelessWidget {
     this.addedBy = "Jesus Martinez",
     this.addedByAvatar = "assets/images/ppls.png",
     this.type = "image",
+    this.onShare,
   });
 
   @override
@@ -85,11 +87,16 @@ class FileInformationSheet extends StatelessWidget {
         children: [
           infoItem(type == "image" ? "File name" : "Folder name", folderName),
           type == "image" ? const SizedBox() : Spacers.sb5(),
-          type == "image" ? const SizedBox() : infoItem("Folder file count", fileCount),
+          type == "image"
+              ? const SizedBox()
+              : infoItem("Folder file count", fileCount),
           Spacers.sb5(),
           infoItem(type == "image" ? "File size" : "Folder size", fileSize),
           Spacers.sb5(),
-          infoItem(type == "image" ? "File Location" : "Folder Location", fileLocation),
+          infoItem(
+            type == "image" ? "File Location" : "Folder Location",
+            fileLocation,
+          ),
           Spacers.sb5(),
           infoItem("Added date and time", addedDate),
           Spacers.sb5(),
@@ -142,29 +149,8 @@ class FileInformationSheet extends StatelessWidget {
             "Share",
             CupertinoIcons.delete,
             "Delete",
+            leftOnTap: onShare,
           ),
-          const Divider(height: 1),
-          type == "folder"
-              ? singleActionRow(Icons.drive_folder_upload_outlined, "Move")
-              : actionRow(
-                  Icons.drive_folder_upload_outlined,
-                  "Move",
-                  Icons.copy,
-                  "Copy",
-                ),
-        ],
-      ),
-    );
-  }
-
-  // For single action rows
-  Widget singleActionRow(IconData icon, text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      child: Row(
-        children: [
-          Spacers.sbw15(),
-          Expanded(child: actionButton(icon, text)),
         ],
       ),
     );
@@ -212,30 +198,37 @@ class FileInformationSheet extends StatelessWidget {
     IconData leftIcon,
     String leftText,
     IconData rightIcon,
-    String rightText,
-  ) {
+    String rightText, {
+    VoidCallback? leftOnTap,
+    VoidCallback? rightOnTap,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Spacers.sbw15(),
-          Expanded(child: actionButton(leftIcon, leftText)),
+          Expanded(child: actionButton(leftIcon, leftText, onTap: leftOnTap)),
           Spacers.sbw30(),
-          Expanded(child: actionButton(rightIcon, rightText)),
+          Expanded(
+            child: actionButton(rightIcon, rightText, onTap: rightOnTap),
+          ),
         ],
       ),
     );
   }
 
   // Button inside row
-  Widget actionButton(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 25),
-        Spacers.sbw8(),
-        TextWidget(text: text, fontSize: 13, fontWeight: FontWeight.w400),
-      ],
+  Widget actionButton(IconData icon, String text, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(icon, size: 25),
+          Spacers.sbw8(),
+          TextWidget(text: text, fontSize: 13, fontWeight: FontWeight.w400),
+        ],
+      ),
     );
   }
 

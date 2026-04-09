@@ -98,10 +98,10 @@ class _SideBarState extends State<SideBar> {
                 String? brandLogo;
                 if (isCustomer) {
                   brandLogo = buildImageUrl(custPro.client?.brandingLogo);
-                  debugPrint("customer $brandLogo 111111111111111111");
+                  debugPrint("customer $brandLogo");
                 } else if (isContact) {
                   brandLogo = buildImageUrl(clipro.selectedClient?.logo);
-                  debugPrint("client $brandLogo 222222222222");
+                  debugPrint("client $brandLogo");
                 } else {
                   brandLogo = null;
                 }

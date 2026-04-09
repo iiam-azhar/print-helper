@@ -180,37 +180,12 @@ class _ChatListState extends State<ChatList> {
     return RegExp(r'^[0-9\s\(\)\-\+\.]+$').hasMatch(title);
   }
 
-  Widget _unsavedAccountButton() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFC400),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: TextWidget(
-          text: '+ Account',
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: Colors.black,
-        ),
-      ),
-    );
-  }
-
   Widget _chatTile(ChatConversation chat, ChatPro chatPro) {
     final participant = chat.type == 'private' && chat.participants.isNotEmpty
         ? chat.participants.first
         : null;
     final isDeletedUser = participant?.id == null;
-    final authPro = getAuthPro(context);
-    final currentUserId = authPro.user?.id;
-
-    // Check if the latest message was sent by current user
-    final isMyMessage =
-        chat.latestMessage?.userId != null &&
-        chat.latestMessage!.userId == currentUserId;
+    final currentUserId = getAuthPro(context).user?.id;
 
     return InkWell(
       onTap: () async {
@@ -247,139 +222,153 @@ class _ChatListState extends State<ChatList> {
           pro.markConversAsRead(chat.id);
         }
       },
-      child: ListTile(
-        leading: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(50),
-            border: Border.all(color: const Color(0xffe6e7e6)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(50),
-            child: ImageWidget(
-              image: chat.type == 'private'
-                  ? (chat.image.isNotEmpty ? chat.image : Paths.user)
-                  : (chat.image.isNotEmpty ? chat.image : Paths.other),
-              height: 40,
-              width: 40,
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
-        title: Row(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              flex: 4,
-              child: TextWidget(
-                text: chat.title,
-                color: const Color(0xff414345),
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 12),
-            if (chat.type == 'private' && _isPhoneTitle(chat.title))
-              Expanded(flex: 3, child: _unsavedAccountButton())
-            else if (chat.type == 'private' &&
-                chat.latestMessage?.userName != null)
-              Expanded(
-                flex: 3,
-                child: TextWidget(
-                  text: '@${chat.latestMessage?.userName ?? 'Unknown'}',
-                  color: const Color(0xff939393),
-                  fontWeight: FontWeight.w400,
-                  fontSize: 12,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              )
-            else if (chat.type == 'private')
-              Expanded(
-                flex: 3,
-                child: TextWidget(
-                  text: isDeletedUser
-                      ? 'Deleted User'
-                      : '@${participant?.username ?? 'deleted user'}',
-                  color: isDeletedUser ? Colors.red : const Color(0xff939393),
-                  fontWeight: FontWeight.w400,
-                  fontSize: 12,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              )
-            else if (chat.type == 'group' &&
-                chat.latestMessage?.userName != null)
-              Expanded(
-                flex: 3,
-                child: TextWidget(
-                  text: '@${chat.latestMessage?.userName ?? 'Unknown'}',
-                  color: const Color(0xff939393),
-                  fontWeight: FontWeight.w400,
-                  fontSize: 12,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              )
-            else
-              const Spacer(flex: 3),
-            const SizedBox(width: 12),
-            if (chat.latestMessage != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  TextWidget(
-                    text: DateFormat(
-                      'dd MMM yyyy',
-                    ).format(chat.latestMessage!.createdAt),
-                    color: const Color(0xff939393),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    fontWeight: FontWeight.w400,
-                    fontSize: 11,
+            Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xffe6e7e6)),
                   ),
-                ],
-              )
-            else
-              const Spacer(flex: 2),
-          ],
-        ),
-        subtitle: Row(
-          mainAxisAlignment: .spaceBetween,
-          children: [
-            Expanded(
-              child: _buildLatestMessageSubtitle(
-                chat.latestMessage,
-                isSelfCaller:
-                    chat.latestMessage?.userId != null &&
-                    chat.latestMessage!.userId == currentUserId,
-                calleeFallback:
-                    chat.type == 'private' && chat.participants.isNotEmpty
-                    ? '${chat.participants.first.name} ${chat.participants.first.lastName}'
-                          .trim()
-                    : null,
-              ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(50),
+                    child: ImageWidget(
+                      image: chat.type == 'private'
+                          ? (chat.image.isNotEmpty ? chat.image : Paths.user)
+                          : (chat.image.isNotEmpty ? chat.image : Paths.other),
+                      height: 48,
+                      width: 48,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                if (participant != null && participant.isOnline)
+                  Positioned(
+                    bottom: 2,
+                    right: 2,
+                    child: Container(
+                      height: 12,
+                      width: 12,
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: TextWidget(
+                                text: chat.title,
+                                color: const Color(0xff111111),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (chat.type == 'group') ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF3C4),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: TextWidget(
+                                  text:
+                                      'Group ${chat.participants.length} Users',
+                                  color: const Color(0xFF8B6B00),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (chat.latestMessage != null)
+                        TextWidget(
+                          text: DateFormat(
+                            'dd MMM. yyyy',
+                          ).format(chat.latestMessage!.createdAt).toLowerCase(),
+                          color: const Color(0xff9e9e9e),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (chat.latestMessage?.userName != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Text(
+                            '@${chat.latestMessage!.userName}:',
+                            style: const TextStyle(
+                              color: Color(0xff888888),
+                              fontStyle: FontStyle.italic,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: _buildLatestMessageSubtitle(
+                          chat.latestMessage,
+                          isSelfCaller:
+                              chat.latestMessage?.userId != null &&
+                              chat.latestMessage!.userId == currentUserId,
+                          calleeFallback:
+                              chat.type == 'private' &&
+                                  chat.participants.isNotEmpty
+                              ? '${chat.participants.first.name} ${chat.participants.first.lastName}'
+                                    .trim()
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildChipsTablet(chat),
+                ],
+              ),
+            ),
             if (chat.unreadCount > 0)
               Container(
-                constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                margin: const EdgeInsets.only(top: 4),
+                margin: const EdgeInsets.only(left: 8, top: 2),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: Colors.green,
                   borderRadius: BorderRadius.circular(50),
                 ),
-                child: Center(
-                  child: TextWidget(
-                    text: chat.unreadCount > 999
-                        ? '999+'
-                        : chat.unreadCount.toString(),
-                    fontSize: 10,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: TextWidget(
+                  text: chat.unreadCount > 999
+                      ? '999+'
+                      : chat.unreadCount.toString(),
+                  fontSize: 10,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
           ],
@@ -425,12 +414,18 @@ class _ChatListState extends State<ChatList> {
     }
 
     final isCallMsg =
-        msg.type == 'call' || (msg.type == 'voice' && msg.isCallRecording);
+        msg.type == 'call' ||
+        msg.type == 'video_call' ||
+        (msg.type == 'voice' && msg.isCallRecording);
 
     if (isCallMsg) {
+      final callOutcome = (msg.callOutcome ?? '').toLowerCase();
+      final isVideoCall = msg.type == 'video_call';
+      final isRejected = callOutcome == 'rejected';
       final isMissed =
-          msg.callOutcome == 'missed' ||
-          msg.callOutcome == 'no-answer' ||
+          callOutcome == 'missed' ||
+          callOutcome == 'no-answer' ||
+          isRejected ||
           (msg.callOutcome == null && msg.type == 'call');
 
       final callerName = isSelfCaller
@@ -452,9 +447,9 @@ class _ChatListState extends State<ChatList> {
       final iconColor = isMissed ? Colors.red : Colors.green;
       final textColor = isMissed ? Colors.red : Colors.green;
 
-      final label = calleeName != null
-          ? '$callerName → $calleeName'
-          : callerName;
+      final label = isRejected
+          ? (isVideoCall ? 'Rejected video call' : 'Rejected call')
+          : (calleeName != null ? '$callerName → $calleeName' : callerName);
 
       return Align(
         alignment: Alignment.centerLeft,
@@ -473,7 +468,9 @@ class _ChatListState extends State<ChatList> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                isMissed ? Icons.phone_missed : Icons.phone_forwarded,
+                isRejected
+                    ? Icons.close
+                    : (isMissed ? Icons.phone_missed : Icons.phone_forwarded),
                 size: 11,
                 color: iconColor,
               ),
@@ -516,14 +513,48 @@ class _ChatListState extends State<ChatList> {
       );
     }
 
-    if (msg.type == 'image') {
-      return TextWidget(
-        text: '📷 Image',
-        color: const Color(0xff6b6b6b),
-        fontWeight: FontWeight.w400,
-        fontSize: 13,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+    if (msg.type == 'image' || msg.type == 'file') {
+      if (msg.isAttachmentMoved) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.delete_outline, size: 14, color: Colors.black54),
+            const SizedBox(width: 4),
+            Flexible(
+              child: TextWidget(
+                text: 'Deleted file',
+                color: const Color(0xff6b6b6b),
+                fontWeight: FontWeight.w400,
+                fontSize: 13,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      }
+
+      final attachmentLabel =
+          (msg.attachmentName != null && msg.attachmentName!.trim().isNotEmpty)
+          ? msg.attachmentName!.trim()
+          : (msg.message.trim().isNotEmpty ? msg.message.trim() : 'Attachment');
+
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.attach_file, size: 14, color: Colors.black54),
+          const SizedBox(width: 4),
+          Flexible(
+            child: TextWidget(
+              text: attachmentLabel,
+              color: const Color(0xff6b6b6b),
+              fontWeight: FontWeight.w400,
+              fontSize: 13,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       );
     }
 
@@ -535,6 +566,112 @@ class _ChatListState extends State<ChatList> {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
+  }
+
+  Widget _buildChipsTablet(ChatConversation chat) {
+    List<Widget> chips = [];
+    Set<String> addedCustomers = {};
+    Set<String> addedClients = {};
+    Set<String> addedRoles = {};
+
+    if (chat.type == 'private' && _isPhoneTitle(chat.title)) {
+      chips.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFC400),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: TextWidget(
+            text: '+ Account',
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.black,
+          ),
+        ),
+      );
+    }
+
+    List<ChatParticipant> participantsToCheck = chat.type == 'private'
+        ? (chat.participants.isNotEmpty ? [chat.participants.first] : [])
+        : chat.participants;
+
+    for (var p in participantsToCheck) {
+      final customer = p.customerCompanyName;
+      if (customer != null &&
+          customer.isNotEmpty &&
+          !addedCustomers.contains(customer)) {
+        addedCustomers.add(customer);
+        chips.add(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF3C4),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextWidget(
+              text: 'Customer: $customer',
+              color: const Color(0xFF8B6B00),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+      }
+
+      final client = p.clientCompanyName ?? p.customerClientCompanyName;
+      if (client != null &&
+          client.isNotEmpty &&
+          !addedClients.contains(client)) {
+        addedClients.add(client);
+        chips.add(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE4E9FF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextWidget(
+              text: 'Client: $client',
+              color: Colors.blue[700]!,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+      }
+
+      final role = p.accountTypeName;
+      if (role != null && role.isNotEmpty) {
+        String displayRole = role;
+        if (role.toLowerCase() == 'staff') {
+          displayRole = 'Specialist';
+        }
+        if (!addedRoles.contains(displayRole)) {
+          addedRoles.add(displayRole);
+          bool isAdmin = role.toLowerCase() == 'admin';
+          chips.add(
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isAdmin ? Colors.black : const Color(0xfff1f1f2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextWidget(
+                text: displayRole,
+                color: isAdmin ? Colors.white : const Color(0xff414345),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    if (chips.isEmpty) return const SizedBox.shrink();
+
+    return Wrap(spacing: 6, runSpacing: 6, children: chips);
   }
 
   // 🔹 AppBar (Left Panel)

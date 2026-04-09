@@ -55,6 +55,7 @@ class ApiService {
     bool isPut = false,
     bool isDelete = false,
     bool showRes = true,
+    int timeOut = _timeOut,
   }) async {
     final Uri uri = _buildUri(path: api);
 
@@ -77,7 +78,10 @@ class ApiService {
           }
         }
 
-        final response = await http.Response.fromStream(await request.send());
+        final streamedResponse = await request
+            .send()
+            .timeout(Duration(seconds: timeOut));
+        final response = await http.Response.fromStream(streamedResponse);
         return _response(response, showRes);
       } else {
         final method = isDelete
@@ -87,7 +91,7 @@ class ApiService {
             : http.post;
 
         final res = method(uri, headers: headers, body: payload);
-        final response = await res.timeout(const Duration(seconds: _timeOut));
+        final response = await res.timeout(Duration(seconds: timeOut));
 
         return _response(response, showRes);
       }

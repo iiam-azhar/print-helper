@@ -259,27 +259,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
     BuildContext context,
     AdminPro provider,
   ) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 15.h),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18.r),
-        color: Colors.white,
-        border: item.roleName.toUpperCase() == 'ADMIN'
-            ? Border.all(color: Colors.black, width: 1.5.w)
-            : null,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: .08),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: EdgeInsets.all(14.w),
-      child: Column(
+    return _ExpandableAccountCard(
+      item: item,
+      provider: provider,
+      topRowBuilder: (isExpanded) => _topRow(item, provider),
+      detailsBuilder: () => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _topRow(item, provider),
           Divider(
             color: AppColors.grey.withValues(alpha: .5),
             thickness: 1.2.w,
@@ -667,6 +653,79 @@ class _AccountsScreenState extends State<AccountsScreen> {
     return IconButton(
       onPressed: onPressed,
       icon: ImageWidget(image: image, width: width),
+    );
+  }
+}
+
+class _ExpandableAccountCard extends StatefulWidget {
+  final AccountModel item;
+  final AdminPro provider;
+  final Widget Function(bool isExpanded) topRowBuilder;
+  final Widget Function() detailsBuilder;
+
+  const _ExpandableAccountCard({
+    required this.item,
+    required this.provider,
+    required this.topRowBuilder,
+    required this.detailsBuilder,
+  });
+
+  @override
+  State<_ExpandableAccountCard> createState() => _ExpandableAccountCardState();
+}
+
+class _ExpandableAccountCardState extends State<_ExpandableAccountCard> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 15.h),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18.r),
+        color: Colors.white,
+        border: widget.item.roleName.toUpperCase() == 'ADMIN'
+            ? Border.all(color: Colors.black, width: 1.5.w)
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .08),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isExpanded = !_isExpanded;
+              });
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              padding: EdgeInsets.all(14.w),
+              decoration: BoxDecoration(
+                color: _isExpanded
+                    ? const Color(0xffeff6ff)
+                    : Colors.transparent,
+                borderRadius: _isExpanded
+                    ? BorderRadius.vertical(top: Radius.circular(18.r))
+                    : BorderRadius.circular(18.r),
+              ),
+              child: widget.topRowBuilder(_isExpanded),
+            ),
+          ),
+          if (_isExpanded) ...[
+            Padding(
+              padding: EdgeInsets.only(left: 14.w, right: 14.w, bottom: 14.w),
+              child: widget.detailsBuilder(),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -36,6 +36,17 @@ class _ClientScreenState extends State<ClientScreen> {
   DateTime? currentBackPressTime;
   bool canPopNow = false;
   final ScrollController _scrollController = ScrollController();
+  final Set<int> _expandedClientIds = <int>{};
+
+  void _toggleClientExpanded(int clientId) {
+    setState(() {
+      if (_expandedClientIds.contains(clientId)) {
+        _expandedClientIds.remove(clientId);
+      } else {
+        _expandedClientIds.add(clientId);
+      }
+    });
+  }
 
   @override
   // void initState() {
@@ -297,6 +308,7 @@ class _ClientScreenState extends State<ClientScreen> {
     ClientPro provider,
     int index,
   ) {
+    final isExpanded = _expandedClientIds.contains(item.id);
     final authPro = Provider.of<AuthPro>(context, listen: false);
     final role = authPro.user?.roleName ?? "";
     // final clPro = Provider.of<ClientPro>(context, listen: false);
@@ -308,7 +320,7 @@ class _ClientScreenState extends State<ClientScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: .04),
@@ -317,189 +329,251 @@ class _ClientScreenState extends State<ClientScreen> {
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+
       child: Column(
         children: [
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 50,
-                height: 50,
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black12),
-                ),
-
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(18),
-                  child: ImageWidget(
-                    image: item.logo == null || item.logo == ""
-                        ? Paths.user
-                        : item.logo.toString(),
-                    width: 52,
-                    height: 52,
-                    fit: BoxFit.cover,
+          Container(
+            decoration: BoxDecoration(
+              color: isExpanded ? const Color(0xFFEFF4FB) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.only(top: 10, bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: 12),
+                Container(
+                  width: 50,
+                  height: 50,
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(50),
+                    child: ImageWidget(
+                      image: item.logo == null || item.logo == ""
+                          ? Paths.user
+                          : item.logo.toString(),
+                      width: 52,
+                      height: 52,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: .start,
-                      children: [
-                        Expanded(
-                          flex: 4,
-                          child: Column(
-                            crossAxisAlignment: .start,
-                            children: [
-                              TextWidget(
-                                text: item.companyName,
-                                fontWeight: FontWeight.w400,
-                                fontSize: 15,
-                              ),
-                              TextWidget(
-                                text: item.companyType,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                                color: Colors.black54,
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          flex: 4,
-                          child: Column(
-                            crossAxisAlignment: .start,
-                            children: [
-                              TextWidget(
-                                text: "1212 Projects  •  34 Files",
-                                fontSize: 12,
-                                fontWeight: FontWeight.w400,
-                                color: Colors.black,
-                              ),
-                              const SizedBox(height: 5),
-                              GestureDetector(
-                                onTap: () {
-                                  // navTo(
-                                  //   context: context,
-                                  //   page: CustomersScreen(
-                                  //     isFromAdmin: true,
-                                  //     id: item.id,
-                                  //   ),
-                                  // );
-                                  if (widget.onMenuTap != null) {
-                                    debugPrint(
-                                      "CLIENT → CUSTOMERS, clientId = ${item.id}",
-                                    );
-                                    widget.onMenuTap!("customers", item.id);
-                                  }
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: role == "STAFF"
-                                        ? AppColors.amber
-                                        : AppColors.amber,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: TextWidget(
-                                    text:
-                                        "${provider.clients[index].customersCount} Customer",
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.black,
-                                  ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: .start,
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: Column(
+                              crossAxisAlignment: .start,
+                              children: [
+                                TextWidget(
+                                  text: item.companyName,
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: 15,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          flex: 4,
-                          child: TextWidget(
-                            text: '${item.createdDate}-${item.createdTime}',
-                            fontSize: 12,
-                            color: Colors.black54,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                        SizedBox(width: role != "STAFF" ? 0 : 190),
-                        SizedBox(
-                          width: role != "STAFF" ? 250 : 60,
-                          child: Row(
-                            crossAxisAlignment: .end,
-                            children: [
-                              SizedBox(
-                                width: 55,
-                                height: 40,
-                                child: FittedBox(
-                                  fit: BoxFit.fill,
-                                  child: Switch(
-                                    value: item.status,
-                                    activeTrackColor: Color(0XFF00a650),
-                                    activeThumbColor: AppColors.white,
-                                    onChanged: (val) => provider
-                                        .toggleStatus(item.id, val, context)
-                                        .whenComplete(() {
-                                          if (!mounted) return;
-                                          provider.getClients(
-                                            ctx: context,
-                                            page: 1,
-                                          );
-                                        }),
-                                  ),
-                                ),
-                              ),
-                              if (role != "STAFF") ...[
-                                SizedBox(width: 45),
-                                SizedBox(width: 25),
-                                SizedBox(width: 25),
-                                _iconButton(
-                                  icon: Paths.edit,
-                                  onTap: () {
-                                    _openRightSideSheet(
-                                      context,
-                                      EditClient(clientId: item.id),
-                                    );
-                                  },
-                                ),
-                                _iconButton(
-                                  icon: Paths.delete,
-                                  onTap: () {
-                                    _confirmDelete(context, item.id);
-                                  },
+                                TextWidget(
+                                  text: item.companyType,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w400,
+                                  color: Colors.black54,
                                 ),
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                          Expanded(
+                            flex: 4,
+                            child: Column(
+                              crossAxisAlignment: .start,
+                              children: [
+                                TextWidget(
+                                  text: "0 Project - 0 File",
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w400,
+                                  color: Colors.black,
+                                ),
+                                const SizedBox(height: 5),
+                                GestureDetector(
+                                  onTap: () {
+                                    if (widget.onMenuTap != null) {
+                                      debugPrint(
+                                        "CLIENT → CUSTOMERS, clientId = ${item.id}",
+                                      );
+                                      widget.onMenuTap!("customers", item.id);
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: role == "STAFF"
+                                          ? AppColors.amber
+                                          : AppColors.amber,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: TextWidget(
+                                      text:
+                                          "${provider.clients[index].customersCount} Customer",
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: TextWidget(
+                              text: '${item.createdDate}-${item.createdTime}',
+                              fontSize: 12,
+                              color: const Color(0xFF8E9BB0),
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          SizedBox(width: role != "STAFF" ? 0 : 190),
+                          SizedBox(
+                            width: role != "STAFF" ? 170 : 100,
+                            child: Row(
+                              crossAxisAlignment: .center,
+                              children: [
+                                SizedBox(
+                                  width: 55,
+                                  height: 40,
+                                  child: FittedBox(
+                                    fit: BoxFit.fill,
+                                    child: Switch(
+                                      value: item.status,
+                                      activeTrackColor: Color(0XFF00a650),
+                                      activeThumbColor: AppColors.white,
+                                      onChanged: (val) => provider
+                                          .toggleStatus(item.id, val, context)
+                                          .whenComplete(() {
+                                            if (!mounted) return;
+                                            provider.getClients(
+                                              ctx: context,
+                                              page: 1,
+                                            );
+                                          }),
+                                    ),
+                                  ),
+                                ),
+                                if (role != "STAFF") ...[
+                                  PopupMenuButton<String>(
+                                    icon: const Icon(
+                                      Icons.more_vert,
+                                      color: Colors.black54,
+                                    ),
+                                    color: Colors.white,
+                                    surfaceTintColor: Colors.transparent,
+                                    elevation: 12,
+                                    shadowColor: Colors.black26,
+                                    offset: const Offset(0, 44),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 150,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    onSelected: (value) {
+                                      if (value == 'edit') {
+                                        _openRightSideSheet(
+                                          context,
+                                          EditClient(clientId: item.id),
+                                        );
+                                      } else if (value == 'delete') {
+                                        _confirmDelete(context, item.id);
+                                      }
+                                    },
+                                    itemBuilder: (_) => [
+                                      PopupMenuItem<String>(
+                                        value: 'edit',
+                                        height: 40,
+                                        child: Row(
+                                          children: [
+                                            ImageWidget(
+                                              image: Paths.edit,
+                                              width: 18,
+                                              color: Colors.black87,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            const TextWidget(
+                                              text: 'Edit',
+                                              fontSize: 14,
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      PopupMenuItem<String>(
+                                        value: 'delete',
+                                        height: 40,
+                                        child: Row(
+                                          children: [
+                                            ImageWidget(
+                                              image: Paths.delete,
+                                              width: 18,
+                                              color: Colors.black87,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            const TextWidget(
+                                              text: 'Delete',
+                                              fontSize: 14,
+                                              color: Colors.red,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                                IconButton(
+                                  onPressed: () =>
+                                      _toggleClientExpanded(item.id),
+                                  icon: ImageWidget(
+                                    image: isExpanded ? Paths.up : Paths.down,
+                                    width: 16,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          const Divider(height: 1),
-          ...List.generate(item.contacts.length, (i) {
-            return _contactCard(
-              item.contacts[i],
-              provider,
-              item,
-              i,
-              item.contacts.length,
-            );
-          }),
+          if (isExpanded) ...[
+            const SizedBox(height: 8),
+
+            ...List.generate(item.contacts.length, (i) {
+              return _contactCard(
+                item.contacts[i],
+                provider,
+                item,
+                i,
+                item.contacts.length,
+              );
+            }),
+          ],
         ],
       ),
     );
@@ -512,6 +586,9 @@ class _ClientScreenState extends State<ClientScreen> {
     int index,
     int total,
   ) {
+    final authPro = Provider.of<AuthPro>(context, listen: false);
+    final role = authPro.user?.roleName ?? "";
+
     return Column(
       children: [
         Padding(
@@ -519,7 +596,8 @@ class _ClientScreenState extends State<ClientScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // AVATAR
+              // AVATASR
+              SizedBox(width: 12),
               Container(
                 width: 50,
                 height: 50,
@@ -529,7 +607,7 @@ class _ClientScreenState extends State<ClientScreen> {
                   border: Border.all(color: Colors.black12),
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(50),
                   child: ImageWidget(
                     image: contact.avatar.isEmpty ? Paths.user : contact.avatar,
                     width: 50,
@@ -538,9 +616,7 @@ class _ClientScreenState extends State<ClientScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(width: 12),
-
               // MAIN CONTENT
               Expanded(
                 child: Row(
@@ -612,7 +688,7 @@ class _ClientScreenState extends State<ClientScreen> {
 
                     /// RIGHT SIDE — SWITCH + ICONS
                     SizedBox(
-                      width: 250,
+                      width: role != "STAFF" ? 170 : 100,
                       child: Row(
                         children: [
                           SizedBox(
@@ -633,9 +709,6 @@ class _ClientScreenState extends State<ClientScreen> {
                               ),
                             ),
                           ),
-
-                          Spacers.sbw30(),
-
                           if (widget.isFromAdmin)
                             _iconButton(
                               icon: Paths.login,
@@ -651,25 +724,16 @@ class _ClientScreenState extends State<ClientScreen> {
                               },
                             ),
 
-                          _iconButton(
-                            icon: Paths.email,
-                            onTap: () {
-                              if (contact.emails.isNotEmpty) {
+                          if (contact.emails.isNotEmpty)
+                            _iconButton(
+                              icon: Paths.email,
+                              onTap: () {
                                 tryLaunchUrl(
                                   url: 'mailto:${contact.emails.first}',
                                   message: 'Could not open email app',
                                 );
-                              } else {
-                                showToast(
-                                  message: 'No email address available',
-                                );
-                              }
-                            },
-                          ),
-                          _iconButton(
-                            icon: Paths.call,
-                            onTap: () => widget.onChatTap?.call(),
-                          ),
+                              },
+                            ),
                           _iconButton(
                             icon: Paths.chat,
                             onTap: () => widget.onChatTap?.call(),
@@ -683,7 +747,6 @@ class _ClientScreenState extends State<ClientScreen> {
             ],
           ),
         ),
-
         if (index != total - 1) const Divider(height: 1),
       ],
     );
@@ -777,6 +840,7 @@ class _ClientScreenState extends State<ClientScreen> {
           Spacers.sb10(),
           Consumer<ClientPro>(
             builder: (context, provider, _) {
+              if (provider.appliedFilterCount == 0) return const SizedBox.shrink();
               return GestureDetector(
                 onTap: () {
                   provider.clearClientFilters(context);

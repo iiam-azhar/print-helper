@@ -15,7 +15,9 @@ abstract class Spacers {
   static SizedBox sb12() => SizedBox(height: 12.h);
   static SizedBox sb10() => SizedBox(height: 10.h);
   static SizedBox sb8() => SizedBox(height: 8.h);
+  static SizedBox sb6() => SizedBox(height: 6.h);
   static SizedBox sb5() => SizedBox(height: 5.h);
+  static SizedBox sb4() => SizedBox(height: 4.h);
   static SizedBox sb2() => SizedBox(height: 2.h);
 
   static SizedBox sbw100() => SizedBox(width: 100.w);
@@ -29,6 +31,8 @@ abstract class Spacers {
   static SizedBox sbw12() => SizedBox(width: 12.w);
   static SizedBox sbw10() => SizedBox(width: 10.w);
   static SizedBox sbw8() => SizedBox(width: 8.w);
+  static SizedBox sbw6() => SizedBox(width: 6.w);
   static SizedBox sbw5() => SizedBox(width: 5.w);
+  static SizedBox sbw4() => SizedBox(width: 4.w);
   static SizedBox sbw2() => SizedBox(width: 2.w);
 }

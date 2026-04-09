@@ -17,8 +17,8 @@ class Loaders {
         builder: (BuildContext context) {
           return PopScope(
             canPop: false,
-            child: Dialog(
-              backgroundColor: AppColors.tr,
+            child: Material(
+              color: Colors.transparent,
               child: Center(child: showLoader(centered: true)),
             ),
           );

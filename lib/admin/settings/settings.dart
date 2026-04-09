@@ -10,6 +10,7 @@ import '../../widgets/spacers.dart';
 import '../../widgets/loaders.dart';
 import '../../constants/colors.dart';
 import '../../constants/paths.dart';
+import 'file_settings.dart';
 import 'twilio_settings.dart';
 import '../../utils/console_util.dart';
 
@@ -101,14 +102,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title.contains("client company") ||
                   title.contains("customer company");
             }).toList();
-          } else if (_activeTab == 2) {
-            // Other Tab
-            filteredSections = pro.sections.where((s) {
-              final title = s.title.toLowerCase();
-              return title.contains("language") ||
-                  title.contains("ranks") ||
-                  title.contains("skills");
-            }).toList();
           }
           printData(
             title: "Filtered Sections for Tab $_activeTab:",
@@ -130,13 +123,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: _activeTab == 1
                         ? const TwilioCredentials()
                         : _activeTab == 2
-                        ? Center(
-                            child: TextWidget(
-                              text: "Coming Soon",
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          )
+                        ? const FileSettingsMobile()
                         : ListView.builder(
                             padding: EdgeInsets.only(
                               left: 12.w,
@@ -172,7 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Spacers.sbw10(),
             _tabItem("Twilio", index: 1),
             Spacers.sbw10(),
-            _tabItem("Other", index: 2),
+            _tabItem("File", index: 2),
           ],
         ),
       ),
