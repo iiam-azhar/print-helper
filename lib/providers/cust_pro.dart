@@ -16,6 +16,7 @@ import '../utils/console_util.dart';
 class CustomerPro extends ChangeNotifier {
   bool customersLoad = false;
   bool isLoadingMore = false;
+  bool myNetworkLoad = false;
 
   int currentPage = 1;
   int lastPage = 1;
@@ -37,6 +38,70 @@ class CustomerPro extends ChangeNotifier {
 
   Map<String, dynamic> customerFilters = {};
   String search = '';
+
+  Map<String, dynamic> _myNetworkTabs = {};
+  Map<String, dynamic> get myNetworkTabs => _myNetworkTabs;
+
+  Future<void> getMyNetworkTabs({
+    required BuildContext ctx,
+    required int clientId,
+  }) async {
+    myNetworkLoad = true;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+      final response = await ApiService().getDataFromApi(
+        api: ApiRoutes.clientMyNetworkTabs(clientId),
+        headers: {"Authorization": "Bearer $token"},
+      );
+
+      if (response is Map<String, dynamic> && response["success"] == true) {
+        final data = response["data"];
+        printData(
+          title: "myNetwork data type",
+          data: data.runtimeType.toString(),
+        );
+        if (data is Map<String, dynamic>) {
+          printData(title: "myNetwork data keys", data: data.keys.toList());
+          final nested = data["data"];
+          if (nested is Map<String, dynamic>) {
+            printData(
+              title: "myNetwork nested data keys",
+              data: nested.keys.toList(),
+            );
+          }
+        }
+        if (data is Map<String, dynamic>) {
+          _myNetworkTabs = data;
+          if (data["client"] is Map<String, dynamic>) {
+            _client = ClientModelCust.fromJson(
+              data["client"] as Map<String, dynamic>,
+            );
+          }
+        } else if (data is List) {
+          _myNetworkTabs = {"tabs": data};
+        } else {
+          _myNetworkTabs = {};
+        }
+      } else if (response is Map<String, dynamic>) {
+        showToast(
+          message:
+              response["message"]?.toString() ?? 'Failed to load network tabs',
+        );
+      }
+    } catch (e, st) {
+      printData(
+        title: "Error loading my network tabs",
+        data: "$e\n$st",
+        e: true,
+      );
+    } finally {
+      myNetworkLoad = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> getCustomers({
     required BuildContext ctx,
@@ -82,24 +147,35 @@ class CustomerPro extends ChangeNotifier {
         } else {
           showToast(message: data["message"]);
         }
-        currentPage = data["meta"]["current_page"];
-        lastPage = data["meta"]["last_page"];
+        final customersBlock = data["customers"];
+        final pagination = customersBlock is Map<String, dynamic>
+            ? (customersBlock["pagination"] as Map<String, dynamic>? ??
+                  customersBlock)
+            : null;
 
-        // Parse total safely
-        if (data["meta"]["total"] != null) {
-          totalCustomers = int.tryParse(data["meta"]["total"].toString()) ?? 0;
+        if (pagination != null) {
+          currentPage =
+              int.tryParse(pagination["current_page"]?.toString() ?? "1") ?? 1;
+          lastPage =
+              int.tryParse(pagination["last_page"]?.toString() ?? "1") ?? 1;
+          totalCustomers =
+              int.tryParse(pagination["total"]?.toString() ?? "0") ?? 0;
         }
 
-        List<dynamic> list = data["customers"] ?? [];
+        final List<dynamic> list = customersBlock is Map<String, dynamic>
+            ? (customersBlock["data"] as List<dynamic>? ??
+                  customersBlock["items"] as List<dynamic>? ??
+                  [])
+            : (customersBlock as List<dynamic>? ?? []);
         for (var item in list) {
           _customers.add(CustomerModel.fromJson(item));
         }
+        if (pagination == null || totalCustomers == 0) {
+          totalCustomers = _customers.length;
+        }
         printData(title: "success:", data: response["success"]);
         printData(title: "data keys:", data: response["data"].keys);
-        printData(
-          title: "customers length raw:",
-          data: (response["data"]["customers"] as List).length,
-        );
+        printData(title: "customers length raw:", data: list.length);
         for (var item in list) {
           printData(title: "item keys:", data: (item as Map).keys);
         }
@@ -216,7 +292,7 @@ class CustomerPro extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
       final uri = Uri.parse(
-        '${ApiRoutes.baseUrl}${ApiRoutes.customers}/$custId/update',
+        '${ApiRoutes.baseUrl}${ApiRoutes.clients}/$custId/update',
       );
       printData(title: 'URI:', data: uri.toString());
       final request = http.MultipartRequest("POST", uri);
@@ -280,6 +356,12 @@ class CustomerPro extends ChangeNotifier {
         );
       }
 
+      printData(title: "FIELDS:", data: request.fields);
+      printData(
+        title: "FILES:",
+        data: request.files.map((e) => e.field).toList(),
+      );
+
       final streamedRes = await request.send();
       final res = await http.Response.fromStream(streamedRes);
 
@@ -292,6 +374,98 @@ class CustomerPro extends ChangeNotifier {
       return false;
     } catch (e) {
       printData(title: "CLIENT CREATE ERROR:", data: e, e: true);
+      return false;
+    } finally {
+      Loaders.hide();
+    }
+  }
+
+  Future<bool> saveClientContact({
+    required int clientId,
+    int? contactId,
+    required ContactFormModel contact,
+    required BuildContext context,
+  }) async {
+    try {
+      Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+
+      // Construct URL:
+      // Adding: .../clients/$clientId/contacts
+      // Updating: .../clients/$clientId/contacts/$contactId
+      String url = contactId == null || contactId == 0
+          ? '${ApiRoutes.baseUrl}${ApiRoutes.clients}/$clientId/contacts'
+          : '${ApiRoutes.baseUrl}${ApiRoutes.clients}/$clientId/contacts/$contactId';
+
+      final request = http.MultipartRequest("POST", Uri.parse(url));
+      request.headers.addAll({
+        "Accept": "application/json",
+        "Authorization": "Bearer $token",
+      });
+
+      request.fields["name"] = contact.firstName.text.trim();
+      request.fields["last_name"] = contact.lastName.text.trim();
+      request.fields["username"] = contact.username.text.trim();
+      if (contact.password.text.isNotEmpty) {
+        request.fields["password"] = contact.password.text.trim();
+        request.fields["password_confirmation"] = contact.confirmPassword.text
+            .trim();
+      }
+
+      // indexed emails: emails[0]
+      for (int i = 0; i < contact.emails.length; i++) {
+        final email = contact.emails[i].text.trim();
+        if (email.isNotEmpty) {
+          request.fields["emails[$i]"] = email;
+        }
+      }
+
+      // indexed phones: phones[0][type], phones[0][number]
+      for (int i = 0; i < contact.phoneFields.length; i++) {
+        final number = contact.phoneFields[i].controller.text.trim();
+        if (number.isNotEmpty) {
+          request.fields["phones[$i][type]"] =
+              contact.phoneFields[i].type.apiValue;
+          request.fields["phones[$i][number]"] = number;
+        }
+      }
+
+      // indexed languages: languages[0]
+      for (int i = 0; i < contact.selectedLanguageIds.length; i++) {
+        request.fields["languages[$i]"] = contact.selectedLanguageIds[i]
+            .toString();
+      }
+
+      if (contact.image != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath("image", contact.image!.path),
+        );
+      }
+
+      printData(title: "SAVE CONTACT URL:", data: url);
+      printData(title: "FIELDS:", data: request.fields);
+      printData(
+        title: "FILES:",
+        data: request.files.map((e) => e.field).toList(),
+      );
+
+      final streamedRes = await request.send();
+      final res = await http.Response.fromStream(streamedRes);
+      printData(title: "RESPONSE:", data: res.body);
+
+      final decoded = jsonDecode(res.body);
+      if (res.statusCode == 200 ||
+          res.statusCode == 201 ||
+          decoded['success'] == true ||
+          decoded['success'] == "true") {
+        return true;
+      } else {
+        showToast(message: decoded['message'] ?? "Failed to save contact");
+        return false;
+      }
+    } catch (e) {
+      printData(title: "SAVE CONTACT ERROR:", data: e, e: true);
       return false;
     } finally {
       Loaders.hide();
@@ -759,10 +933,23 @@ class CustomerPro extends ChangeNotifier {
           _client = ClientModelCust.fromJson(data["client"]);
         }
 
-        currentPage = data["meta"]["current_page"];
-        lastPage = data["meta"]["last_page"];
+        final customersBlock = data["customers"];
+        final pagination = customersBlock is Map<String, dynamic>
+            ? customersBlock["pagination"] as Map<String, dynamic>?
+            : null;
 
-        final List<dynamic> list = data["customers"] ?? [];
+        if (pagination != null) {
+          currentPage =
+              int.tryParse(pagination["current_page"]?.toString() ?? "1") ?? 1;
+          lastPage =
+              int.tryParse(pagination["last_page"]?.toString() ?? "1") ?? 1;
+          totalCustomers =
+              int.tryParse(pagination["total"]?.toString() ?? "0") ?? 0;
+        }
+
+        final List<dynamic> list = customersBlock is Map<String, dynamic>
+            ? (customersBlock["items"] as List<dynamic>? ?? [])
+            : (customersBlock as List<dynamic>? ?? []);
 
         if (list.isNotEmpty) {
           for (final item in list) {
@@ -772,6 +959,9 @@ class CustomerPro extends ChangeNotifier {
           _customers.add(
             CustomerModel.fromClientModel(_client!, loggedCustomerId),
           );
+        }
+        if (pagination == null || totalCustomers == 0) {
+          totalCustomers = _customers.length;
         }
       }
     } catch (e, st) {

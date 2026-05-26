@@ -291,6 +291,237 @@ class ChatPro extends ChangeNotifier {
     }
   }
 
+  String _sanitizePhoneForApi(String input) {
+    final hasPlus = input.trim().startsWith('+');
+    final digits = input.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return input.trim();
+    return hasPlus ? '+$digits' : '+$digits';
+  }
+
+  Future<Map<String, dynamic>?> createTwilioTextTarget({
+    required String toNumber,
+    required String fromNumber,
+  }) async {
+    try {
+      final payload = jsonEncode({
+        "to_number": _sanitizePhoneForApi(toNumber),
+        "from_number": _sanitizePhoneForApi(fromNumber),
+      });
+
+      final data = await ApiService().postDataToApi(
+        api: ApiRoutes.twilioTextTarget,
+        headers: await apiHeaders(),
+        payload: payload,
+      );
+
+      if (data is Map<String, dynamic> && data['success'] == true) {
+        return data['data'] as Map<String, dynamic>?;
+      }
+
+      final msg = data is Map ? data['message'] : null;
+      showToast(message: msg ?? 'Failed to initialize text target');
+      return null;
+    } catch (e) {
+      printData(title: 'createTwilioTextTarget error', data: e, e: true);
+      showToast(message: 'Failed to initialize text target');
+      return null;
+    }
+  }
+
+  int? _extractConversationIdFromTwilioResult(Map<String, dynamic> data) {
+    final raw = data['data'];
+    if (raw is! Map) return null;
+    final id = raw['conversation_id'];
+    if (id is int) return id;
+    return int.tryParse('$id');
+  }
+
+  void _applyTwilioSendResultToState({
+    required Map<String, dynamic> apiResponse,
+    required int currentUserId,
+    int? openedConversationId,
+  }) {
+    final raw = apiResponse['data'];
+    if (raw is! Map) return;
+
+    Map<String, dynamic>? messageMap;
+    final single = raw['message'];
+    if (single is Map) {
+      messageMap = Map<String, dynamic>.from(single);
+    } else {
+      final messages = raw['messages'];
+      if (messages is List && messages.isNotEmpty && messages.first is Map) {
+        messageMap = Map<String, dynamic>.from(messages.first as Map);
+      }
+    }
+
+    if (messageMap == null) return;
+
+    final sentMessage = ChatMessage.fromJson(messageMap, currentUserId);
+    final conversationId = sentMessage.conversationId;
+
+    final shouldInjectIntoOpenChat =
+        currentActiveConversationId == conversationId ||
+        (openedConversationId != null &&
+            openedConversationId == conversationId);
+
+    if (shouldInjectIntoOpenChat) {
+      final existingIndex = messages.indexWhere((m) => m.id == sentMessage.id);
+      if (existingIndex == -1) {
+        messages.insert(0, sentMessage);
+      } else {
+        messages[existingIndex] = sentMessage;
+      }
+    }
+
+    final latestMessage = ChatLatestMessage.fromJson(messageMap);
+    final convoIndex = conversations.indexWhere((c) => c.id == conversationId);
+    if (convoIndex != -1) {
+      final old = conversations[convoIndex];
+      final updatedConversation = ChatConversation(
+        id: old.id,
+        type: old.type,
+        title: old.title,
+        participants: old.participants,
+        latestMessage: latestMessage,
+        unreadCount: old.unreadCount,
+        updatedAt: DateTime.now(),
+        isDefault: old.isDefault,
+        image: old.image,
+      );
+      conversations
+        ..removeAt(convoIndex)
+        ..insert(0, updatedConversation);
+    }
+
+    notifyListeners();
+  }
+
+  Future<bool> sendTwilioTextMessage({
+    required int currentUserId,
+    required String toNumber,
+    required String fromNumber,
+    required String message,
+    int? openedConversationId,
+  }) async {
+    try {
+      final payload = jsonEncode({
+        "to_number": _sanitizePhoneForApi(toNumber),
+        "from_number": _sanitizePhoneForApi(fromNumber),
+        "message": message,
+      });
+
+      final data = await ApiService().postDataToApi(
+        api: ApiRoutes.twilioSendText,
+        headers: await apiHeaders(),
+        payload: payload,
+      );
+
+      if (data is! Map<String, dynamic> || data['success'] != true) {
+        final msg = data is Map ? data['message'] : null;
+        showToast(message: msg ?? 'Failed to send SMS');
+        return false;
+      }
+
+      _applyTwilioSendResultToState(
+        apiResponse: data,
+        currentUserId: currentUserId,
+        openedConversationId: openedConversationId,
+      );
+
+      final conversationId = _extractConversationIdFromTwilioResult(data);
+      if (conversationId != null) {
+        if (currentActiveConversationId != conversationId &&
+            openedConversationId != conversationId) {
+          await _updateSingleConversation(conversationId);
+        }
+      }
+
+      return true;
+    } catch (e) {
+      printData(title: 'sendTwilioTextMessage error', data: e, e: true);
+      showToast(message: 'Failed to send SMS');
+      return false;
+    }
+  }
+
+  Future<bool> sendTwilioMmsMessage({
+    required int currentUserId,
+    required String toNumber,
+    required String fromNumber,
+    required File file,
+    String message = '',
+    int? openedConversationId,
+  }) async {
+    try {
+      final url = Uri.parse('${ApiRoutes.baseUrl}${ApiRoutes.twilioSendMms}');
+      final request = http.MultipartRequest('POST', url);
+      final headers = await apiHeaders();
+      headers.remove('Content-Type');
+      request.headers.addAll(headers);
+      final normalizedMessage = message.trim();
+
+      request.fields['to_number'] = _sanitizePhoneForApi(toNumber);
+      request.fields['from_number'] = _sanitizePhoneForApi(fromNumber);
+      request.fields['message'] = normalizedMessage;
+      request.fields['caption'] = normalizedMessage;
+
+      request.files.add(
+        await http.MultipartFile.fromPath('media_files[]', file.path),
+      );
+
+      printData(title: 'sendTwilioMmsMessage URL', data: url.toString());
+      printData(title: 'sendTwilioMmsMessage Headers', data: request.headers);
+      printData(title: 'sendTwilioMmsMessage Fields', data: request.fields);
+      printData(
+        title: 'sendTwilioMmsMessage File',
+        data: {
+          'path': file.path,
+          'exists': file.existsSync(),
+          'name': file.path.split(Platform.pathSeparator).last,
+        },
+      );
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+      printData(
+        title: 'sendTwilioMmsMessage Status',
+        data: response.statusCode,
+      );
+      printData(
+        title: 'sendTwilioMmsMessage Raw Response',
+        data: response.body,
+      );
+      final decoded = jsonDecode(response.body);
+
+      if (decoded is! Map<String, dynamic> || decoded['success'] != true) {
+        final msg = decoded is Map ? decoded['message'] : null;
+        showToast(message: msg ?? 'Failed to send MMS');
+        return false;
+      }
+
+      _applyTwilioSendResultToState(
+        apiResponse: decoded,
+        currentUserId: currentUserId,
+        openedConversationId: openedConversationId,
+      );
+
+      final conversationId = _extractConversationIdFromTwilioResult(decoded);
+      if (conversationId != null) {
+        if (currentActiveConversationId != conversationId &&
+            openedConversationId != conversationId) {
+          await _updateSingleConversation(conversationId);
+        }
+      }
+
+      return true;
+    } catch (e) {
+      printData(title: 'sendTwilioMmsMessage error', data: e, e: true);
+      showToast(message: 'Failed to send MMS');
+      return false;
+    }
+  }
+
   Future<String?> getTwilioAccessToken({bool forceRefresh = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final cached = prefs.getString("twilio_access_token");
@@ -483,11 +714,23 @@ class ChatPro extends ChangeNotifier {
         _handleRealtimeChatListMessage(data, userId);
 
         final activeConversationId = currentActiveConversationId;
-        final dataConversationId = int.tryParse(
-          data['conversation_id']?.toString() ?? '',
-        );
+
+        // Robust ID extraction: Check top-level or nested inside 'message'
+        final rawConvoId =
+            data['conversation_id'] ?? data['message']?['conversation_id'];
+        final dataConversationId = int.tryParse(rawConvoId?.toString() ?? '');
         final parsedCurrentUserId = int.tryParse(userId);
 
+        printData(
+          title: "🔍 MSG ROUTING DEBUG",
+          data:
+              "activeConvoId=$activeConversationId "
+              "dataConvoId=$dataConversationId "
+              "userId=$parsedCurrentUserId "
+              "match=${activeConversationId != null && dataConversationId == activeConversationId}",
+        );
+
+        // Inject into active conversation if it matches
         if (activeConversationId != null &&
             dataConversationId != null &&
             dataConversationId == activeConversationId &&
@@ -654,15 +897,29 @@ class ChatPro extends ChangeNotifier {
     int conversationId,
   ) {
     try {
-      final payload = data.containsKey('message') && data['message'] is Map
-          ? Map<String, dynamic>.from(data['message'])
-          : Map<String, dynamic>.from(data);
+      // Robust payload extraction:
+      // 1. If 'message' is a Map with an 'id', it's the real message data.
+      // 2. We must ensure 'conversation_id' is preserved even if it's only in the outer wrapper.
+      Map<String, dynamic> payload;
+      if (data['message'] is Map && data['message'].containsKey('id')) {
+        payload = Map<String, dynamic>.from(data['message']);
+        // Copy conversation_id from outer if missing in inner
+        if (!payload.containsKey('conversation_id') &&
+            data.containsKey('conversation_id')) {
+          payload['conversation_id'] = data['conversation_id'];
+        }
+      } else {
+        payload = Map<String, dynamic>.from(data);
+      }
 
       final eventConversationId = int.tryParse(
-        payload['conversation_id']?.toString() ?? '',
+        (payload['conversation_id'] ?? data['conversation_id'])?.toString() ??
+            '',
       );
+
       final activeConversationId =
           currentActiveConversationId ?? conversationId;
+
       if (eventConversationId == null ||
           eventConversationId != activeConversationId) {
         return;
@@ -1475,11 +1732,15 @@ class ChatPro extends ChangeNotifier {
           conversations.insert(0, updatedNewChat);
 
           if (senderId.toString() != currentUserId) {
-            NotificationService.instance.showChatNotification(
-              title: "New message from ${latestMessage.userName ?? 'User'}",
-              body: latestMessage.message,
-              id: latestMessage.id,
-            );
+            // ONLY show notification if this chat is NOT the one currently open
+            final isActiveChat = currentActiveConversationId == updatedNewChat.id;
+            if (!isActiveChat || !isChatScreenOpen) {
+              NotificationService.instance.showChatNotification(
+                title: "New message from ${latestMessage.userName ?? 'User'}",
+                body: latestMessage.message,
+                id: latestMessage.id,
+              );
+            }
           }
 
           _recomputeTotalUnreadFromList();
@@ -1535,13 +1796,16 @@ class ChatPro extends ChangeNotifier {
 
     _recomputeTotalUnreadFromList();
 
-    /// Show notification only for new incoming messages
+    /// Show notification only for new incoming messages and NOT in active chat
     if (senderId.toString() != currentUserId && existingIndex == -1) {
-      NotificationService.instance.showChatNotification(
-        title: "New message from ${latestMessage.userName}",
-        body: latestMessage.message,
-        id: latestMessage.id,
-      );
+      final isActiveChat = currentActiveConversationId == updatedConversation.id;
+      if (!isActiveChat || !isChatScreenOpen) {
+        NotificationService.instance.showChatNotification(
+          title: "New message from ${latestMessage.userName}",
+          body: latestMessage.message,
+          id: latestMessage.id,
+        );
+      }
     }
 
     notifyListeners();

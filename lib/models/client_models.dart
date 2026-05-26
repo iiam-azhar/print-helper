@@ -162,10 +162,15 @@ class ContactModel {
 class StaffModel {
   final int id;
   final String name;
+  final int role;
 
-  StaffModel({required this.id, required this.name});
+  StaffModel({required this.id, required this.name, this.role = 0});
 
   factory StaffModel.fromJson(Map<String, dynamic> json) {
-    return StaffModel(id: json["id"], name: json["name"] ?? "");
+    return StaffModel(
+      id: json["id"],
+      name: json["name"] ?? "",
+      role: json["role"] ?? 0,
+    );
   }
 }

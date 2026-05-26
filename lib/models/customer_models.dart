@@ -23,6 +23,7 @@ class ClientModelCust {
   int updatedBy;
   String createdAt;
   String updatedAt;
+  List<AssignedSpecialistModel> assignedSpecialists;
 
   ClientModelCust({
     required this.id,
@@ -46,6 +47,7 @@ class ClientModelCust {
     required this.updatedBy,
     required this.createdAt,
     required this.updatedAt,
+    required this.assignedSpecialists,
   });
 
   ClientModelCust copyWith({
@@ -70,6 +72,7 @@ class ClientModelCust {
     int? updatedBy,
     String? createdAt,
     String? updatedAt,
+    List<AssignedSpecialistModel>? assignedSpecialists,
   }) {
     return ClientModelCust(
       id: id ?? this.id,
@@ -94,6 +97,7 @@ class ClientModelCust {
       updatedBy: updatedBy ?? this.updatedBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      assignedSpecialists: assignedSpecialists ?? this.assignedSpecialists,
     );
   }
 
@@ -122,6 +126,12 @@ class ClientModelCust {
       updatedBy: json["updated_by"] ?? 0,
       createdAt: json["created_at"] ?? "",
       updatedAt: json["updated_at"] ?? "",
+      assignedSpecialists:
+          (json["assignedSpecialists"] as List<dynamic>? ??
+                  json["assigned_specialists"] as List<dynamic>? ??
+                  [])
+              .map((e) => AssignedSpecialistModel.fromJson(e))
+              .toList(),
     );
   }
 }
@@ -150,6 +160,7 @@ class CustomerModel {
   String createdAt;
   String updatedAt;
   List<ContactModel> contacts;
+  List<AssignedSpecialistModel> assignedSpecialists;
 
   CustomerModel({
     required this.id,
@@ -174,6 +185,7 @@ class CustomerModel {
     required this.createdAt,
     required this.updatedAt,
     required this.contacts,
+    required this.assignedSpecialists,
   });
 
   CustomerModel copyWith({
@@ -199,6 +211,7 @@ class CustomerModel {
     String? createdAt,
     String? updatedAt,
     List<ContactModel>? contacts,
+    List<AssignedSpecialistModel>? assignedSpecialists,
   }) {
     return CustomerModel(
       id: id ?? this.id,
@@ -224,20 +237,58 @@ class CustomerModel {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       contacts: contacts ?? this.contacts,
+      assignedSpecialists: assignedSpecialists ?? this.assignedSpecialists,
     );
   }
 
+  Map<String, dynamic> toJson() {
+    return {
+      "id": id,
+      "client_id": clientId,
+      "company_name": companyName,
+      "image": image,
+      "image_url": imageUrl,
+      "company_category_name": companyCategoryName,
+      "company_type": companyCategoryName, // Backwards compatibility for UI
+      "customer_rank_name": customerRankName,
+      "branding_logo": brandingLogo,
+      "branding_primary_color": brandingPrimaryColor,
+      "branding_secondary_color": brandingSecondaryColor,
+      "branding_url": brandingUrl,
+      "address": address,
+      "address_2": address2,
+      "state": state,
+      "city": city,
+      "zipcode": zipcode,
+      "status": status,
+      "created_by": createdBy,
+      "updated_by": updatedBy,
+      "created_at": createdAt,
+      "updated_at": updatedAt,
+      "contacts": contacts.map((e) => e.toJson()).toList(),
+      "assigned_specialists":
+          assignedSpecialists.map((e) => e.toJson()).toList(),
+    };
+  }
+
   factory CustomerModel.fromJson(Map<String, dynamic> json) {
-    final c = json["customer"];
+    final c = (json["customer"] is Map<String, dynamic>)
+        ? json["customer"] as Map<String, dynamic>
+        : json;
 
     return CustomerModel(
-      id: c["id"],
-      clientId: c["client_id"],
+      id: c["id"] ?? 0,
+      clientId: c["client_id"] ?? 0,
       companyName: c["company_name"] ?? "",
       image: c["image"],
-      imageUrl: c["image_url"],
-      companyCategoryName: c["company_category_name"] ?? "",
-      customerRankName: c["customer_rank_name"],
+      imageUrl: c["image_url"] ?? c["image"],
+      companyCategoryName: c["company_category_name"] ??
+          c["company_type_name"] ??
+          c["company_type"] ??
+          c["company_category"] ??
+          "",
+      customerRankName:
+          c["customer_rank_name"]?.toString() ?? c["customer_rank"]?.toString(),
       brandingLogo: c["branding_logo"],
       brandingPrimaryColor: c["branding_primary_color"] ?? "",
       brandingSecondaryColor: c["branding_secondary_color"] ?? "",
@@ -255,6 +306,12 @@ class CustomerModel {
       contacts: (c["contacts"] as List<dynamic>? ?? [])
           .map((e) => ContactModel.fromJson(e))
           .toList(),
+      assignedSpecialists:
+          (c["assignedSpecialists"] as List<dynamic>? ??
+                  c["assigned_specialists"] as List<dynamic>? ??
+                  [])
+              .map((e) => AssignedSpecialistModel.fromJson(e))
+              .toList(),
     );
   }
 
@@ -285,6 +342,47 @@ class CustomerModel {
       createdAt: client.createdAt,
       updatedAt: client.updatedAt,
       contacts: const [],
+      assignedSpecialists: const [],
+    );
+  }
+}
+
+class AssignedSpecialistModel {
+  int id;
+  String name;
+  String lastName;
+  String email;
+  String? image;
+  int role;
+
+  AssignedSpecialistModel({
+    required this.id,
+    required this.name,
+    required this.lastName,
+    required this.email,
+    required this.image,
+    required this.role,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      "id": id,
+      "name": name,
+      "last_name": lastName,
+      "email": email,
+      "image": image,
+      "role": role,
+    };
+  }
+
+  factory AssignedSpecialistModel.fromJson(Map<String, dynamic> json) {
+    return AssignedSpecialistModel(
+      id: json["id"] ?? 0,
+      name: json["name"] ?? "",
+      lastName: json["last_name"] ?? "",
+      email: json["email"] ?? "",
+      image: json["image"],
+      role: json["role"] ?? 0,
     );
   }
 }
@@ -382,6 +480,32 @@ class ContactModel {
       emails: emails ?? this.emails,
       languages: languages ?? this.languages,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      "id": contactId,
+      "customer_id": customerId,
+      "is_primary": isPrimary ? 1 : 0,
+      "name": name,
+      "last_name": lastName,
+      "email": email,
+      "username": username,
+      "phone": phone,
+      "personal_phone": personalPhone,
+      "image": image,
+      "image_url": imageUrl,
+      "language": language,
+      "role": role,
+      "status": status,
+      "created_at": createdAt,
+      "updated_at": updatedAt,
+      "created_by": createdBy,
+      "updated_by": updatedBy,
+      "phones": phones,
+      "emails": emails,
+      "languages": languages,
+    };
   }
 
   factory ContactModel.fromJson(Map<String, dynamic> json) {

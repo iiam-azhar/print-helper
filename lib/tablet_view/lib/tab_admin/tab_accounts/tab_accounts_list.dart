@@ -14,11 +14,12 @@ import '../../tab_widgets/tab_spacers.dart';
 import '../../tab_widgets/tab_text_widget.dart';
 import '../../tab_widgets/tab_toasts.dart';
 import '../tab_filter/tab_filter_screen.dart';
+import 'tab_account_info_screen_tablet.dart';
 import 'tab_add_account.dart';
 import 'tab_edit_account.dart';
 
 class AccountsScreen extends StatefulWidget {
-  final ValueChanged<String>? onMenuTap;
+  final void Function(String page, AccountModel? account)? onMenuTap;
 
   const AccountsScreen({super.key, this.onMenuTap});
 
@@ -325,7 +326,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                   20,
                                   onTap: () {
                                     if (widget.onMenuTap != null) {
-                                      widget.onMenuTap!('chat');
+                                      widget.onMenuTap!('chat', null);
                                       return;
                                     }
                                   },
@@ -440,7 +441,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           borderRadius: BorderRadius.circular(16),
                         ),
                         onSelected: (value) async {
-                          if (value == 'login') {
+                          if (value == 'info') {
+                            if (widget.onMenuTap != null) {
+                              widget.onMenuTap!('account_info', item);
+                            } else {
+                              navTo(
+                                context: context,
+                                page: TabAccountInfoTabletScreen(account: item),
+                              );
+                            }
+                          } else if (value == 'login') {
                             final authPro = Provider.of<AuthPro>(
                               context,
                               listen: false,
@@ -459,6 +469,26 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           }
                         },
                         itemBuilder: (_) => [
+                          PopupMenuItem<String>(
+                            value: 'info',
+                            height: 40,
+                            child: Row(
+                              children: [
+                                ImageWidget(
+                                  image: Paths.info,
+                                  width: 18,
+                                  color: Colors.black87,
+                                ),
+                                const SizedBox(width: 10),
+                                const TextWidget(
+                                  text: 'Info',
+                                  fontSize: 14,
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ],
+                            ),
+                          ),
                           PopupMenuItem<String>(
                             value: 'login',
                             height: 40,

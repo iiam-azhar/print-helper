@@ -8,14 +8,14 @@ class TextStyleData {
     fontFamily: MyFontFam.poppins,
     fontSize: 11,
     fontWeight: FontWeight.bold,
-    color: AppColors.white,
+    color: AppColors.black,
   );
 
   static TextStyle unSelectedNavLbl = FontUtils.getFontStyle(
     fontFamily: MyFontFam.poppins,
     fontSize: 11,
     fontWeight: FontWeight.w500,
-    color: AppColors.grey,
+    color: AppColors.iconColor,
   );
 
   static TextStyle formHintStyle = FontUtils.getFontStyle(

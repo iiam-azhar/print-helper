@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:print_helper/admin/customers/customer_list.dart';
 import 'package:print_helper/admin/client/add_client.dart';
+import 'package:print_helper/admin/client/client_info_screen.dart';
 import 'package:print_helper/admin/client/edit_client.dart';
+import 'package:print_helper/admin/client/client_billing_screen.dart';
+import 'package:print_helper/admin/customers/my_network_screen.dart';
 import 'package:print_helper/widgets/image_widget.dart';
 import 'package:provider/provider.dart';
 
@@ -117,14 +119,13 @@ class _ClientScreenState extends State<ClientScreen> {
                                 vertical: 10.h,
                               ),
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8.r),
                                 color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(8.r),
                               ),
                               child: TextWidget(
-                                text: "Reset Filters",
-                                fontSize: 13,
+                                text: "Clear Filters",
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                fontSize: 13,
                               ),
                             ),
                           ),
@@ -453,19 +454,36 @@ class _ClientScreenState extends State<ClientScreen> {
                                   );
                                 },
                                 pageBuilder: (_, _, _) {
+                                  final screenSize = MediaQuery.of(
+                                    context,
+                                  ).size;
+                                  const popupWidth = 200.0;
+                                  const popupHeight = 278.0;
+                                  final openAbove =
+                                      pos.dy + size.height + popupHeight + 24 >
+                                      screenSize.height;
+                                  final top = openAbove
+                                      ? pos.dy - popupHeight - 6
+                                      : pos.dy + size.height + 6;
+                                  final left = (pos.dx - 110).clamp(
+                                    60.0,
+                                    screenSize.width - popupWidth - 60.0,
+                                  );
+
                                   return GestureDetector(
                                     onTap: () => Navigator.pop(context),
                                     child: Stack(
                                       children: [
                                         Positioned(
-                                          top: pos.dy + size.height + 6,
-                                          left: pos.dx - 110,
+                                          top: top,
+                                          left: left,
                                           child: GestureDetector(
                                             onTap: () {},
                                             child: Container(
+                                              width: popupWidth.w,
                                               padding: EdgeInsets.symmetric(
                                                 horizontal: 14.w,
-                                                vertical: 10.h,
+                                                vertical: 12.h,
                                               ),
                                               decoration: BoxDecoration(
                                                 color: Colors.white.withValues(
@@ -473,6 +491,11 @@ class _ClientScreenState extends State<ClientScreen> {
                                                 ),
                                                 borderRadius:
                                                     BorderRadius.circular(16.r),
+                                                border: Border.all(
+                                                  color: const Color(
+                                                    0xFFE5E7EB,
+                                                  ),
+                                                ),
                                                 boxShadow: [
                                                   BoxShadow(
                                                     color: Colors.black
@@ -484,10 +507,45 @@ class _ClientScreenState extends State<ClientScreen> {
                                                   ),
                                                 ],
                                               ),
-                                              child: Row(
+                                              child: Column(
                                                 mainAxisSize: MainAxisSize.min,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
                                                 children: [
-                                                  Spacers.sbw8(),
+                                                  _popupIcon(
+                                                    icon: Paths.info,
+                                                    label: "Info",
+                                                    onTap: () {
+                                                      Navigator.pop(context);
+                                                      navTo(
+                                                        context: context,
+                                                        page: ClientInfoScreen(
+                                                          clientId: item.id,
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                                  _popupDivider(),
+                                                  _popupIcon(
+                                                    icon: Paths.customers,
+                                                    label: "My Network",
+                                                    onTap: () {
+                                                      Navigator.pop(context);
+                                                      navTo(
+                                                        context: context,
+                                                        page: MyNetworkScreen(
+                                                          isFromAdmin: widget
+                                                              .isFromAdmin,
+                                                          id: item.id,
+                                                          isFromStaff: widget
+                                                              .isFromStaff,
+                                                          isFromClient: widget
+                                                              .isFromClient,
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                                  _popupDivider(),
                                                   _popupIcon(
                                                     icon: Paths.edit,
                                                     label: "Edit",
@@ -510,10 +568,25 @@ class _ClientScreenState extends State<ClientScreen> {
                                                       );
                                                     },
                                                   ),
-                                                  Spacers.sbw20(),
+                                                  _popupDivider(),
+                                                  _popupIcon(
+                                                    icon: Paths.billingIcon,
+                                                    label: "Billing",
+                                                    onTap: () {
+                                                      Navigator.pop(context);
+                                                      navTo(
+                                                        context: context,
+                                                        page: ClientBillingScreen(
+                                                          clientId: item.id,
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                                  _popupDivider(),
                                                   _popupIcon(
                                                     icon: Paths.delete,
                                                     label: "Delete",
+                                                    isDestructive: true,
                                                     onTap: () {
                                                       _confirmDelete(
                                                         context,
@@ -572,7 +645,7 @@ class _ClientScreenState extends State<ClientScreen> {
                   onTap: () {
                     navTo(
                       context: context,
-                      page: CustomersScreen(
+                      page: MyNetworkScreen(
                         isFromAdmin: widget.isFromAdmin,
                         id: item.id,
                         isFromStaff: widget.isFromStaff,
@@ -618,24 +691,33 @@ class _ClientScreenState extends State<ClientScreen> {
     required String icon,
     required String label,
     required VoidCallback onTap,
+    bool isDestructive = false,
   }) {
+    final color = isDestructive ? const Color(0xFFEF4444) : Colors.black87;
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ImageWidget(image: icon, width: 22),
-          Spacers.sb2(),
-          TextWidget(
-            text: label,
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            color: Colors.black87,
-            decoration: TextDecoration.none,
-          ),
-        ],
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 8.h, horizontal: 6.w),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ImageWidget(image: icon, width: 20, color: color),
+            SizedBox(width: 12.w),
+            TextWidget(
+              text: label,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: color,
+              decoration: TextDecoration.none,
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _popupDivider() {
+    return Divider(height: 1, thickness: 0.5, color: const Color(0xFFE5E7EB));
   }
 
   Widget _contactCard(

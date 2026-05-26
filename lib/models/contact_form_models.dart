@@ -21,6 +21,8 @@ class ContactFormModel {
   ];
   List<int> selectedLanguageIds = [];
   bool showLanguageDropdown = false;
+  bool obscurePass = true;
+  bool obscureConfirm = true;
   String? selectedLanguageName;
   File? image;
   int? existingId;

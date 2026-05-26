@@ -12,7 +12,8 @@ import '../tab_widgets/tab_spacers.dart';
 import '../tab_constants/colors.dart';
 import 'tab_file_settings.dart';
 import 'tab_twilio_credentials.dart';
-
+import 'tab_contracts_settings.dart';
+import 'tab_services_pricing.dart';
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
   @override
@@ -110,6 +111,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             )
                           : _activeTab == 2
                           ? const FileSettingsTablet()
+                          : _activeTab == 3
+                          ? const ContractsSettingsTablet()
+                          : _activeTab == 4
+                          ? const ServicesPricingSettingsTablet()
                           : Container(
                               padding: EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -155,6 +160,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tabItem("Twilio", index: 1),
             Spacers.sbw10(),
             _tabItem("File", index: 2),
+            Spacers.sbw10(),
+            _tabItem("Contracts", index: 3),
+            Spacers.sbw10(),
+            _tabItem("Services & Pricing", index: 4),
           ],
         ),
       ),
@@ -277,45 +286,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (section.expanded)
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Spacers.sbw10(),
-                      Expanded(
-                        flex: 2,
-                        child: TextWidget(
-                          text: "Item Name",
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
+              child: pro.isSectionLoading(section.id)
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                      Spacers.sbw80(),
-                      Spacers.sbw80(),
-                      Expanded(
-                        flex: 1,
-                        child: TextWidget(
-                          text: "Date Added",
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                    )
+                  : Column(
+                      children: [
+                        Row(
+                          children: [
+                            Spacers.sbw10(),
+                            Expanded(
+                              flex: 2,
+                              child: TextWidget(
+                                text: "Item Name",
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Spacers.sbw80(),
+                            Spacers.sbw80(),
+                            Expanded(
+                              flex: 1,
+                              child: TextWidget(
+                                text: "Date Added",
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Spacer(flex: 5),
+                          ],
                         ),
-                      ),
-                      Spacer(flex: 5),
-                    ],
-                  ),
-                  Spacers.sb10(),
-                  Column(
-                    children: [
-                      for (final item in section.items)
-                        _buildItemRow(
-                          section,
-                          item,
-                          Provider.of<SettingsPro>(context, listen: false),
+                        Spacers.sb10(),
+                        Column(
+                          children: [
+                            for (final item in section.items)
+                              _buildItemRow(
+                                section,
+                                item,
+                                Provider.of<SettingsPro>(
+                                  context,
+                                  listen: false,
+                                ),
+                              ),
+                          ],
                         ),
-                    ],
-                  ),
-                ],
-              ),
+                      ],
+                    ),
             ),
         ],
       ),

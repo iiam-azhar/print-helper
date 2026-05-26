@@ -1,53 +1,181 @@
 final projectsJson = {
-  "status": true,
-  "message": "success",
-  "projects": [
+  "success": true,
+  "message": "Projects retrieved successfully.",
+  "data": [
     {
-      "id": "12151242",
-      "name": "Project name goes here",
-      "comments": 4,
-      "files": 3,
-      "date": "01/24/21 – 12:20pm",
-      "company": "Tacos el Gavilan",
-      "progress": 45,
-      "status": "Coming",
-      "avatars": [
-        "https://idsb.tmgrup.com.tr/ly/uploads/images/2023/11/14/301015.jpg",
-        "https://i.pinimg.com/474x/60/5b/9b/605b9b86a82dd0147ed8aa612381326f.jpg",
-        "https://neurosciencenews.com/files/2024/03/ai-real-people-image-neurosicence.jpg",
+      "id": 3,
+      "uuid": "00000003",
+      "name": "Project 1",
+      "code": "00000003",
+      "status": "active",
+      "client": {"id": 1, "company_name": "Ainex", "image": null},
+      "customer": {
+        "id": 1,
+        "company_name": "AmbaniBkery",
+        "client_id": 1,
+        "image":
+            "https://printhelper.s3.amazonaws.com/users/1774505189_69c4cce5c80d1.jpg",
+      },
+      "owner": {
+        "id": 1,
+        "name": "System Admin",
+        "image":
+            "https://printhelper.s3.amazonaws.com/users/thumb_1774853130_69ca1c0ab57c45.19960577.jpg",
+      },
+      "card_date_text": "04/09/26",
+      "card_time_text": "4:15pm",
+      "card_code": "00000003",
+      "card_avatars": [
+        {
+          "key": "owner_1",
+          "src":
+              "https://printhelper.s3.amazonaws.com/users/thumb_1774853130_69ca1c0ab57c45.19960577.jpg",
+          "alt": "System Admin",
+          "title": "System Admin",
+        },
+        {
+          "key": "client_1",
+          "src":
+              "https://production.printhelpers.com/icons/Print_Helpers_Icon.svg",
+          "alt": "Ainex",
+          "title": "Ainex",
+        },
+        {
+          "key": "customer_1",
+          "src":
+              "https://printhelper.s3.amazonaws.com/users/1774505189_69c4cce5c80d1.jpg",
+          "alt": "AmbaniBkery",
+          "title": "AmbaniBkery",
+        },
       ],
+      "card_progress_percent": 0,
+      "card_late_tasks_count": 1,
+      "card_tasks_count": 2,
+      "card_comments_count": 0,
+      "card_attachments_count": 0,
+      "card_progress_state": "todo",
     },
     {
-      "id": "12151242",
-      "name": "Project name goes here",
-      "comments": 4,
-      "files": 3,
-      "date": "01/24/21 – 12:20pm",
-      "company": "Tacos el Gavilan",
-      "progress": 0,
-      "status": "Coming",
-      "avatars": [
-        "https://idsb.tmgrup.com.tr/ly/uploads/images/2023/11/14/301015.jpg",
-        "https://i.pinimg.com/474x/60/5b/9b/605b9b86a82dd0147ed8aa612381326f.jpg",
-        "https://neurosciencenews.com/files/2024/03/ai-real-people-image-neurosicence.jpg",
+      "id": 2,
+      "uuid": "00000002",
+      "name": "work flow check",
+      "code": "00000002",
+      "status": "active",
+      "client": {"id": 1, "company_name": "Ainex", "image": null},
+      "customer": {
+        "id": 1,
+        "company_name": "AmbaniBkery",
+        "client_id": 1,
+        "image":
+            "https://printhelper.s3.amazonaws.com/users/1774505189_69c4cce5c80d1.jpg",
+      },
+      "owner": {
+        "id": 1,
+        "name": "System Admin",
+        "image":
+            "https://printhelper.s3.amazonaws.com/users/thumb_1774853130_69ca1c0ab57c45.19960577.jpg",
+      },
+      "card_date_text": "04/09/26",
+      "card_time_text": "3:37pm",
+      "card_code": "00000002",
+      "card_avatars": [
+        {
+          "key": "owner_1",
+          "src":
+              "https://printhelper.s3.amazonaws.com/users/thumb_1774853130_69ca1c0ab57c45.19960577.jpg",
+          "alt": "System Admin",
+          "title": "System Admin",
+        },
+        {
+          "key": "client_1",
+          "src":
+              "https://production.printhelpers.com/icons/Print_Helpers_Icon.svg",
+          "alt": "Ainex",
+          "title": "Ainex",
+        },
+        {
+          "key": "customer_1",
+          "src":
+              "https://printhelper.s3.amazonaws.com/users/1774505189_69c4cce5c80d1.jpg",
+          "alt": "AmbaniBkery",
+          "title": "AmbaniBkery",
+        },
       ],
+      "card_progress_percent": 35,
+      "card_late_tasks_count": 2,
+      "card_tasks_count": 4,
+      "card_comments_count": 1,
+      "card_attachments_count": 1,
+      "card_progress_state": "in_progress",
     },
     {
-      "id": "12151242",
-      "name": "Project name goes here",
-      "comments": 4,
-      "files": 3,
-      "date": "01/24/21 – 12:20pm",
-      "company": "Tacos el Gavilan",
-      "progress": 45,
-      "status": "Coming",
-      "avatars": [
-        "https://idsb.tmgrup.com.tr/ly/uploads/images/2023/11/14/301015.jpg",
-        "https://i.pinimg.com/474x/60/5b/9b/605b9b86a82dd0147ed8aa612381326f.jpg",
-        "https://neurosciencenews.com/files/2024/03/ai-real-people-image-neurosicence.jpg",
+      "id": 1,
+      "uuid": "00000001",
+      "name": "work flow check",
+      "code": "00000001",
+      "status": "active",
+      "client": {"id": 1, "company_name": "Ainex", "image": null},
+      "customer": {
+        "id": 1,
+        "company_name": "AmbaniBkery",
+        "client_id": 1,
+        "image":
+            "https://printhelper.s3.amazonaws.com/users/1774505189_69c4cce5c80d1.jpg",
+      },
+      "owner": {
+        "id": 1,
+        "name": "System Admin",
+        "image":
+            "https://printhelper.s3.amazonaws.com/users/thumb_1774853130_69ca1c0ab57c45.19960577.jpg",
+      },
+      "card_date_text": "04/09/26",
+      "card_time_text": "3:33pm",
+      "card_code": "00000001",
+      "card_avatars": [
+        {
+          "key": "owner_1",
+          "src":
+              "https://printhelper.s3.amazonaws.com/users/thumb_1774853130_69ca1c0ab57c45.19960577.jpg",
+          "alt": "System Admin",
+          "title": "System Admin",
+        },
+        {
+          "key": "client_1",
+          "src":
+              "https://production.printhelpers.com/icons/Print_Helpers_Icon.svg",
+          "alt": "Ainex",
+          "title": "Ainex",
+        },
+        {
+          "key": "customer_1",
+          "src":
+              "https://printhelper.s3.amazonaws.com/users/1774505189_69c4cce5c80d1.jpg",
+          "alt": "AmbaniBkery",
+          "title": "AmbaniBkery",
+        },
       ],
+      "card_progress_percent": 100,
+      "card_late_tasks_count": 0,
+      "card_tasks_count": 2,
+      "card_comments_count": 1,
+      "card_attachments_count": 1,
+      "card_progress_state": "done",
     },
   ],
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 16,
+    "total": 3,
+    "from": 1,
+    "to": 3,
+  },
+  "links": {
+    "first": "https://staging.printhelpers.com/api/projects?page=1",
+    "last": "https://staging.printhelpers.com/api/projects?page=1",
+    "prev": null,
+    "next": null,
+  },
 };
 
 final filesJson = {

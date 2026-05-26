@@ -50,6 +50,7 @@ class AuthPro extends ChangeNotifier {
         prefs.setInt("customer_id", user!.customerId);
         printData(title: "Customer Client ID:", data: user!.custClientId);
         printData(title: "Customer ID:", data: user!.customerId);
+        // Register device for FCM push notifications and VoIP
         await CallDeviceService.bootstrap(forceRegister: true);
 
         // Initialize real-time file updates

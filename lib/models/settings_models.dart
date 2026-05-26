@@ -43,7 +43,7 @@ class SettingsSection {
     required this.id,
     required this.title,
     required this.items,
-    this.expanded = true,
+    this.expanded = false,
   });
 
   factory SettingsSection.fromJson(Map<String, dynamic> json) =>
@@ -55,7 +55,7 @@ class SettingsSection {
         items: (json['items'] as List<dynamic>? ?? [])
             .map((e) => SettingsItem.fromJson(e as Map<String, dynamic>))
             .toList(),
-        expanded: json['expanded'] ?? true,
+        expanded: json['expanded'] ?? false,
       );
 
   Map<String, dynamic> toJson() => {

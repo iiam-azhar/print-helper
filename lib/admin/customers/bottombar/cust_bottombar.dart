@@ -12,6 +12,8 @@ import '../../chat/view/chat_list.dart';
 import '../../drawer/drawer.dart';
 import '../../../utils/console_util.dart';
 import '../../../widgets/toasts.dart';
+import '../../files/files_list.dart';
+import '../../projects/projects.dart';
 
 class CustBottomBar extends StatefulWidget {
   final int pageNum;
@@ -98,9 +100,9 @@ class _CustBottomBarState extends State<CustBottomBar>
               isFromClient: false,
               id: pro.custClientId ?? 0,
             ),
-            const SizedBox(),
+            const FilesScreen(),
             ChatList(),
-            const SizedBox(),
+            const ProjectsPage(),
           ],
         ),
         bottomNavigationBar: Theme(

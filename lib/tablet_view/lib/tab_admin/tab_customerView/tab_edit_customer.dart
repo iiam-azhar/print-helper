@@ -248,8 +248,8 @@ class EditCustomerState extends State<EditCustomer> {
           GestureDetector(
             onTap: onPick,
             child: Container(
-              width: 140,
-              height: 140,
+              width: 120,
+              height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.grey.shade300, width: 2),
@@ -687,8 +687,8 @@ class EditCustomerState extends State<EditCustomer> {
               border: Border.all(color: Colors.grey.shade300),
               color: Colors.white,
             ),
-            child: SizedBox(
-              height: 250,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 250),
               child: SingleChildScrollView(
                 physics: BouncingScrollPhysics(),
                 child: Column(

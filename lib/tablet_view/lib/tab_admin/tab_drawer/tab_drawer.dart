@@ -20,7 +20,6 @@ class CustomDrawer extends StatefulWidget {
 }
 
 class _CustomDrawerState extends State<CustomDrawer> {
-  bool billingExpanded = true;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +28,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
         color: Colors.white,
         borderRadius: BorderRadius.only(topRight: Radius.circular(25)),
       ),
-      width: 280,
+      width: 250,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,8 +77,6 @@ class _CustomDrawerState extends State<CustomDrawer> {
               ),
             ),
 
-            _menuItem(icon: Paths.timeIcon, title: "Time Track", onTap: () {}),
-
             _menuItem(
               icon: Paths.accounts,
               title: "Accounts",
@@ -88,50 +85,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
               },
             ),
 
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 10, 0),
-              child: GestureDetector(
-                onTap: () => setState(() => billingExpanded = !billingExpanded),
-                child: Row(
-                  children: [
-                    ImageWidget(image: Paths.billingIcon, width: 25),
-                    Spacers.sbw20(),
-                    const Expanded(
-                      child: TextWidget(
-                        text: "Billing",
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Icon(
-                      billingExpanded
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down,
-                      size: 24,
-                    ),
-                  ],
-                ),
-              ),
-            ),
 
-            if (billingExpanded) ...[
-              Spacers.sb10(),
-              _subMenuItem(
-                title: "Invoices",
-                icon: Paths.invoices,
-                onTap: () {},
-              ),
-              Spacers.sb10(),
-              _subMenuItem(
-                title: "Subscriptions",
-                icon: Paths.subscriptions,
-                onTap: () {},
-              ),
-              Spacers.sb10(),
-              _subMenuItem(title: "Orders", icon: Paths.orders, onTap: () {}),
-            ],
-
-            Spacers.sb15(),
 
             _menuItem(
               icon: Paths.settings,
@@ -202,23 +156,4 @@ class _CustomDrawerState extends State<CustomDrawer> {
     );
   }
 
-  Widget _subMenuItem({
-    required String title,
-    required String icon,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 55, top: 12),
-        child: Row(
-          children: [
-            ImageWidget(image: icon, width: 25, color: Colors.black),
-            Spacers.sbw20(),
-            TextWidget(text: title, fontSize: 14, fontWeight: FontWeight.w400),
-          ],
-        ),
-      ),
-    );
-  }
 }

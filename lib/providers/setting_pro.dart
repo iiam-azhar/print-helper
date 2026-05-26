@@ -14,9 +14,11 @@ class SettingsPro extends ChangeNotifier {
   bool loading = false;
   bool fileSettingsSaving = false;
   final List<SettingsSection> _sections = [];
+  final Set<int> _loadingSections = {};
   FileSettingsConfig _fileSettings = FileSettingsConfig.defaults();
   List<SettingsSection> get sections => _sections;
   FileSettingsConfig get fileSettings => _fileSettings;
+  bool isSectionLoading(int id) => _loadingSections.contains(id);
 
   void _setLoading(bool v) {
     loading = v;
@@ -53,13 +55,13 @@ class SettingsPro extends ChangeNotifier {
             id: 999,
             title: "Languages",
             items: [],
-            expanded: true,
+            expanded: false,
           ),
         );
       }
       if (!_sections.any((s) => s.title.toLowerCase().contains("ranks"))) {
         _sections.add(
-          SettingsSection(id: 700, title: "Ranks", items: [], expanded: true),
+          SettingsSection(id: 700, title: "Ranks", items: [], expanded: false),
         );
       }
       if (!_sections.any((s) => s.title.toLowerCase().contains("account"))) {
@@ -68,7 +70,7 @@ class SettingsPro extends ChangeNotifier {
             id: 200,
             title: "Account Types",
             items: [],
-            expanded: true,
+            expanded: false,
           ),
         );
       }
@@ -80,13 +82,13 @@ class SettingsPro extends ChangeNotifier {
             id: 400,
             title: "Customer Ranks",
             items: [],
-            expanded: true,
+            expanded: false,
           ),
         );
       }
       if (!_sections.any((s) => s.title.toLowerCase().contains("skills"))) {
         _sections.add(
-          SettingsSection(id: 500, title: "Skills", items: [], expanded: true),
+          SettingsSection(id: 500, title: "Skills", items: [], expanded: false),
         );
       }
       if (!_sections.any(
@@ -97,7 +99,7 @@ class SettingsPro extends ChangeNotifier {
             id: 600,
             title: "Client Company Types",
             items: [],
-            expanded: true,
+            expanded: false,
           ),
         );
       }
@@ -109,26 +111,36 @@ class SettingsPro extends ChangeNotifier {
             id: 300,
             title: "Customer Company Types",
             items: [],
-            expanded: true,
+            expanded: false,
           ),
         );
       }
-      await getLanguages();
-      await getAccountTypes();
-      await getCustomerCompanyTypes();
-      await getCustomerRanks();
-      await getSkills();
-      await getClientCompanyTypes();
-      await getRanks();
     } catch (e, st) {
       printData(title: "LOAD SETTINGS ERROR:", data: "$e\n$st", e: true);
       showToast(message: "Failed to load settings");
     } finally {
       _setLoading(false);
     }
+    // Individual section fetches — each shows its own per-section loading indicator
+    await Future.wait([
+      getLanguages(),
+      getAccountTypes(),
+      getCustomerCompanyTypes(),
+      getCustomerRanks(),
+      getSkills(),
+      getClientCompanyTypes(),
+      getRanks(),
+    ]);
   }
 
   Future<void> getLanguages() async {
+    final idx = _sections.indexWhere(
+      (s) => s.title.toLowerCase().contains("language"),
+    );
+    if (idx != -1) {
+      _loadingSections.add(_sections[idx].id);
+      notifyListeners();
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
@@ -140,9 +152,6 @@ class SettingsPro extends ChangeNotifier {
       printData(title: "LANGUAGE LIST:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
-        final idx = _sections.indexWhere(
-          (s) => s.title.toLowerCase().contains("language"),
-        );
         if (idx != -1) {
           _sections[idx].items = list
               .map((e) => SettingsItem.fromJson(e as Map<String, dynamic>))
@@ -154,10 +163,22 @@ class SettingsPro extends ChangeNotifier {
       }
     } catch (e) {
       printData(title: "GET LANG ERROR:", data: e, e: true);
+    } finally {
+      if (idx != -1) {
+        _loadingSections.remove(_sections[idx].id);
+        notifyListeners();
+      }
     }
   }
 
   Future<void> getAccountTypes() async {
+    final idx = _sections.indexWhere(
+      (s) => s.title.toLowerCase().contains("account"),
+    );
+    if (idx != -1) {
+      _loadingSections.add(_sections[idx].id);
+      notifyListeners();
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
@@ -168,9 +189,6 @@ class SettingsPro extends ChangeNotifier {
       printData(title: "ACCOUNT TYPES LIST:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
-        final idx = _sections.indexWhere(
-          (s) => s.title.toLowerCase().contains("account"),
-        );
         if (idx != -1) {
           _sections[idx].items = list
               .map((e) => SettingsItem.fromJson(e as Map<String, dynamic>))
@@ -182,10 +200,22 @@ class SettingsPro extends ChangeNotifier {
       }
     } catch (e) {
       printData(title: "GET ACCTYPES ERROR:", data: e, e: true);
+    } finally {
+      if (idx != -1) {
+        _loadingSections.remove(_sections[idx].id);
+        notifyListeners();
+      }
     }
   }
 
   Future<void> getCustomerCompanyTypes() async {
+    final idx = _sections.indexWhere(
+      (s) => s.title.toLowerCase().contains("customer company"),
+    );
+    if (idx != -1) {
+      _loadingSections.add(_sections[idx].id);
+      notifyListeners();
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
@@ -196,9 +226,6 @@ class SettingsPro extends ChangeNotifier {
       printData(title: "CUSTOMER COMPANY TYPES:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
-        final idx = _sections.indexWhere(
-          (s) => s.title.toLowerCase().contains("customer company"),
-        );
         if (idx != -1) {
           _sections[idx].items = list
               .map((e) => SettingsItem.fromJson(e as Map<String, dynamic>))
@@ -208,10 +235,22 @@ class SettingsPro extends ChangeNotifier {
       }
     } catch (e) {
       printData(title: "GET CUSTOMER COMPANY TYPES ERROR:", data: e, e: true);
+    } finally {
+      if (idx != -1) {
+        _loadingSections.remove(_sections[idx].id);
+        notifyListeners();
+      }
     }
   }
 
   Future<void> getCustomerRanks() async {
+    final idx = _sections.indexWhere(
+      (s) => s.title.toLowerCase().contains("customer ranks"),
+    );
+    if (idx != -1) {
+      _loadingSections.add(_sections[idx].id);
+      notifyListeners();
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
@@ -222,23 +261,31 @@ class SettingsPro extends ChangeNotifier {
       printData(title: "CUSTOMER RANKS:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
-        final idx = _sections.indexWhere(
-          (s) => s.title.toLowerCase().contains("customer ranks"),
-        );
         if (idx != -1) {
           _sections[idx].items = list
               .map((e) => SettingsItem.fromJson(e as Map<String, dynamic>))
               .toList();
-
           notifyListeners();
         }
       }
     } catch (e) {
       printData(title: "GET CUSTOMER RANKS ERROR:", data: e, e: true);
+    } finally {
+      if (idx != -1) {
+        _loadingSections.remove(_sections[idx].id);
+        notifyListeners();
+      }
     }
   }
 
   Future<void> getSkills() async {
+    final idx = _sections.indexWhere(
+      (s) => s.title.toLowerCase().contains("skills"),
+    );
+    if (idx != -1) {
+      _loadingSections.add(_sections[idx].id);
+      notifyListeners();
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
@@ -249,24 +296,31 @@ class SettingsPro extends ChangeNotifier {
       printData(title: "SKILLS LIST:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
-        final idx = _sections.indexWhere(
-          (s) => s.title.toLowerCase().contains("skills"),
-        );
-
         if (idx != -1) {
           _sections[idx].items = list
               .map((e) => SettingsItem.fromJson(e))
               .toList();
-
           notifyListeners();
         }
       }
     } catch (e) {
       printData(title: "GET SKILLS ERROR:", data: e, e: true);
+    } finally {
+      if (idx != -1) {
+        _loadingSections.remove(_sections[idx].id);
+        notifyListeners();
+      }
     }
   }
 
   Future<void> getClientCompanyTypes() async {
+    final idx = _sections.indexWhere(
+      (s) => s.title.toLowerCase().contains("client company"),
+    );
+    if (idx != -1) {
+      _loadingSections.add(_sections[idx].id);
+      notifyListeners();
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
@@ -277,9 +331,6 @@ class SettingsPro extends ChangeNotifier {
       printData(title: "CLIENT COMPANY TYPES:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
-        final idx = _sections.indexWhere(
-          (s) => s.title.toLowerCase().contains("client company"),
-        );
         if (idx != -1) {
           _sections[idx].items = list
               .map((e) => SettingsItem.fromJson(e))
@@ -289,10 +340,22 @@ class SettingsPro extends ChangeNotifier {
       }
     } catch (e) {
       printData(title: "GET CLIENT COMPANY TYPES ERROR:", data: e, e: true);
+    } finally {
+      if (idx != -1) {
+        _loadingSections.remove(_sections[idx].id);
+        notifyListeners();
+      }
     }
   }
 
   Future<void> getRanks() async {
+    final idx = _sections.indexWhere(
+      (s) => s.title.toLowerCase().contains("ranks"),
+    );
+    if (idx != -1) {
+      _loadingSections.add(_sections[idx].id);
+      notifyListeners();
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
@@ -303,9 +366,6 @@ class SettingsPro extends ChangeNotifier {
       printData(title: "RANKS LIST:", data: res.body);
       if (res.statusCode == 200) {
         final List<dynamic> list = jsonDecode(res.body);
-        final idx = _sections.indexWhere(
-          (s) => s.title.toLowerCase().contains("ranks"),
-        );
         if (idx != -1) {
           _sections[idx].items = list
               .map((e) => SettingsItem.fromJson(e))
@@ -315,6 +375,11 @@ class SettingsPro extends ChangeNotifier {
       }
     } catch (e) {
       printData(title: "GET RANKS ERROR:", data: e, e: true);
+    } finally {
+      if (idx != -1) {
+        _loadingSections.remove(_sections[idx].id);
+        notifyListeners();
+      }
     }
   }
 

@@ -174,6 +174,7 @@ class ChatMessage {
   final String message;
 
   final String type; // text | image | audio | call | video
+  final String? channel; // app | sms
   final String? audioUrl; // voice message URL
   final int? audioDuration; // seconds (optional)
   final Map<String, dynamic>? callAttachments; // call-specific data
@@ -204,6 +205,7 @@ class ChatMessage {
     required this.createdAt,
     required this.isMe,
     this.type = 'text',
+    this.channel,
     this.audioUrl,
     this.audioDuration,
     this.callAttachments,
@@ -245,6 +247,7 @@ class ChatMessage {
           : null,
       readAt: json['read_at'] != null ? parseDateLocal(json['read_at']) : null,
       type: json['type'] ?? 'text',
+      channel: _extractChannel(json),
       audioUrl: _extractVoiceUrl(json),
       audioDuration: json['voice_duration'],
       callAttachments: _extractCallAttachments(json),
@@ -254,6 +257,18 @@ class ChatMessage {
       videoMimeType: _extractVideoMimeType(json),
       isVideoCallRecording: _isVideoCallRecording(json),
     );
+  }
+
+  static String? _extractChannel(Map<String, dynamic> json) {
+    final attachments = json['attachments'];
+    Map<String, dynamic>? map;
+    if (attachments is Map<String, dynamic>) {
+      map = attachments;
+    } else if (attachments is Map) {
+      map = Map<String, dynamic>.from(attachments);
+    }
+    if (map != null && map.containsKey('twilio_sms')) return 'sms';
+    return null;
   }
 
   static Map<String, dynamic>? _extractAttachmentsMap(

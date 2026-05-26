@@ -192,13 +192,30 @@ class ChatLatestMessage {
 
   factory ChatLatestMessage.fromJson(Map<String, dynamic> json) {
     final user = json['user'];
-    final message = (json['message'] ?? '').toString();
+    final type = json['type'] ?? 'text';
+    String message = (json['message'] ?? '').toString();
+
+    // If message is a JSON string (reminder or system card), extract a human-readable title/text
+    if (message.trim().startsWith('{')) {
+      try {
+        final decoded = jsonDecode(message);
+        if (decoded is Map) {
+          if (type == 'reminder' && decoded['title'] != null) {
+            message = decoded['title'].toString();
+          } else if (decoded['text'] != null &&
+              decoded['text'].toString().isNotEmpty) {
+            message = decoded['text'].toString();
+          } else if (decoded['event'] != null) {
+            message = decoded['event'].toString();
+          }
+        }
+      } catch (_) {}
+    }
 
     // Parse attachments for call data
     bool isCallRecording = false;
     String? callOutcome;
     List<Map<String, dynamic>>? toUsers;
-    final type = json['type'] ?? 'text';
     if (type == 'voice' || type == 'call' || type == 'video_call') {
       var att = json['attachments'];
       Map<String, dynamic>? attMap;
@@ -398,8 +415,10 @@ class ChatMessage {
   final int conversationId;
   final int? senderId;
   final String message;
+  final ChatSystemCard? systemCard;
 
   final String type; // text | image | audio | video
+  final String? channel; // app | sms
   final String? audioUrl; // voice message URL
   final int? audioDuration; // seconds (optional)
   final List<double>? voiceWaveform; // wave data
@@ -450,9 +469,11 @@ class ChatMessage {
     required this.conversationId,
     this.senderId,
     required this.message,
+    this.systemCard,
     required this.createdAt,
     required this.isMe,
     this.type = 'text',
+    this.channel,
     this.audioUrl,
     this.audioDuration,
     this.attachmentUrl,
@@ -490,8 +511,13 @@ class ChatMessage {
   factory ChatMessage.fromJson(Map<String, dynamic> json, int currentUserId) {
     final user = json['user'];
     final userId = user != null ? user['id'] : json['user_id'];
+    final parsedSystemCard = _parseSystemCard(json['message']);
+    final parsedMessage = _extractMessageText(
+      json['message'],
+      parsedSystemCard,
+    );
 
-    return ChatMessage(
+    final msg = ChatMessage(
       id: json['id'] is int
           ? json['id']
           : int.tryParse(json['id'].toString()) ?? 0,
@@ -499,7 +525,8 @@ class ChatMessage {
           ? json['conversation_id']
           : int.tryParse(json['conversation_id'].toString()) ?? 0,
       senderId: userId is int ? userId : int.tryParse(userId.toString()),
-      message: json['message'] ?? '',
+      message: parsedMessage,
+      systemCard: parsedSystemCard,
       createdAt: parseDateLocal(json['created_at']),
       isMe: userId != null && userId == currentUserId,
       senderName: user != null
@@ -513,6 +540,7 @@ class ChatMessage {
           : null,
       readAt: json['read_at'] != null ? parseDateLocal(json['read_at']) : null,
       type: json['type'] ?? 'text',
+      channel: _extractChannel(json),
       audioUrl: _cleanUrl(_extractVoiceUrl(json)),
       audioDuration: json['voice_duration'],
       attachmentUrl: _cleanUrl(_extractAttachmentUrl(json)),
@@ -543,6 +571,80 @@ class ChatMessage {
       videoMimeType: _extractVideoMimeType(json),
       isVideoCallRecording: _isVideoCallRecording(json),
     );
+
+    // Normalize: If it's a system card and has no attachment URL,
+    // use the first attachment from the card if available.
+    if (msg.systemCard != null &&
+        (msg.attachmentUrl == null || msg.attachmentUrl!.isEmpty)) {
+      final items = msg.systemCard!.attachmentItems;
+      if (items.isNotEmpty) {
+        return msg.copyWith(
+          attachmentUrl: _cleanUrl(items.first.url),
+          attachmentName: items.first.name,
+          attachmentMimeType: items.first.mime,
+        );
+      }
+    }
+
+    return msg;
+  }
+
+  static String? _extractChannel(Map<String, dynamic> json) {
+    final attachments = json['attachments'];
+    Map<String, dynamic>? map;
+    if (attachments is Map<String, dynamic>) {
+      map = attachments;
+    } else if (attachments is Map) {
+      map = Map<String, dynamic>.from(attachments);
+    }
+    if (map != null && map.containsKey('twilio_sms')) return 'sms';
+    return null;
+  }
+
+  static String _extractMessageText(dynamic raw, ChatSystemCard? card) {
+    if (raw == null) return '';
+    if (raw is String) return raw;
+    if (raw is Map) {
+      final map = Map<String, dynamic>.from(raw);
+      final text = map['text']?.toString().trim() ?? '';
+      if (text.isNotEmpty) return text;
+      if (card != null) {
+        final title = card.title?.trim() ?? '';
+        if (title.isNotEmpty) return title;
+
+        final event = card.event.trim();
+        final project = card.project?.trim() ?? '';
+        if (event.isNotEmpty && project.isNotEmpty) {
+          return '$event: $project';
+        }
+        if (event.isNotEmpty) return event;
+      }
+      return jsonEncode(map);
+    }
+    return raw.toString();
+  }
+
+  static ChatSystemCard? _parseSystemCard(dynamic raw) {
+    Map<String, dynamic>? map;
+    if (raw is Map) {
+      map = Map<String, dynamic>.from(raw);
+    } else if (raw is String && raw.trim().startsWith('{')) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          map = Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {
+        map = null;
+      }
+    }
+
+    if (map == null) return null;
+    if ((map['kind']?.toString().trim().toLowerCase() ?? '') != 'system_card') {
+      return null;
+    }
+
+    return ChatSystemCard.fromJson(map);
   }
 
   static List<double>? _extractVoiceWaveform(Map<String, dynamic> json) {
@@ -774,19 +876,24 @@ class ChatMessage {
     bool? isDelivered,
     DateTime? deliveredAt,
     DateTime? readAt,
+    String? attachmentUrl,
+    String? attachmentName,
+    String? attachmentMimeType,
   }) {
     return ChatMessage(
       id: id,
       conversationId: conversationId,
       senderId: senderId,
       message: message ?? this.message,
+      systemCard: systemCard,
       type: type,
+      channel: channel,
       audioUrl: audioUrl,
       audioDuration: audioDuration,
-      attachmentUrl: attachmentUrl,
-      attachmentName: attachmentName,
+      attachmentUrl: attachmentUrl ?? this.attachmentUrl,
+      attachmentName: attachmentName ?? this.attachmentName,
       attachmentSize: attachmentSize,
-      attachmentMimeType: attachmentMimeType,
+      attachmentMimeType: attachmentMimeType ?? this.attachmentMimeType,
       thumbnailUrl: thumbnailUrl,
       expiresInDays: expiresInDays,
       isExpired: isExpired,
@@ -816,6 +923,136 @@ class ChatMessage {
       videoSize: videoSize,
       videoMimeType: videoMimeType,
       isVideoCallRecording: isVideoCallRecording,
+    );
+  }
+}
+
+class ChatSystemCard {
+  final String kind;
+  final String event;
+  final String? task;
+  final String? project;
+  final String? comment;
+  final List<String> files;
+  final List<String> attachments;
+  final List<ChatSystemCardAttachment> attachmentItems;
+  final String text;
+  final String? title;
+  final String? description;
+  final String? buttonLabel;
+  final String? buttonUrl;
+
+  const ChatSystemCard({
+    required this.kind,
+    required this.event,
+    required this.task,
+    required this.project,
+    required this.comment,
+    required this.files,
+    required this.attachments,
+    required this.attachmentItems,
+    required this.text,
+    this.title,
+    this.description,
+    this.buttonLabel,
+    this.buttonUrl,
+  });
+
+  factory ChatSystemCard.fromJson(Map<String, dynamic> json) {
+    List<String> parseStringList(dynamic raw) {
+      if (raw is! List) return const <String>[];
+      final values = <String>[];
+      for (final item in raw) {
+        if (item == null) continue;
+        if (item is String) {
+          final v = item.trim();
+          if (v.isNotEmpty) values.add(v);
+          continue;
+        }
+        if (item is Map) {
+          final map = Map<String, dynamic>.from(item);
+          final name =
+              map['name']?.toString().trim() ??
+              map['file_name']?.toString().trim() ??
+              map['filename']?.toString().trim() ??
+              map['original_name']?.toString().trim() ??
+              map['title']?.toString().trim() ??
+              '';
+          if (name.isNotEmpty) values.add(name);
+          continue;
+        }
+        final value = item.toString().trim();
+        if (value.isNotEmpty) values.add(value);
+      }
+      return values;
+    }
+
+    List<ChatSystemCardAttachment> parseAttachmentItems(dynamic raw) {
+      if (raw is! List) return const <ChatSystemCardAttachment>[];
+      final values = <ChatSystemCardAttachment>[];
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final map = Map<String, dynamic>.from(item);
+        values.add(ChatSystemCardAttachment.fromJson(map));
+      }
+      return values;
+    }
+
+    final parsedFiles = parseStringList(json['files']);
+    final parsedAttachmentItems = parseAttachmentItems(json['attachments']);
+    final parsedAttachments = <String>{
+      ...parsedAttachmentItems
+          .map((item) => item.name.trim())
+          .where((item) => item.isNotEmpty),
+      ...parseStringList(json['attachments']),
+    }.toList();
+
+    return ChatSystemCard(
+      kind: json['kind']?.toString() ?? 'system_card',
+      event: json['event']?.toString().trim() ?? '',
+      task: json['task']?.toString(),
+      project: json['project']?.toString(),
+      comment: json['comment']?.toString(),
+      files: parsedFiles,
+      attachments: parsedAttachments,
+      attachmentItems: parsedAttachmentItems,
+      text: json['text']?.toString() ?? '',
+      title: json['title']?.toString(),
+      description: json['description']?.toString(),
+      buttonLabel: json['button_label']?.toString(),
+      buttonUrl: json['button_url']?.toString(),
+    );
+  }
+}
+
+class ChatSystemCardAttachment {
+  final String name;
+  final String url;
+  final String mime;
+
+  const ChatSystemCardAttachment({
+    required this.name,
+    required this.url,
+    required this.mime,
+  });
+
+  factory ChatSystemCardAttachment.fromJson(Map<String, dynamic> json) {
+    return ChatSystemCardAttachment(
+      name:
+          json['name']?.toString() ??
+          json['file_name']?.toString() ??
+          json['filename']?.toString() ??
+          '',
+      url:
+          json['url']?.toString() ??
+          json['file_url']?.toString() ??
+          json['path']?.toString() ??
+          '',
+      mime:
+          json['mime']?.toString() ??
+          json['mime_type']?.toString() ??
+          json['file_mime_type']?.toString() ??
+          '',
     );
   }
 }

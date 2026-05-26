@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:print_helper/admin/chat/provider/chat_pro.dart';
-import 'package:print_helper/widgets/loaders.dart';
-import 'package:print_helper/widgets/toasts.dart';
+import 'loaders.dart';
+import 'tab_toasts.dart';
 import '../tab_constants/paths.dart';
 import '../tab_widgets/tab_image_widget.dart';
 import 'tab_text_widget.dart' as tab_text;
@@ -43,7 +43,8 @@ class TabShareChatPopup extends StatefulWidget {
 
 class _TabShareChatPopupState extends State<TabShareChatPopup> {
   final TextEditingController _searchCtrl = TextEditingController();
-  final Set<dynamic> _selectedItems = {}; // Set of Conversation or SearchResultUser
+  final Set<dynamic> _selectedItems =
+      {}; // Set of Conversation or SearchResultUser
 
   @override
   void initState() {
@@ -255,13 +256,17 @@ class _TabShareChatPopupState extends State<TabShareChatPopup> {
                           image = item.image ?? '';
                         } catch (_) {}
 
-                        final isSelected = _selectedItems.any((e) => (e as dynamic).id == item.id);
+                        final isSelected = _selectedItems.any(
+                          (e) => (e as dynamic).id == item.id,
+                        );
 
                         return InkWell(
                           onTap: () {
                             setState(() {
                               if (isSelected) {
-                                _selectedItems.removeWhere((e) => (e as dynamic).id == item.id);
+                                _selectedItems.removeWhere(
+                                  (e) => (e as dynamic).id == item.id,
+                                );
                               } else {
                                 _selectedItems.add(item);
                               }

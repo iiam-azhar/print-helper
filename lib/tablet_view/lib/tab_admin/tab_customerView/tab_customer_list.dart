@@ -784,8 +784,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
               _iconButton(
                 icon: Paths.edit,
                 onTap: () {
-                  print("${item.id}customer idddddd");
-                  print("${item.clientId}client idddddd");
+                  debugPrint("${item.id}customer idddddd");
+                  debugPrint("${item.clientId}client idddddd");
                   _openRightSideSheet(
                     context,
                     EditCustomer(customerId: item.id, clientId: item.clientId),

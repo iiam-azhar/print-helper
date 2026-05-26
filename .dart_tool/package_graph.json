@@ -7,6 +7,7 @@
       "name": "print_helper",
       "version": "1.0.0+1",
       "dependencies": [
+        "app_links",
         "audio_waveforms",
         "cached_network_image",
         "chewie",
@@ -16,6 +17,7 @@
         "dart_pusher_channels",
         "delayed_display",
         "dio",
+        "dotted_border",
         "easy_localization",
         "emoji_picker_flutter",
         "file_picker",
@@ -23,10 +25,15 @@
         "firebase_messaging",
         "flutter",
         "flutter_colorpicker",
+        "flutter_inappwebview",
         "flutter_local_notifications",
+        "flutter_localizations",
+        "flutter_quill",
+        "flutter_quill_delta_from_html",
         "flutter_screenutil",
         "flutter_secure_storage",
         "flutter_svg",
+        "flutter_web_auth_2",
         "fluttertoast",
         "google_fonts",
         "http",
@@ -76,6 +83,79 @@
         "stream_channel",
         "test_api",
         "vector_math"
+      ]
+    },
+    {
+      "name": "flutter_quill_delta_from_html",
+      "version": "1.5.3",
+      "dependencies": [
+        "dart_quill_delta",
+        "html"
+      ]
+    },
+    {
+      "name": "flutter_quill",
+      "version": "11.5.0",
+      "dependencies": [
+        "charcode",
+        "collection",
+        "dart_quill_delta",
+        "flutter",
+        "flutter_colorpicker",
+        "flutter_keyboard_visibility_temp_fork",
+        "flutter_localizations",
+        "flutter_quill_delta_from_html",
+        "html",
+        "intl",
+        "markdown",
+        "meta",
+        "quill_native_bridge",
+        "quiver",
+        "url_launcher"
+      ]
+    },
+    {
+      "name": "flutter_web_auth_2",
+      "version": "5.0.2",
+      "dependencies": [
+        "desktop_webview_window",
+        "flutter",
+        "flutter_web_auth_2_platform_interface",
+        "flutter_web_plugins",
+        "path_provider",
+        "url_launcher",
+        "web",
+        "window_to_front"
+      ]
+    },
+    {
+      "name": "app_links",
+      "version": "7.0.0",
+      "dependencies": [
+        "app_links_linux",
+        "app_links_platform_interface",
+        "app_links_web",
+        "flutter"
+      ]
+    },
+    {
+      "name": "flutter_inappwebview",
+      "version": "6.1.5",
+      "dependencies": [
+        "flutter",
+        "flutter_inappwebview_android",
+        "flutter_inappwebview_ios",
+        "flutter_inappwebview_macos",
+        "flutter_inappwebview_platform_interface",
+        "flutter_inappwebview_web",
+        "flutter_inappwebview_windows"
+      ]
+    },
+    {
+      "name": "dotted_border",
+      "version": "3.1.0",
+      "dependencies": [
+        "flutter"
       ]
     },
     {
@@ -492,6 +572,15 @@
       "dependencies": []
     },
     {
+      "name": "flutter_localizations",
+      "version": "0.0.0",
+      "dependencies": [
+        "flutter",
+        "intl",
+        "path"
+      ]
+    },
+    {
       "name": "flutter",
       "version": "0.0.0",
       "dependencies": [
@@ -590,6 +679,183 @@
         "stream_channel",
         "string_scanner",
         "term_glyph"
+      ]
+    },
+    {
+      "name": "html",
+      "version": "0.15.6",
+      "dependencies": [
+        "csslib",
+        "source_span"
+      ]
+    },
+    {
+      "name": "dart_quill_delta",
+      "version": "10.8.3",
+      "dependencies": [
+        "collection",
+        "diff_match_patch",
+        "quiver"
+      ]
+    },
+    {
+      "name": "quill_native_bridge",
+      "version": "11.1.0",
+      "dependencies": [
+        "flutter",
+        "quill_native_bridge_android",
+        "quill_native_bridge_ios",
+        "quill_native_bridge_macos",
+        "quill_native_bridge_platform_interface",
+        "quill_native_bridge_web",
+        "quill_native_bridge_windows"
+      ]
+    },
+    {
+      "name": "flutter_keyboard_visibility_temp_fork",
+      "version": "0.1.5",
+      "dependencies": [
+        "flutter",
+        "flutter_keyboard_visibility_linux",
+        "flutter_keyboard_visibility_macos",
+        "flutter_keyboard_visibility_platform_interface",
+        "flutter_keyboard_visibility_windows",
+        "flutter_web_plugins",
+        "meta",
+        "web"
+      ]
+    },
+    {
+      "name": "charcode",
+      "version": "1.4.0",
+      "dependencies": []
+    },
+    {
+      "name": "markdown",
+      "version": "7.3.1",
+      "dependencies": [
+        "args",
+        "meta"
+      ]
+    },
+    {
+      "name": "quiver",
+      "version": "3.2.2",
+      "dependencies": [
+        "matcher"
+      ]
+    },
+    {
+      "name": "window_to_front",
+      "version": "0.0.3",
+      "dependencies": [
+        "flutter"
+      ]
+    },
+    {
+      "name": "web",
+      "version": "1.1.1",
+      "dependencies": []
+    },
+    {
+      "name": "flutter_web_plugins",
+      "version": "0.0.0",
+      "dependencies": [
+        "flutter"
+      ]
+    },
+    {
+      "name": "flutter_web_auth_2_platform_interface",
+      "version": "5.0.0",
+      "dependencies": [
+        "flutter",
+        "plugin_platform_interface"
+      ]
+    },
+    {
+      "name": "desktop_webview_window",
+      "version": "0.2.3",
+      "dependencies": [
+        "flutter",
+        "path"
+      ]
+    },
+    {
+      "name": "app_links_web",
+      "version": "1.0.4",
+      "dependencies": [
+        "app_links_platform_interface",
+        "flutter",
+        "flutter_web_plugins",
+        "web"
+      ]
+    },
+    {
+      "name": "app_links_platform_interface",
+      "version": "2.0.2",
+      "dependencies": [
+        "flutter",
+        "plugin_platform_interface"
+      ]
+    },
+    {
+      "name": "app_links_linux",
+      "version": "1.0.3",
+      "dependencies": [
+        "app_links_platform_interface",
+        "flutter",
+        "gtk"
+      ]
+    },
+    {
+      "name": "flutter_inappwebview_windows",
+      "version": "0.6.0",
+      "dependencies": [
+        "flutter",
+        "flutter_inappwebview_platform_interface"
+      ]
+    },
+    {
+      "name": "flutter_inappwebview_web",
+      "version": "1.1.2",
+      "dependencies": [
+        "flutter",
+        "flutter_inappwebview_platform_interface",
+        "flutter_web_plugins",
+        "web"
+      ]
+    },
+    {
+      "name": "flutter_inappwebview_macos",
+      "version": "1.1.2",
+      "dependencies": [
+        "flutter",
+        "flutter_inappwebview_platform_interface"
+      ]
+    },
+    {
+      "name": "flutter_inappwebview_ios",
+      "version": "1.1.2",
+      "dependencies": [
+        "flutter",
+        "flutter_inappwebview_platform_interface"
+      ]
+    },
+    {
+      "name": "flutter_inappwebview_android",
+      "version": "1.1.3",
+      "dependencies": [
+        "flutter",
+        "flutter_inappwebview_platform_interface"
+      ]
+    },
+    {
+      "name": "flutter_inappwebview_platform_interface",
+      "version": "1.3.0+1",
+      "dependencies": [
+        "flutter",
+        "flutter_inappwebview_internal_annotations",
+        "plugin_platform_interface"
       ]
     },
     {
@@ -748,14 +1014,6 @@
       ]
     },
     {
-      "name": "html",
-      "version": "0.15.6",
-      "dependencies": [
-        "csslib",
-        "source_span"
-      ]
-    },
-    {
       "name": "fixnum",
       "version": "1.1.1",
       "dependencies": []
@@ -774,11 +1032,6 @@
       ]
     },
     {
-      "name": "web",
-      "version": "1.1.1",
-      "dependencies": []
-    },
-    {
       "name": "js",
       "version": "0.7.2",
       "dependencies": []
@@ -788,13 +1041,6 @@
       "version": "2.1.8",
       "dependencies": [
         "meta"
-      ]
-    },
-    {
-      "name": "flutter_web_plugins",
-      "version": "0.0.0",
-      "dependencies": [
-        "flutter"
       ]
     },
     {
@@ -1315,15 +1561,6 @@
       ]
     },
     {
-      "name": "flutter_localizations",
-      "version": "0.0.0",
-      "dependencies": [
-        "flutter",
-        "intl",
-        "path"
-      ]
-    },
-    {
       "name": "easy_logger",
       "version": "0.0.2",
       "dependencies": [
@@ -1477,6 +1714,119 @@
       ]
     },
     {
+      "name": "csslib",
+      "version": "1.0.2",
+      "dependencies": [
+        "source_span"
+      ]
+    },
+    {
+      "name": "diff_match_patch",
+      "version": "0.4.1",
+      "dependencies": []
+    },
+    {
+      "name": "quill_native_bridge_macos",
+      "version": "0.0.1",
+      "dependencies": [
+        "flutter",
+        "quill_native_bridge_platform_interface"
+      ]
+    },
+    {
+      "name": "quill_native_bridge_ios",
+      "version": "0.0.1",
+      "dependencies": [
+        "flutter",
+        "quill_native_bridge_platform_interface"
+      ]
+    },
+    {
+      "name": "quill_native_bridge_windows",
+      "version": "0.0.2",
+      "dependencies": [
+        "ffi",
+        "file_selector_platform_interface",
+        "file_selector_windows",
+        "flutter",
+        "quill_native_bridge_platform_interface",
+        "win32"
+      ]
+    },
+    {
+      "name": "quill_native_bridge_web",
+      "version": "0.0.2",
+      "dependencies": [
+        "flutter",
+        "flutter_web_plugins",
+        "quill_native_bridge_platform_interface",
+        "web"
+      ]
+    },
+    {
+      "name": "quill_native_bridge_platform_interface",
+      "version": "0.0.2+1",
+      "dependencies": [
+        "flutter",
+        "plugin_platform_interface"
+      ]
+    },
+    {
+      "name": "quill_native_bridge_android",
+      "version": "0.0.1+2",
+      "dependencies": [
+        "flutter",
+        "quill_native_bridge_platform_interface"
+      ]
+    },
+    {
+      "name": "flutter_keyboard_visibility_windows",
+      "version": "1.0.0",
+      "dependencies": [
+        "flutter",
+        "flutter_keyboard_visibility_platform_interface"
+      ]
+    },
+    {
+      "name": "flutter_keyboard_visibility_macos",
+      "version": "1.0.0",
+      "dependencies": [
+        "flutter",
+        "flutter_keyboard_visibility_platform_interface"
+      ]
+    },
+    {
+      "name": "flutter_keyboard_visibility_linux",
+      "version": "1.0.0",
+      "dependencies": [
+        "flutter",
+        "flutter_keyboard_visibility_platform_interface"
+      ]
+    },
+    {
+      "name": "flutter_keyboard_visibility_platform_interface",
+      "version": "2.0.0",
+      "dependencies": [
+        "flutter",
+        "meta",
+        "plugin_platform_interface"
+      ]
+    },
+    {
+      "name": "gtk",
+      "version": "2.1.0",
+      "dependencies": [
+        "ffi",
+        "flutter",
+        "meta"
+      ]
+    },
+    {
+      "name": "flutter_inappwebview_internal_annotations",
+      "version": "1.3.0",
+      "dependencies": []
+    },
+    {
       "name": "file_selector_windows",
       "version": "0.9.3+5",
       "dependencies": [
@@ -1536,13 +1886,6 @@
         "flutter",
         "meta",
         "plugin_platform_interface"
-      ]
-    },
-    {
-      "name": "csslib",
-      "version": "1.0.2",
-      "dependencies": [
-        "source_span"
       ]
     },
     {

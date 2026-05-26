@@ -10,8 +10,10 @@ import '../../../constants/colors.dart';
 import '../../../constants/paths.dart';
 import '../../../utils/textstyle_util.dart';
 import '../../../widgets/image_widget.dart';
-import '../../customers/customer_list.dart';
+import '../../customers/my_customers.dart';
 import '../../drawer/drawer.dart';
+import '../../files/files_list.dart';
+import '../../projects/projects.dart';
 
 class ClientBottomBar extends StatefulWidget {
   final int pageNum;
@@ -90,15 +92,12 @@ class _ClientBottomBarState extends State<ClientBottomBar>
             return IndexedStack(
               index: pageNum,
               children: [
-                CustomersScreen(
-                  isFromAdmin: false,
-                  isFromStaff: false,
-                  isFromClient: true,
+                MyCustomersScreen(
                   id: user.clientId!,
                 ),
-                const SizedBox(),
+                const FilesScreen(),
                 ChatList(),
-                const SizedBox(),
+                const ProjectsPage(),
                 const SizedBox(),
               ],
             );

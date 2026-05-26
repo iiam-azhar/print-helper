@@ -163,14 +163,20 @@
 //   }
 // }
 
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:print_helper/auth/login_screen.dart';
+import 'package:print_helper/services/call_device_service.dart';
+import 'package:print_helper/services/db_service.dart';
+import 'package:print_helper/services/navigation_service.dart';
+import '../tab_widgets/tab_toasts.dart';
 
 import '../tab_utils/console_util.dart';
 import '../tab_utils/custom_exceptions.dart';
@@ -185,6 +191,7 @@ class ApiService {
 
   static const _timeOut = 30;
   static final Random _rng = Random();
+  static bool _isHandlingUnauthorized = false;
 
   /// Create IOClient that bypasses SSL
   IOClient _getBypassedClient() {
@@ -204,7 +211,6 @@ class ApiService {
     bool showRes = true,
     int timeOut = _timeOut,
   }) async {
-
     final Uri uri = _buildUri(path: api, url: url);
     final client = _getBypassedClient();
 
@@ -271,8 +277,7 @@ class ApiService {
           res = client.post(uri, headers: headers, body: payload);
         }
 
-        final response =
-            await res.timeout(const Duration(seconds: _timeOut));
+        final response = await res.timeout(const Duration(seconds: _timeOut));
 
         return _response(response, showRes);
       }
@@ -285,14 +290,12 @@ class ApiService {
 
   /// Build URI
   Uri _buildUri({String path = '', String? url}) {
-    final Uri uri =
-        url != null ? Uri.parse(url) : Uri.parse('${ApiRoutes.baseUrl}$path');
+    final Uri uri = url != null
+        ? Uri.parse(url)
+        : Uri.parse('${ApiRoutes.baseUrl}$path');
 
     return uri.replace(
-      queryParameters: {
-        ...uri.queryParameters,
-        'v': '${_rng.nextInt(100)}',
-      },
+      queryParameters: {...uri.queryParameters, 'v': '${_rng.nextInt(100)}'},
     );
   }
 
@@ -302,12 +305,70 @@ class ApiService {
     bool showRes, {
     bool decode = true,
   }) {
+    dynamic result;
     switch (response.statusCode) {
       case 200:
       case 201:
-        return _processResponse(response, false, showRes, decode: decode);
+        result = _processResponse(response, false, showRes, decode: decode);
+        break;
       default:
-        return _processResponse(response, true, showRes, decode: decode);
+        result = _processResponse(response, true, showRes, decode: decode);
+        break;
+    }
+
+    if (_shouldForceReauthentication(response.statusCode, result)) {
+      final sessionMessage =
+          result is Map &&
+              (result['message']?.toString().trim().isNotEmpty ?? false)
+          ? result['message'].toString()
+          : 'Session expired. Please sign in again.';
+      unawaited(_clearSessionAndNavigateToLogin(message: sessionMessage));
+    }
+
+    return result;
+  }
+
+  bool _shouldForceReauthentication(int statusCode, dynamic payload) {
+    if (statusCode != 401 || payload is! Map) return false;
+
+    final data = Map<String, dynamic>.from(payload);
+    final tokenExpired = data['token_expired'] == true;
+    final requiresReauth = data['requires_reauthentication'] == true;
+    final errorCode = (data['error_code'] ?? '').toString().toUpperCase();
+    final message = (data['message'] ?? '').toString().toLowerCase();
+
+    return tokenExpired ||
+        requiresReauth ||
+        errorCode == 'UNAUTHENTICATED' ||
+        message.contains('unauthenticated');
+  }
+
+  Future<void> _clearSessionAndNavigateToLogin({
+    required String message,
+  }) async {
+    if (_isHandlingUnauthorized) return;
+    _isHandlingUnauthorized = true;
+
+    try {
+      showToast(message: message);
+
+      try {
+        await CallDeviceService.unregister();
+      } catch (_) {}
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      await DbService.clearAllData();
+
+      final nav = NavigationService.navigatorKey.currentState;
+      if (nav != null) {
+        nav.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      }
+    } finally {
+      _isHandlingUnauthorized = false;
     }
   }
 
@@ -339,4 +400,3 @@ class ApiService {
     return decode ? json.decode(response.body) : response;
   }
 }
-

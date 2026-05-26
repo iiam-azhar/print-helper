@@ -164,6 +164,10 @@ class DbService {
 
   static Future<void> deleteRemMe() async => await _deleteData(_remMeKeys);
 
+  static Future<void> clearAllData() async {
+    await _storage.deleteAll();
+  }
+
   //## Secure Storage Helpers ##
   static Future<void> _writeData(Map<String, String?> data) async {
     await Future.wait(

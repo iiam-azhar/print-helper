@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 // ignore: unused_import
 import 'package:permission_handler/permission_handler.dart';
@@ -20,6 +21,8 @@ void notificationTapBackground(NotificationResponse result) {
 class DownloadService {
   static final DownloadService instance = DownloadService._();
   DownloadService._();
+
+  static const _scannerChannel = MethodChannel('com.printhelper.print_helper/media_scanner');
 
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
   final Dio _dio = Dio();
@@ -85,6 +88,7 @@ class DownloadService {
   Future<void> downloadFile({
     required String url,
     required String fileName,
+    Map<String, dynamic>? headers,
   }) async {
     try {
       await init();
@@ -93,12 +97,28 @@ class DownloadService {
 
       Directory? dir;
       if (Platform.isAndroid) {
-        dir = Directory('/storage/emulated/0/Download');
-        if (!await dir.exists()) {
-          dir = await getExternalStorageDirectory();
+        dir = Directory('/storage/emulated/0/Download/Printhelper');
+        try {
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+        } catch (e) {
+          final extDir = await getExternalStorageDirectory();
+          if (extDir != null) {
+            dir = Directory('${extDir.path}/Printhelper');
+            if (!await dir.exists()) {
+              await dir.create(recursive: true);
+            }
+          }
         }
       } else {
-        dir = await getDownloadsDirectory();
+        final downloadsDir = await getDownloadsDirectory();
+        if (downloadsDir != null) {
+          dir = Directory('${downloadsDir.path}/Printhelper');
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+        }
       }
 
       if (dir == null) {
@@ -118,12 +138,13 @@ class DownloadService {
         url,
         savePath,
         cancelToken: cancelToken,
+        options: Options(headers: headers),
         onReceiveProgress: (received, total) {
           if (total != -1) {
             final progress = (received / total * 100).toInt();
             // Only update notification if progress has increased by at least 3%
             // to avoid bottlenecking the download with UI updates.
-            if (progress - lastReportedProgress >= 3 || progress == 100) {
+            if ((progress - lastReportedProgress >= 3 || progress == 100) && progress < 100) {
               lastReportedProgress = progress;
               _showProgressNotification(notificationId, fileName, progress);
             }
@@ -132,7 +153,18 @@ class DownloadService {
       );
 
       _cancelTokens.remove(notificationId);
+      await _notifications.cancel(notificationId);
       _showCompletedNotification(notificationId, fileName, savePath);
+
+      if (Platform.isAndroid) {
+        try {
+          await _scannerChannel.invokeMethod('scanFile', {'path': savePath});
+        } catch (e) {
+          debugPrint("Media scanner error: $e");
+        }
+      }
+
+      showToast(message: 'File downloaded to: $savePath');
     } on DioException catch (de) {
       final int notificationId = fileName.hashCode;
       if (de.type == DioExceptionType.cancel) {

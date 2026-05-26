@@ -3,8 +3,8 @@
 ## Project Overview
 Print Helper is a Flutter-based mobile application for managing print service operations with real-time chat, file management, and multi-role user workflows. The app supports role-based access (Admin, Client, Customer, Staff) and integrates real-time communication via Laravel Reverb/Pusher.
 
-**Base URL**: `https://production.printhelpers.com/api/`  
-**WebSocket**: `wss://production.printhelpers.com:443`
+**Base URL**: `https://staging.printhelpers.com/api/`  
+**WebSocket**: `wss://staging.printhelpers.com:443`
 
 ## Architecture
 

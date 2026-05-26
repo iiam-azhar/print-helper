@@ -381,13 +381,14 @@ class CallDeviceService {
         await prefs.setString("registered_device_id", deviceId);
 
         printData(
-          title: "CallDevice/register",
-          data: "Backend Registered Successfully. Saved local state.",
+          title: "CallDevice/register SUCCESS",
+          data: "FCM Token registered to backend for UserID: $userId. Token: ${fcmToken.substring(0, 10)}...",
         );
       } else {
+        final errorMsg = data is Map ? (data["message"] ?? data) : "Unknown response format";
         printData(
-          title: "CallDevice/register",
-          data: "Backend registration failed: $data",
+          title: "CallDevice/register FAILED",
+          data: "Backend registration failed: $errorMsg",
           e: true,
         );
       }

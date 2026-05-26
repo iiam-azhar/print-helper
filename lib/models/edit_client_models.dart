@@ -3,7 +3,9 @@ class EditClientModel {
   final String companyName;
   final String? image;
   final String? companyType;
+  final int? companyTypeId;
   final EditClientRank? clientRank;
+  final int? clientRankId;
   final String? brandingLogo;
   final String brandingPrimaryColor;
   final String brandingSecondaryColor;
@@ -28,7 +30,9 @@ class EditClientModel {
     required this.companyName,
     this.image,
     this.companyType,
+    this.companyTypeId,
     this.clientRank,
+    this.clientRankId,
     this.brandingLogo,
     required this.brandingPrimaryColor,
     required this.brandingSecondaryColor,
@@ -81,8 +85,18 @@ class EditClientModel {
       companyName: json['company_name'] ?? "",
       image: json['image'],
       companyType: companyTypeStr,
+      companyTypeId: rawCompanyType is Map
+          ? (rawCompanyType['id'] is int
+              ? rawCompanyType['id'] as int
+              : int.tryParse('${rawCompanyType['id'] ?? ''}'))
+          : (int.tryParse(companyTypeStr ?? '')),
       clientRank: json['client_rank'] != null
           ? EditClientRank.fromJson(json['client_rank'])
+          : null,
+      clientRankId: json['client_rank'] != null && json['client_rank'] is Map
+          ? (json['client_rank']['id'] is int
+              ? json['client_rank']['id'] as int
+              : int.tryParse('${json['client_rank']['id'] ?? ''}'))
           : null,
       brandingLogo: json['branding_logo'],
       brandingPrimaryColor: json['branding_primary_color'] ?? "#000000",

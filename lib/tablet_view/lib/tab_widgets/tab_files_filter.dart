@@ -22,7 +22,7 @@ class TabFilesFilter extends StatefulWidget {
       barrierLabel: 'FilesFilterPanel',
       barrierColor: Colors.black.withValues(alpha: 0.25),
       transitionDuration: const Duration(milliseconds: 300),
-      transitionBuilder: (_, anim, __, child) {
+      transitionBuilder: (_, anim, _, child) {
         return SlideTransition(
           position: Tween<Offset>(
             begin: const Offset(1, 0),
@@ -31,7 +31,7 @@ class TabFilesFilter extends StatefulWidget {
           child: child,
         );
       },
-      pageBuilder: (context, _, __) {
+      pageBuilder: (context, _, _) {
         return const Align(
           alignment: Alignment.centerRight,
           child: TabFilesFilter(),

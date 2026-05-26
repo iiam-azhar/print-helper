@@ -93,7 +93,12 @@ class ImageWidget extends StatelessWidget {
     }
   }
 
-  Icon _errorWidget() => Icon(Icons.error, size: 26);
+  Widget _errorWidget() => Image.asset(
+    'assets/images/user.png',
+    height: height,
+    width: width,
+    fit: fit ?? BoxFit.contain,
+  );
 
   Widget _showAssetImage() {
     if (image.endsWith('.svg')) {

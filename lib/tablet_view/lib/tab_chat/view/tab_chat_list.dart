@@ -283,7 +283,7 @@ class _ChatListState extends State<ChatList> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (chat.type == 'group') ...[
+                            if (chat.type == 'group' && chat.participants.isNotEmpty) ...[
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -791,6 +791,15 @@ class _ChatListState extends State<ChatList> {
               ),
             ),
           ),
+        );
+      },
+      transitionBuilder: (_, anim, _, child) {
+        return SlideTransition(
+          position: Tween(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+          child: child,
         );
       },
     );

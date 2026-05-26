@@ -60,6 +60,18 @@
 		<string>processing</string>
 	</array>
 
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>printhelper</string>
+			</array>
+		</dict>
+	</array>
+
 
     <key>LSApplicationQueriesSchemes</key>
     <array>

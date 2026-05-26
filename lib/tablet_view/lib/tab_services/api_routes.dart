@@ -3,7 +3,7 @@ class ApiRoutes {
   static final ApiRoutes _instance = ApiRoutes._internal();
   factory ApiRoutes() => _instance;
 
-  static const baseUrl = 'https://production.printhelpers.com/api/';
+  static const baseUrl = 'https://staging.printhelpers.com/api/';
 
   static const String login = 'auth/login';
   static const String logout = 'auth/logout';
@@ -18,6 +18,7 @@ class ApiRoutes {
   static const String settings = 'settings';
   static const String addAccount = 'accounts';
   static const String clients = 'clients';
+  static String clientInfoTabs(int id) => 'clients/$id/info-tabs';
   static const String customers = 'customers';
   static const String contacts = 'contacts';
   static const String switchUser = 'auth/switch-user';
@@ -28,7 +29,7 @@ class ApiRoutes {
   static const String twilioCredentials = 'twilio/credentials';
   static const String twilioSyncNumbers = 'twilio/sync-numbers';
 
-  static String serverIp = "production.printhelpers.com";
+  static String serverIp = "staging.printhelpers.com";
   static String socketHost = serverIp;
   static int socketPort = 443;
   static String appKey = "8xK9mP2nL5qR7vW4jH6tY3bF1sD0gX8e";

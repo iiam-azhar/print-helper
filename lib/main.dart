@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:print_helper/providers/admin_pro.dart';
 import 'package:print_helper/providers/cust_pro.dart';
+import 'package:print_helper/providers/email_pro.dart';
 import 'package:print_helper/providers/files_pro.dart';
 import 'package:print_helper/providers/project_pro.dart';
 import 'package:print_helper/providers/setting_pro.dart';
@@ -22,6 +23,7 @@ import 'admin/chat/provider/chat_pro.dart';
 import 'providers/client_pro.dart';
 import 'providers/lang_pro.dart';
 import 'providers/user_pro.dart';
+import 'providers/navigation_pro.dart';
 import 'root.dart';
 import 'utils/system_chromes.dart';
 
@@ -147,6 +149,8 @@ MultiProvider multiProviders() {
       ChangeNotifierProvider(create: (_) => ClientPro()),
       ChangeNotifierProvider(create: (_) => SettingsPro()),
       ChangeNotifierProvider(create: (_) => ChatPro()),
+      ChangeNotifierProvider(create: (_) => EmailPro()),
+      ChangeNotifierProvider(create: (_) => NavigationPro()),
     ],
     child: const MyApp(),
   );

@@ -57,6 +57,10 @@ class Paths {
   static const String speakerOff = 'assets/images/9.png';
   static const String micOn = 'assets/images/7.png';
   static const String micOff = 'assets/images/6.png';
+  static const String docx = 'assets/images/Docx.png';
+  static const String txt = 'assets/images/txt.png';
+  static const String zip = 'assets/images/Zip.png';
+  static const String pdf = 'assets/images/pdf.png';
 
   // urls
   static const String wtspShare = 'https://wa.me/';

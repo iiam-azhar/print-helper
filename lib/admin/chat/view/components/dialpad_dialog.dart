@@ -8,11 +8,15 @@ import '../../../../constants/colors.dart';
 class DialPadDialog extends StatefulWidget {
   final String fromNumber;
   final Function(String toNumber) onCall;
+  final bool isTextMode;
+  final Function(String toNumber)? onSendText;
 
   const DialPadDialog({
     super.key,
     required this.fromNumber,
     required this.onCall,
+    this.isTextMode = false,
+    this.onSendText,
   });
 
   @override
@@ -87,7 +91,7 @@ class _DialPadDialogState extends State<DialPadDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             TextWidget(
-              text: "Calling From",
+              text: widget.isTextMode ? "Text From" : "Calling From",
               fontSize: 12,
               color: Colors.grey,
               fontWeight: FontWeight.w500,
@@ -207,24 +211,38 @@ class _DialPadDialogState extends State<DialPadDialog> {
                   onTap: () {
                     if (_number.isNotEmpty) {
                       Navigator.pop(context);
-                      widget.onCall(_number);
+                      if (widget.isTextMode) {
+                        widget.onSendText?.call(_number);
+                      } else {
+                        widget.onCall(_number);
+                      }
                     }
                   },
                   child: Container(
                     height: 65.h,
                     width: 65.h,
                     decoration: BoxDecoration(
-                      color: Colors.green,
+                      color: widget.isTextMode
+                          ? const Color(0xFF1E8E3E)
+                          : Colors.green,
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.green.withValues(alpha: 0.3),
+                          color:
+                              (widget.isTextMode
+                                      ? const Color(0xFF1E8E3E)
+                                      : Colors.green)
+                                  .withValues(alpha: 0.3),
                           blurRadius: 10.r,
                           offset: Offset(0, 5.h),
                         ),
                       ],
                     ),
-                    child: Icon(Icons.call, color: Colors.white, size: 30.sp),
+                    child: Icon(
+                      widget.isTextMode ? Icons.send_rounded : Icons.call,
+                      color: Colors.white,
+                      size: 30.sp,
+                    ),
                   ),
                 ),
                 IconButton(

@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:print_helper/admin/client/edit_client.dart';
@@ -7,7 +9,6 @@ import 'package:print_helper/providers/client_pro.dart';
 import 'package:print_helper/providers/cust_pro.dart';
 import 'package:print_helper/services/helpers.dart';
 import 'package:print_helper/utils/formatter.dart';
-import 'package:print_helper/widgets/custom_button.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../models/customer_models.dart';
@@ -45,6 +46,8 @@ class CustomersScreen extends StatefulWidget {
 
 class _CustomersScreenState extends State<CustomersScreen> {
   final _scrollController = ScrollController();
+  final TextEditingController _searchCtrl = TextEditingController();
+  int _activeNetworkTab = 0;
 
   @override
   void initState() {
@@ -76,100 +79,79 @@ class _CustomersScreenState extends State<CustomersScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // print("widget.isFromAdmin ${widget.isFromAdmin}");
-    // print("widget.isFromStaff ${widget.isFromStaff}");
-    // print("widget.isFromClient ${widget.isFromClient}");
     return Scaffold(
+      backgroundColor: const Color(0xFFF3F4F7),
       appBar: _appBar(context),
-      body: Stack(
-        children: [
-          IgnorePointer(
-            ignoring: true,
-            child: SizedBox(
-              width: double.infinity,
-              height: double.infinity,
-              child: Image.asset(
-                Paths.chatbg,
-                fit: BoxFit.cover,
-                opacity: const AlwaysStoppedAnimation(.28),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Consumer<CustomerPro>(
-              builder: (context, provider, _) {
-                if (provider.customersLoad) {
-                  return Center(child: showLoader());
-                }
-                return ListView(
-                  controller: _scrollController,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.w,
-                    vertical: 12.h,
-                  ),
-                  children: [
-                    widget.isFromAdmin || widget.isFromStaff
-                        ? _header(provider)
-                        : SizedBox(),
-                    widget.isFromAdmin || widget.isFromStaff
-                        ? Spacers.sb12()
-                        : SizedBox(),
-                    provider.customers.isEmpty
-                        ? SizedBox()
-                        : CustomButton(
-                            title: "Contact Multiple Customers",
-                            stadium: false,
-                            height: 45,
-                            textColor: AppColors.black,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            buttonColor:
-                                (!widget.isFromAdmin &&
-                                    !widget.isFromStaff &&
-                                    provider.client?.brandingPrimaryColor !=
-                                        null)
-                                ? hexToColor(
-                                    provider.client!.brandingPrimaryColor,
-                                  )
-                                : AppColors.primary,
-                            borderRadius: 12,
-                            onTap: () {},
-                          ),
-                    provider.customers.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: EdgeInsets.only(top: 40.h),
-                              child: TextWidget(
-                                text: "No customers",
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.grey,
-                              ),
-                            ),
-                          )
-                        : Spacers.sb12(),
-                    ...provider.customers.map(
-                      (c) => _customerCard(c, provider),
+      body: SafeArea(
+        child: Consumer<CustomerPro>(
+          builder: (context, provider, _) {
+            if (provider.customersLoad) {
+              return Center(child: showLoader());
+            }
+
+            final clientName =
+                provider.client?.companyName.trim().isNotEmpty == true
+                ? provider.client!.companyName
+                : 'Client';
+
+            return SingleChildScrollView(
+              controller: _scrollController,
+              padding: EdgeInsets.fromLTRB(8.w, 12.h, 8.w, 14.h),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(20.r),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: .05),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
-                    if (provider.isLoadingMore)
-                      Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(12),
-                          child: showLoader(),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.fromLTRB(12.w, 12.h, 12.w, 10.h),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: const Color(0xFFE5E7EB),
+                            width: 1,
+                          ),
                         ),
                       ),
-                    Spacers.sb20(),
+                      child: Row(
+                        children: [
+                          _tabChip('Customers', 0),
+                          SizedBox(width: 10.w),
+                          _tabChip('Assigned Team', 1),
+                          SizedBox(width: 10.w),
+                          _tabChip('Internal Ops', 2),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(12.w, 12.h, 12.w, 12.h),
+                      child: _activeNetworkTab == 0
+                          ? _customersTab(provider, clientName)
+                          : _activeNetworkTab == 1
+                          ? _assignedTeamTab(provider, clientName)
+                          : _internalOpsTab(clientName),
+                    ),
                   ],
-                );
-              },
-            ),
-          ),
-        ],
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -349,124 +331,621 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   AppBar _appBar(BuildContext context) {
-    // final pro = getCustPro(context);
-    // final Color primaryColor = widget.isFromClient
-    //     ? hexToColor(pro.client!.brandingPrimaryColor)
-    //     : AppColors.primary;
-
     return AppBar(
-      backgroundColor: AppColors.white,
+      backgroundColor: Colors.white,
       elevation: 2,
-      surfaceTintColor: AppColors.white,
+      surfaceTintColor: Colors.white,
       automaticallyImplyLeading: false,
+      titleSpacing: 8.w,
       title: Consumer<CustomerPro>(
         builder: (context, prov, _) {
+          final clientName = prov.client?.companyName.trim().isNotEmpty == true
+              ? prov.client!.companyName
+              : 'Client';
           return Row(
             children: [
-              ImageWidget(image: Paths.customers, width: 28),
-              Spacers.sbw12(),
-              TextWidget(
-                text: "Customers (${prov.totalCustomers})",
-                fontWeight: FontWeight.w700,
-                fontSize: 17,
-                color: const Color(0xFF414345),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+                splashRadius: 18,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              SizedBox(width: 8.w),
+              ImageWidget(image: Paths.customers, width: 20),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: TextWidget(
+                  text: 'Clients/ $clientName',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  maxLines: 1,
+                ),
               ),
             ],
           );
         },
       ),
       actions: [
-        widget.isFromAdmin || widget.isFromStaff || widget.isFromClient
-            ? GestureDetector(
-                onTap: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    barrierColor: Colors.black.withValues(alpha: .25),
-                    builder: (_) => FractionallySizedBox(
-                      heightFactor: .98,
-                      child: AddCustomer(
-                        clientId: widget.id,
-                        isFromClient: widget.isFromClient,
-                      ),
-                    ),
-                  );
-                },
-                child: Consumer<CustomerPro>(
-                  builder: (context, pro, _) {
-                    if (widget.isFromClient && pro.client == null) {
-                      return addCustomerShimmer();
-                    }
-                    final Color primaryColor =
-                        widget.isFromClient && pro.client != null
-                        ? hexToColor(pro.client!.brandingPrimaryColor)
-                        : AppColors.primary;
+        OutlinedButton.icon(
+          onPressed: () => showToast(message: 'Deactivate coming soon'),
+          icon: const Icon(Icons.block, size: 15, color: Color(0xFFEF4444)),
+          label: const TextWidget(
+            text: 'Deactivate',
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFFEF4444),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: Color(0xFFEF4444)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14.r),
+            ),
+          ),
+        ),
+        SizedBox(width: 12.w),
+      ],
+    );
+  }
 
-                    return Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 18.w,
-                        vertical: 4.h,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10.r),
-                        border: Border.all(color: primaryColor, width: 1.5),
-                      ),
-                      child: TextWidget(
-                        text: "+ Customer",
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12,
-                        color: const Color(0xFF414345),
-                      ),
-                    );
-                  },
+  Widget _tabChip(String label, int index) {
+    final active = _activeNetworkTab == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _activeNetworkTab = index),
+        child: Container(
+          height: 36.h,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? Colors.white : const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(18.r),
+            border: Border.all(
+              color: active ? const Color(0xFFE5E7EB) : Colors.transparent,
+            ),
+          ),
+          child: TextWidget(
+            text: label,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF374151),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _customersTab(CustomerPro provider, String clientName) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextWidget(
+          text:
+              'End customers of $clientName. Admin can add, edit, and delete on behalf of the client.',
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: const Color(0xFF64748B),
+        ),
+        SizedBox(height: 10.h),
+        Align(
+          alignment: Alignment.centerRight,
+          child: _solidGreenButton(
+            label: '+ Customer',
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                barrierColor: Colors.black.withValues(alpha: .25),
+                builder: (_) => FractionallySizedBox(
+                  heightFactor: .98,
+                  child: AddCustomer(
+                    clientId: widget.id,
+                    isFromClient: widget.isFromClient,
+                  ),
                 ),
-              )
-            : SizedBox(),
-        Spacers.sbw10(),
-        Consumer<CustomerPro>(
-          builder: (context, pro, _) {
-            final count = pro.appliedFilterCount;
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IconButton(
-                  onPressed: () => _filterBottomSheet(context, pro),
-                  icon: ImageWidget(image: Paths.filter, width: 20),
-                ),
-                if (count > 0)
-                  Positioned(
-                    right: 6,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Colors.amber,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 18,
-                        minHeight: 18,
-                      ),
-                      child: Center(
-                        child: Text(
-                          count.toString(),
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+              );
+            },
+          ),
+        ),
+        SizedBox(height: 10.h),
+        TextField(
+          controller: _searchCtrl,
+          decoration: InputDecoration(
+            hintText: 'Search customers...',
+            prefixIcon: const Icon(Icons.search, color: Color(0xFF94A3B8)),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+            ),
+          ),
+        ),
+        SizedBox(height: 10.h),
+        Row(
+          children: [
+            Expanded(child: _fakeDropdown('All Types')),
+            SizedBox(width: 10.w),
+            Expanded(child: _fakeDropdown('All Status')),
+            SizedBox(width: 10.w),
+            Container(
+              width: 40.w,
+              height: 40.w,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFF3F4F6),
+                border: Border.all(color: const Color(0xFFD1D5DB)),
+              ),
+              child: const Icon(Icons.refresh, color: Color(0xFF6B7280)),
+            ),
+            SizedBox(width: 10.w),
+            Container(
+              width: 40.w,
+              height: 40.w,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFF3F4F6),
+                border: Border.all(color: const Color(0xFFD1D5DB)),
+              ),
+              child: TextWidget(
+                text: provider.totalCustomers.toString(),
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF374151),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 14.h),
+        if (provider.customers.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(vertical: 36.h),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14.r),
+              border: Border.all(color: const Color(0xFFD1D5DB)),
+            ),
+            child: const Center(
+              child: TextWidget(
+                text: 'No customers found.',
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF4B5563),
+              ),
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount:
+                provider.customers.length + (provider.isLoadingMore ? 1 : 0),
+            separatorBuilder: (_, __) => SizedBox(height: 12.h),
+            itemBuilder: (context, index) {
+              if (index == provider.customers.length) {
+                return Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12.h),
+                  child: Center(child: showLoader()),
+                );
+              }
+              return _customerCard(provider.customers[index], provider);
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _assignedTeamTab(CustomerPro provider, String clientName) {
+    final specialists = _assignedSpecialists(provider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _teamCard(
+          title: 'ASSIGNED SPECIALISTS',
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (specialists.isEmpty)
+                const TextWidget(
+                  text: 'No specialists assigned.',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF64748B),
+                )
+              else
+                ...specialists.map(
+                  (specialist) => Padding(
+                    padding: EdgeInsets.only(bottom: 12.h),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24.r,
+                          backgroundColor: const Color(0xFFE2E8F0),
+                          child: ClipOval(
+                            child: ImageWidget(
+                              image: specialist.image?.isNotEmpty == true
+                                  ? specialist.image!
+                                  : Paths.user,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
-                      ),
+                        SizedBox(width: 12.w),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              TextWidget(
+                                text:
+                                    '${specialist.name} ${specialist.lastName}'
+                                        .trim(),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              TextWidget(
+                                text: specialist.email,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          width: 40.w,
+                          height: 40.w,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(14.r),
+                          ),
+                          child: Center(
+                            child: ImageWidget(
+                              image: Paths.delete,
+                              width: 18,
+                              color: const Color(0xFFEF4444),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-              ],
-            );
-          },
+                ),
+              SizedBox(height: 14.h),
+              _outlineAction('+  Assign Specialist'),
+            ],
+          ),
+        ),
+        SizedBox(height: 12.h),
+        _teamCard(
+          title: 'SUPERVISOR',
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const TextWidget(
+                text: 'No supervisor assigned.',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF64748B),
+              ),
+              SizedBox(height: 12.h),
+              _outlineAction('+  Assign Supervisor'),
+            ],
+          ),
+        ),
+        SizedBox(height: 16.h),
+        const TextWidget(
+          text: 'PH PORTAL SUPPORT LINES',
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+        ),
+        SizedBox(height: 8.h),
+        Divider(color: const Color(0xFFD1D5DB), height: 1.h),
+        SizedBox(height: 10.h),
+        const TextWidget(
+          text: 'Lines assigned to this client. Managed in Settings.',
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF64748B),
         ),
       ],
     );
+  }
+
+  Widget _internalOpsTab(String clientName) {
+    final handle = clientName.toLowerCase().replaceAll(' ', '');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const TextWidget(
+          text:
+              'Main contact can manage all contacts. Additional contacts are view-only except their own settings.',
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF64748B),
+        ),
+        SizedBox(height: 10.h),
+        Align(
+          alignment: Alignment.centerRight,
+          child: _solidGreenButton(label: '+ Add Contact', onTap: () {}),
+        ),
+        SizedBox(height: 10.h),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(12.w),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16.r),
+            border: Border.all(color: const Color(0xFFEAB308)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24.r,
+                    backgroundColor: const Color(0xFFFACC15),
+                    child: const TextWidget(
+                      text: 'A',
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextWidget(
+                          text: '$clientName Solution',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        TextWidget(
+                          text: '@$handle',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10.w,
+                      vertical: 4.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const TextWidget(
+                      text: 'Main',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF92400E),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 10.h),
+              const Row(
+                children: [
+                  Icon(
+                    Icons.email_outlined,
+                    size: 16,
+                    color: Color(0xFF9CA3AF),
+                  ),
+                  SizedBox(width: 6),
+                  TextWidget(
+                    text: 'No email',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF9CA3AF),
+                  ),
+                ],
+              ),
+              SizedBox(height: 10.h),
+              Divider(color: const Color(0xFFE5E7EB), height: 1.h),
+              SizedBox(height: 10.h),
+              Wrap(
+                spacing: 8.w,
+                runSpacing: 8.h,
+                children: [
+                  _softAction('Edit', icon: Icons.edit_outlined),
+                  _softAction('Reset Password', icon: Icons.key_outlined),
+                  _solidGreenButton(
+                    label: 'Login',
+                    onTap: () {},
+                    compact: true,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 12.h),
+        Container(
+          width: double.infinity,
+          height: 200.h,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14.r),
+            border: Border.all(
+              color: const Color(0xFFD1D5DB),
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.person_add_alt_1,
+                  size: 28,
+                  color: Color(0xFF9CA3AF),
+                ),
+                SizedBox(height: 10),
+                TextWidget(
+                  text: 'Add Contact',
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF9CA3AF),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _fakeDropdown(String label) {
+    return Container(
+      height: 42.h,
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: 12.w),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: const Color(0xFFD1D5DB)),
+      ),
+      child: Row(
+        children: [
+          TextWidget(
+            text: label,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: const Color(0xFF111827),
+          ),
+          const Spacer(),
+          const Icon(Icons.keyboard_arrow_down, color: Color(0xFF6B7280)),
+        ],
+      ),
+    );
+  }
+
+  Widget _teamCard({required String title, required Widget body}) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(12.w),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(color: const Color(0xFFD1D5DB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextWidget(
+            text: title,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2,
+            color: const Color(0xFF64748B),
+          ),
+          SizedBox(height: 10.h),
+          Divider(color: const Color(0xFFD1D5DB), height: 1.h),
+          SizedBox(height: 10.h),
+          body,
+        ],
+      ),
+    );
+  }
+
+  Widget _outlineAction(String text) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 9.h),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(color: const Color(0xFFD1D5DB)),
+      ),
+      child: TextWidget(
+        text: text,
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: const Color(0xFF334155),
+      ),
+    );
+  }
+
+  Widget _solidGreenButton({
+    required String label,
+    required VoidCallback onTap,
+    bool compact = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 14.w : 16.w,
+          vertical: compact ? 9.h : 10.h,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFF22C55E),
+          borderRadius: BorderRadius.circular(10.r),
+        ),
+        child: TextWidget(
+          text: label,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _softAction(String label, {required IconData icon}) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 9.h),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(8.r),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF6B7280)),
+          SizedBox(width: 6.w),
+          TextWidget(
+            text: label,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF374151),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<AssignedSpecialistModel> _assignedSpecialists(CustomerPro provider) {
+    final specialists = <AssignedSpecialistModel>[];
+    final seenIds = <int>{};
+
+    for (final specialist in provider.client?.assignedSpecialists ?? const []) {
+      if (seenIds.add(specialist.id)) {
+        specialists.add(specialist);
+      }
+    }
+
+    for (final customer in provider.customers) {
+      for (final specialist in customer.assignedSpecialists) {
+        if (seenIds.add(specialist.id)) {
+          specialists.add(specialist);
+        }
+      }
+    }
+
+    return specialists;
   }
 
   void _filterBottomSheet(dynamic context, CustomerPro pro) {

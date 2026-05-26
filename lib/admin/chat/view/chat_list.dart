@@ -241,7 +241,7 @@ class _ChatListState extends State<ChatList> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  if (chat.type == 'group') ...[
+                                  if (chat.type == 'group' && chat.participants.isNotEmpty) ...[
                                     SizedBox(width: 8.w),
                                     Container(
                                       padding: EdgeInsets.symmetric(

@@ -48,9 +48,7 @@ class VoiceAudioManager {
     if (_disposed) {
       throw StateError('VoiceAudioManager has been disposed');
     }
-    if (_player == null) {
-      _player = AudioPlayer();
-    }
+    _player ??= AudioPlayer();
     return _player!;
   }
 

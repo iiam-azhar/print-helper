@@ -120,6 +120,7 @@ class CustomAlert extends StatelessWidget {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: AppColors.white,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 20.w),

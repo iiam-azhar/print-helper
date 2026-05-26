@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/files_pro.dart';
-import '../../../widgets/toasts.dart';
-import '../../../widgets/loaders.dart';
+import 'tab_toasts.dart';
+import 'loaders.dart';
 import '../../../constants/colors.dart';
 import '../tab_constants/paths.dart';
 import '../tab_widgets/tab_text_widget.dart';
@@ -425,11 +425,24 @@ class TabEmailShareSheet {
                                                           5,
                                                         ),
                                                     child: ImageWidget(
-                                                      image: (selectedReplyTo!['image'] != null && selectedReplyTo!['image'].toString().isNotEmpty) ? selectedReplyTo!['image'].toString() : Paths.user,
+                                                      image:
+                                                          (selectedReplyTo!['image'] !=
+                                                                  null &&
+                                                              selectedReplyTo!['image']
+                                                                  .toString()
+                                                                  .isNotEmpty)
+                                                          ? selectedReplyTo!['image']
+                                                                .toString()
+                                                          : Paths.user,
                                                       height: 24,
                                                       width: 24,
                                                       fit: BoxFit.cover,
-                                                      errorWidget: ImageWidget(image: Paths.user, height: 24, width: 24, fit: BoxFit.cover),
+                                                      errorWidget: ImageWidget(
+                                                        image: Paths.user,
+                                                        height: 24,
+                                                        width: 24,
+                                                        fit: BoxFit.cover,
+                                                      ),
                                                     ),
                                                   ),
                                                   SizedBox(width: 8),
@@ -527,7 +540,7 @@ class TabEmailShareSheet {
                                                   ),
                                                 ),
                                               );
-                                            }).toList(),
+                                            }),
                                           ],
                                         );
                                       },
@@ -659,11 +672,25 @@ class TabEmailShareSheet {
                                                             50,
                                                           ),
                                                       child: ImageWidget(
-                                                        image: (user['image'] != null && user['image'].toString().isNotEmpty) ? user['image'].toString() : Paths.user,
+                                                        image:
+                                                            (user['image'] !=
+                                                                    null &&
+                                                                user['image']
+                                                                    .toString()
+                                                                    .isNotEmpty)
+                                                            ? user['image']
+                                                                  .toString()
+                                                            : Paths.user,
                                                         height: 24,
                                                         width: 24,
                                                         fit: BoxFit.cover,
-                                                        errorWidget: ImageWidget(image: Paths.user, height: 24, width: 24, fit: BoxFit.cover),
+                                                        errorWidget:
+                                                            ImageWidget(
+                                                              image: Paths.user,
+                                                              height: 24,
+                                                              width: 24,
+                                                              fit: BoxFit.cover,
+                                                            ),
                                                       ),
                                                     ),
                                                     SizedBox(width: 10),
@@ -764,7 +791,7 @@ class TabEmailShareSheet {
                                                     ),
                                                   ),
                                                 );
-                                              }).toList(),
+                                              }),
                                               if (selectedSentToUsers.last !=
                                                   user)
                                                 const Divider(height: 1),
@@ -1082,8 +1109,7 @@ class TabEmailShareSheet {
                                             items: items,
                                           );
                                       Loaders.hide();
-
-                                      if (success) {
+                                      if (success && ctx.mounted) {
                                         Navigator.pop(ctx);
                                         showToast(
                                           message:

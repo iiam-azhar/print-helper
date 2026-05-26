@@ -118,21 +118,13 @@ class _TabEmailRecipientPickerState extends State<TabEmailRecipientPicker> {
 
   Widget _buildRoleBadge(int roleId) {
     String text = 'User';
-    Color bgColor = Colors.grey.shade200;
-    Color textColor = Colors.grey.shade800;
 
     if (roleId == 1) {
       text = 'Admin';
-      bgColor = Colors.black.withValues(alpha: 0.08);
-      textColor = Colors.black54;
     } else if (roleId == 4) {
       text = 'Contact';
-      bgColor = Colors.black.withValues(alpha: 0.08);
-      textColor = Colors.black54;
     } else if (roleId == 5) {
       text = 'Customer';
-      bgColor = Colors.black.withValues(alpha: 0.08);
-      textColor = Colors.black54;
     }
 
     return Container(
@@ -320,7 +312,7 @@ class _TabEmailRecipientPickerState extends State<TabEmailRecipientPicker> {
                               fontWeight: FontWeight.w500,
                             ),
                           );
-                        }).toList(),
+                        }),
                       ],
                       onChanged: (val) {
                         setState(() {

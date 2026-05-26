@@ -122,7 +122,7 @@ class UsPhoneTextFormatter extends TextInputFormatter {
     if (digits.isEmpty) return '';
 
     if (digits.length <= 3) {
-      return '(${digits}';
+      return '($digits';
     } else if (digits.length <= 6) {
       return '(${digits.substring(0, 3)}) ${digits.substring(3)}';
     } else {
@@ -184,27 +184,15 @@ class InternationalPhoneFormatter extends TextInputFormatter {
 
     // Add country code (1-3 digits) in brackets
     if (digits.length <= 3) {
-      formatted += '(' + digits;
+      formatted += '($digits';
     } else if (digits.length <= 5) {
-      formatted += '(' + digits.substring(0, 3) + ') (' + digits.substring(3);
+      formatted += '(${digits.substring(0, 3)}) (${digits.substring(3)}';
     } else if (digits.length <= 8) {
       formatted +=
-          '(' +
-          digits.substring(0, 3) +
-          ') (' +
-          digits.substring(3, 5) +
-          ') ' +
-          digits.substring(5);
+          '(${digits.substring(0, 3)}) (${digits.substring(3, 5)}) ${digits.substring(5)}';
     } else {
       formatted +=
-          '(' +
-          digits.substring(0, 3) +
-          ') (' +
-          digits.substring(3, 5) +
-          ') ' +
-          digits.substring(5, 8) +
-          '-' +
-          digits.substring(8);
+          '(${digits.substring(0, 3)}) (${digits.substring(3, 5)}) ${digits.substring(5, 8)}-${digits.substring(8)}';
     }
 
     return TextEditingValue(

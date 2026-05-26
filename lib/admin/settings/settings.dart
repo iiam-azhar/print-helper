@@ -10,8 +10,10 @@ import '../../widgets/spacers.dart';
 import '../../widgets/loaders.dart';
 import '../../constants/colors.dart';
 import '../../constants/paths.dart';
+import 'contracts_settings.dart';
 import 'file_settings.dart';
 import 'twilio_settings.dart';
+import 'services_pricing_settings.dart';
 import '../../utils/console_util.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -95,13 +97,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           }
 
           if (_activeTab == 0) {
-            // Accounts Tab
-            filteredSections = pro.sections.where((s) {
-              final title = s.title.toLowerCase();
-              return title.contains("account") ||
-                  title.contains("client company") ||
-                  title.contains("customer company");
-            }).toList();
+            // Accounts Tab: show all sections, matching web/tablet behavior.
+            filteredSections = List<SettingsSection>.from(pro.sections);
           }
           printData(
             title: "Filtered Sections for Tab $_activeTab:",
@@ -124,6 +121,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? const TwilioCredentials()
                         : _activeTab == 2
                         ? const FileSettingsMobile()
+                        : _activeTab == 3
+                        ? const ContractsSettingsMobile()
+                        : _activeTab == 4
+                        ? const ServicesPricingSettingsMobile()
                         : ListView.builder(
                             padding: EdgeInsets.only(
                               left: 12.w,
@@ -160,6 +161,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tabItem("Twilio", index: 1),
             Spacers.sbw10(),
             _tabItem("File", index: 2),
+            Spacers.sbw10(),
+            _tabItem("Contracts", index: 3),
+            Spacers.sbw10(),
+            _tabItem("Services & Pricing", index: 4),
           ],
         ),
       ),
@@ -283,44 +288,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (section.expanded)
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Spacers.sbw10(),
-                      Expanded(
-                        flex: 5,
-                        child: TextWidget(
-                          text: "Item Name",
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
+              child: pro.isSectionLoading(section.id)
+                  ? Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16.h),
+                      child: const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                      Spacers.sbw10(),
-                      Expanded(
-                        flex: 3,
-                        child: TextWidget(
-                          text: "Date Added",
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                    )
+                  : Column(
+                      children: [
+                        Row(
+                          children: [
+                            Spacers.sbw10(),
+                            Expanded(
+                              flex: 5,
+                              child: TextWidget(
+                                text: "Item Name",
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Spacers.sbw10(),
+                            Expanded(
+                              flex: 3,
+                              child: TextWidget(
+                                text: "Date Added",
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Spacer(flex: 1),
+                          ],
                         ),
-                      ),
-                      Spacer(flex: 1),
-                    ],
-                  ),
-                  Spacers.sb10(),
-                  Column(
-                    children: [
-                      for (final item in section.items)
-                        _buildItemRow(
-                          section,
-                          item,
-                          Provider.of<SettingsPro>(context, listen: false),
+                        Spacers.sb10(),
+                        Column(
+                          children: [
+                            for (final item in section.items)
+                              _buildItemRow(
+                                section,
+                                item,
+                                Provider.of<SettingsPro>(
+                                  context,
+                                  listen: false,
+                                ),
+                              ),
+                          ],
                         ),
-                    ],
-                  ),
-                ],
-              ),
+                      ],
+                    ),
             ),
         ],
       ),

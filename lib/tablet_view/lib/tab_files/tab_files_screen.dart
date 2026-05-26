@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:print_helper/tablet_view/lib/tab_widgets/loaders.dart';
 import 'package:provider/provider.dart';
@@ -14,7 +13,7 @@ import '../../../models/filefolder_models.dart';
 import '../../../providers/files_pro.dart';
 import '../../../services/api_routes.dart';
 import '../tab_widgets/tab_image_widget.dart';
-import '../../../widgets/toasts.dart';
+import '../tab_widgets/tab_toasts.dart';
 import '../tab_services/helpers.dart';
 import '../tab_widgets/tab_share_popup.dart';
 import '../tab_widgets/tab_share_chat_popup.dart';
@@ -97,11 +96,7 @@ class _TabFilesScreenState extends State<TabFilesScreen> {
       iconPath = Paths.txt;
     }
     if (iconPath != null) {
-      return Image.asset(
-        iconPath,
-        height: height * 0.75,
-        fit: BoxFit.contain,
-      );
+      return Image.asset(iconPath, height: height * 0.75, fit: BoxFit.contain);
     }
     return Icon(
       Icons.insert_drive_file_rounded,

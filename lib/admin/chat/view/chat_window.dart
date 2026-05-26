@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -13,6 +14,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:print_helper/admin/chat/view/chat_profile.dart';
 import 'package:print_helper/admin/chat/view/groupchat/edit_group.dart';
 import 'package:print_helper/providers/auth_pro.dart';
+import 'package:print_helper/providers/project_pro.dart';
 import 'package:print_helper/screens/call_screen.dart' as cs;
 import 'package:print_helper/services/helpers.dart';
 import 'package:print_helper/services/api_routes.dart';
@@ -39,6 +41,8 @@ import 'components/voice_mesg_bubble.dart';
 import 'components/video_mesg_bubble.dart';
 import 'components/dialpad_dialog.dart';
 import 'components/cloud_files_picker_sheet.dart';
+import 'components/project_chat_pebble.dart';
+import 'components/reminder_mesg_bubble.dart';
 
 enum _DuplicateAttachmentAction { reshare, rename, cancel }
 
@@ -74,11 +78,56 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isSearchMode = false;
   Timer? _searchDebounce;
   bool _isChatDisabled = false; // True when peer is deleted
+
+  /// Returns true if the other participant in this private chat is Admin or Staff.
+  bool _isPeerAdminOrStaff(ChatPro chatPro) {
+    // Check from conversation participants list
+    if (widget.conversationId != null && widget.conversationId! > 0) {
+      final convo = chatPro.conversations.firstWhere(
+        (c) => c.id == widget.conversationId,
+        orElse: () => ChatConversation(
+          id: -1, type: 'private', title: '', participants: [],
+          image: '', unreadCount: 0, updatedAt: DateTime.now(), isDefault: true,
+        ),
+      );
+      if (convo.id != -1 && convo.type == 'private' && convo.participants.isNotEmpty) {
+        final peer = convo.participants.firstWhere(
+          (p) => p.id == widget.receiverUserId,
+          orElse: () => ChatParticipant(
+            name: '', username: '', lastName: '', isOnline: false, phoneNumbers: [],
+          ),
+        );
+        final pRole = (peer.accountTypeName ?? '').toLowerCase();
+        return pRole == 'admin' || pRole == 'staff';
+      }
+    }
+    // Fallback: check fetched user profile (role: 1=admin, 2=staff)
+    if (chatPro.userProfile != null && chatPro.userProfile!.id == widget.receiverUserId) {
+      return chatPro.userProfile!.role == 1 || chatPro.userProfile!.role == 2;
+    }
+    return false;
+  }
+
+  /// Returns true if the current conversation is an external-number group
+  /// (a system-created group for SMS / external phone numbers with 0 members).
+  bool _isExternalNumberGroup(ChatPro chatPro) {
+    if (widget.conversationId == null || widget.conversationId! <= 0) return false;
+    final convo = chatPro.conversations.firstWhere(
+      (c) => c.id == widget.conversationId,
+      orElse: () => ChatConversation(
+        id: -1, type: 'private', title: '', participants: [],
+        image: '', unreadCount: 0, updatedAt: DateTime.now(), isDefault: true,
+      ),
+    );
+    return convo.id != -1 && convo.type == 'group' && convo.participants.isEmpty;
+  }
   bool _pendingDuplicateChecked = false;
   int? _pendingDuplicateConversationId;
   ChatDuplicateFileCheckResult? _pendingDuplicateResult;
   OverlayEntry? _groupOverlay;
   String selectedSmsNumber = "(323) 000-0000";
+  String _smsFromNumber = "";
+  String _smsToNumber = "";
   final _scrollCtrl = ScrollController();
   static const double _inputAreaHeight = 20;
   late ChatPro _chatPro;
@@ -293,6 +342,35 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  void _showTextDialPad(String fromNumber) {
+    showDialog(
+      context: context,
+      builder: (context) => DialPadDialog(
+        fromNumber: fromNumber,
+        isTextMode: true,
+        onCall: (_) {},
+        onSendText: (toNumber) async {
+          final pro = getChatPro(context, listen: false);
+          final result = await pro.createTwilioTextTarget(
+            toNumber: toNumber,
+            fromNumber: fromNumber,
+          );
+
+          if (result == null || !mounted) return;
+
+          setState(() {
+            isSmsSelected = true;
+            selectedSmsNumber = _formatPhone(fromNumber);
+            _smsFromNumber = _sanitizeSmsNumber(fromNumber);
+            _smsToNumber = _sanitizeSmsNumber(toNumber);
+          });
+          _focusNode.requestFocus();
+          showToast(message: "Text mode enabled for ${_formatPhone(toNumber)}");
+        },
+      ),
+    );
+  }
+
   Future<CallPopupData?> _buildNewCallPopupData() async {
     final pro = getChatPro(context);
 
@@ -355,7 +433,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _showCallFromSheet() {
     String? selectedFromNumber;
+    bool isTextMode = false;
     final media = MediaQuery.of(context);
+    final isCompact = media.size.width < 700;
     final rect = RelativeRect.fromLTRB(
       0,
       kToolbarHeight + media.padding.top + 8.h,
@@ -370,6 +450,266 @@ class _ChatScreenState extends State<ChatScreen> {
             listen: false,
           ).fetchCallPopupData(widget.conversationId!)
         : _buildNewCallPopupData();
+
+    Widget buildPopupContent(StateSetter setStateSheet) {
+      return Container(
+        padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 16.h),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16.r),
+        ),
+        child: FutureBuilder<CallPopupData?>(
+          future: popupDataFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return SizedBox(
+                height: 200.h,
+                child: Center(child: showLoader()),
+              );
+            }
+            final popupData = snapshot.data;
+            if (popupData == null) {
+              return Padding(
+                padding: EdgeInsets.symmetric(vertical: 24.h),
+                child: const Center(
+                  child: TextWidget(
+                    text: "Failed to load call data.",
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                  ),
+                ),
+              );
+            }
+
+            final fromNumbers = popupData.callFromNumbers;
+            final targets = popupData.targets;
+
+            if (selectedFromNumber == null && fromNumbers.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (selectedFromNumber == null) {
+                  setStateSheet(
+                    () => selectedFromNumber = fromNumbers.first.number,
+                  );
+                }
+              });
+            }
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    ImageWidget(
+                      image: isTextMode ? Paths.chat : Paths.call,
+                      width: 18,
+                    ),
+                    Spacers.sbw8(),
+                    TextWidget(
+                      text: isTextMode ? "Send Text" : "Start Call",
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () {
+                        if (selectedFromNumber == null) {
+                          showToast(
+                            message: "Select a 'Call From' number first",
+                          );
+                          return;
+                        }
+                        Navigator.pop(context);
+                        if (isTextMode) {
+                          _showTextDialPad(selectedFromNumber!);
+                        } else {
+                          _showDialPad(selectedFromNumber!);
+                        }
+                      },
+                      icon: Icon(
+                        Icons.dialpad,
+                        size: 20,
+                        color: isTextMode
+                            ? const Color(0xFF1E8E3E)
+                            : Colors.blue,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, size: 20),
+                    ),
+                  ],
+                ),
+                Spacers.sb8(),
+                Container(
+                  padding: EdgeInsets.all(3.w),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4F4F4),
+                    borderRadius: BorderRadius.circular(10.r),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setStateSheet(() => isTextMode = false),
+                          child: Container(
+                            height: 38.h,
+                            decoration: BoxDecoration(
+                              color: isTextMode
+                                  ? Colors.white
+                                  : AppColors.primary,
+                              borderRadius: BorderRadius.circular(8.r),
+                            ),
+                            alignment: Alignment.center,
+                            child: TextWidget(
+                              text: "Call",
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isTextMode ? Colors.black87 : Colors.black,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Spacers.sbw8(),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setStateSheet(() => isTextMode = true),
+                          child: Container(
+                            height: 38.h,
+                            decoration: BoxDecoration(
+                              color: isTextMode
+                                  ? AppColors.primary
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(8.r),
+                            ),
+                            alignment: Alignment.center,
+                            child: TextWidget(
+                              text: "Text",
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Spacers.sb12(),
+                TextWidget(
+                  text: isTextMode ? "Text From" : "Call From",
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                Spacers.sb8(),
+                if (fromNumbers.isEmpty)
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: 18.h),
+                    child: const Center(
+                      child: TextWidget(
+                        text: "No Twilio numbers are assigned to you.",
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                      ),
+                    ),
+                  )
+                else
+                  _buildFromDropdown(
+                    fromNumbers,
+                    selectedFromNumber,
+                    (val) => setStateSheet(() => selectedFromNumber = val),
+                  ),
+                if (fromNumbers.isNotEmpty) ...[
+                  Spacers.sb12(),
+                  TextWidget(
+                    text: isTextMode
+                        ? "Select a number to text"
+                        : "Select a number to call",
+                    color: Colors.grey,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  Spacers.sb8(),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: isCompact ? 360.h : 300.h,
+                    ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: targets.map((target) {
+                          return _buildTargetSection(
+                            target: target,
+                            isGroup: popupData.type == 'group',
+                            selectedFromNumber: selectedFromNumber,
+                            isTextMode: isTextMode,
+                            onCallPressed: (toNumber, isInternal, targetUserId) {
+                              if (selectedFromNumber == null ||
+                                  selectedFromNumber!.isEmpty) {
+                                showToast(message: "Select a call from number");
+                                return;
+                              }
+                              Navigator.pop(context);
+                              printData(
+                                title:
+                                    "Call from: $selectedFromNumber | Call to: $toNumber",
+                                data:
+                                    "Internal: $isInternal | Target: $targetUserId",
+                              );
+                              _placeVoiceCall(
+                                fromNumber: selectedFromNumber,
+                                toNumber: toNumber,
+                                isInternal: isInternal,
+                                targetUserId: targetUserId,
+                              );
+                            },
+                            onTextPressed: (toNumber, fromNumber, _) async {
+                              if (selectedFromNumber == null ||
+                                  selectedFromNumber!.isEmpty) {
+                                showToast(message: "Select a text from number");
+                                return;
+                              }
+
+                              final pro = getChatPro(context, listen: false);
+                              final result = await pro.createTwilioTextTarget(
+                                toNumber: toNumber,
+                                fromNumber: selectedFromNumber!,
+                              );
+
+                              if (result == null) return;
+
+                              Navigator.pop(context);
+                              if (mounted) {
+                                setState(() {
+                                  isSmsSelected = true;
+                                  selectedSmsNumber = _formatPhone(
+                                    selectedFromNumber!,
+                                  );
+                                  _smsFromNumber = _sanitizeSmsNumber(
+                                    selectedFromNumber!,
+                                  );
+                                  _smsToNumber = _sanitizeSmsNumber(toNumber);
+                                });
+                              }
+                              _focusNode.requestFocus();
+                              showToast(
+                                message:
+                                    "Text mode enabled for ${_formatPhone(toNumber)}",
+                              );
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      );
+    }
 
     showMenu<void>(
       context: context,
@@ -389,171 +729,7 @@ class _ChatScreenState extends State<ChatScreen> {
           padding: EdgeInsets.zero,
           child: StatefulBuilder(
             builder: (ctx, setStateSheet) {
-              return Container(
-                padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 16.h),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16.r),
-                ),
-                child: FutureBuilder<CallPopupData?>(
-                  future: popupDataFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return SizedBox(
-                        height: 200.h,
-                        child: Center(child: showLoader()),
-                      );
-                    }
-                    final popupData = snapshot.data;
-                    if (popupData == null) {
-                      return Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24.h),
-                        child: const Center(
-                          child: TextWidget(
-                            text: "Failed to load call data.",
-                            color: Colors.grey,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                          ),
-                        ),
-                      );
-                    }
-
-                    final fromNumbers = popupData.callFromNumbers;
-                    final targets = popupData.targets;
-
-                    // Auto-select the first "from" number
-                    if (selectedFromNumber == null && fromNumbers.isNotEmpty) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (selectedFromNumber == null) {
-                          setStateSheet(
-                            () => selectedFromNumber = fromNumbers.first.number,
-                          );
-                        }
-                      });
-                    }
-
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // ── Header ──
-                        Row(
-                          children: [
-                            ImageWidget(image: Paths.call, width: 18),
-                            Spacers.sbw8(),
-                            const TextWidget(
-                              text: "Start Call",
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              onPressed: () {
-                                if (selectedFromNumber == null) {
-                                  showToast(
-                                    message:
-                                        "Select a 'Call From' number first",
-                                  );
-                                  return;
-                                }
-                                Navigator.pop(context);
-                                _showDialPad(selectedFromNumber!);
-                              },
-                              icon: const Icon(
-                                Icons.dialpad,
-                                size: 20,
-                                color: Colors.blue,
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close, size: 20),
-                            ),
-                          ],
-                        ),
-
-                        // ── Call From Dropdown ──
-                        Spacers.sb5(),
-                        const TextWidget(
-                          text: "Call From",
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        Spacers.sb8(),
-                        if (fromNumbers.isEmpty)
-                          Padding(
-                            padding: EdgeInsets.symmetric(vertical: 18.h),
-                            child: const Center(
-                              child: TextWidget(
-                                text: "No Twilio numbers are assigned to you.",
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 12,
-                              ),
-                            ),
-                          )
-                        else
-                          _buildFromDropdown(
-                            fromNumbers,
-                            selectedFromNumber,
-                            (val) =>
-                                setStateSheet(() => selectedFromNumber = val),
-                          ),
-                        if (fromNumbers.isNotEmpty) ...[
-                          Spacers.sb12(),
-                          const TextWidget(
-                            text: "Select a number to call",
-                            color: Colors.grey,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          Spacers.sb8(),
-                          // ── Target Numbers (scrollable) ──
-                          ConstrainedBox(
-                            constraints: BoxConstraints(maxHeight: 300.h),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                children: targets.map((target) {
-                                  return _buildTargetSection(
-                                    target: target,
-                                    isGroup: popupData.type == 'group',
-                                    selectedFromNumber: selectedFromNumber,
-                                    onCallPressed:
-                                        (toNumber, isInternal, targetUserId) {
-                                          if (selectedFromNumber == null ||
-                                              selectedFromNumber!.isEmpty) {
-                                            showToast(
-                                              message:
-                                                  "Select a call from number",
-                                            );
-                                            return;
-                                          }
-                                          Navigator.pop(context);
-                                          printData(
-                                            title:
-                                                "Call from: $selectedFromNumber | Call to: $toNumber",
-                                            data:
-                                                "Internal: $isInternal | Target: $targetUserId",
-                                          );
-                                          _placeVoiceCall(
-                                            fromNumber: selectedFromNumber,
-                                            toNumber: toNumber,
-                                            isInternal: isInternal,
-                                            targetUserId: targetUserId,
-                                          );
-                                        },
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
-                ),
-              );
+              return buildPopupContent(setStateSheet);
             },
           ),
         ),
@@ -637,9 +813,30 @@ class _ChatScreenState extends State<ChatScreen> {
     required CallTarget target,
     required bool isGroup,
     required String? selectedFromNumber,
+    required bool isTextMode,
     required void Function(String toNumber, bool isInternal, int targetUserId)
     onCallPressed,
+    required void Function(String toNumber, bool isInternal, int targetUserId)
+    onTextPressed,
   }) {
+    String normalizeNumber(String value) {
+      final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+      if (digits.length == 11 && digits.startsWith('1')) {
+        return digits.substring(1);
+      }
+      return digits;
+    }
+
+    final normalizedFrom =
+        (selectedFromNumber == null || selectedFromNumber.isEmpty)
+        ? ''
+        : normalizeNumber(selectedFromNumber);
+
+    final visibleNumbers = target.numbers.where((item) {
+      if (!item.isTwilio || normalizedFrom.isEmpty) return true;
+      return normalizeNumber(item.number) != normalizedFrom;
+    }).toList();
+
     return Padding(
       padding: EdgeInsets.only(bottom: 10.h),
       child: Row(
@@ -674,7 +871,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: target.numbers.isEmpty
+              children: visibleNumbers.isEmpty
                   ? [
                       TextWidget(
                         text: "No numbers",
@@ -683,15 +880,29 @@ class _ChatScreenState extends State<ChatScreen> {
                         fontWeight: FontWeight.w400,
                       ),
                     ]
-                  : target.numbers.map<Widget>((item) {
+                  : visibleNumbers.map<Widget>((item) {
+                      final isTextSupported = item.number.trim().isNotEmpty;
+                      final shouldDisable = isTextMode && !isTextSupported;
                       return Padding(
                         padding: EdgeInsets.only(bottom: 4.h),
                         child: GestureDetector(
-                          onTap: () => onCallPressed(
-                            item.number,
-                            item.isTwilio,
-                            target.user.id,
-                          ),
+                          onTap: shouldDisable
+                              ? null
+                              : () {
+                                  if (isTextMode) {
+                                    onTextPressed(
+                                      item.number,
+                                      item.isTwilio,
+                                      target.user.id,
+                                    );
+                                  } else {
+                                    onCallPressed(
+                                      item.number,
+                                      item.isTwilio,
+                                      target.user.id,
+                                    );
+                                  }
+                                },
                           child: Container(
                             width: 200,
                             padding: EdgeInsets.symmetric(
@@ -699,13 +910,27 @@ class _ChatScreenState extends State<ChatScreen> {
                               vertical: 6.h,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.primary,
+                              color: shouldDisable
+                                  ? const Color(0xFFEDEDED)
+                                  : AppColors.primary,
                               borderRadius: BorderRadius.circular(10.r),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (item.isTwilio)
+                                if (shouldDisable)
+                                  const Icon(
+                                    Icons.block,
+                                    size: 18,
+                                    color: Color(0xFF9E9E9E),
+                                  )
+                                else if (isTextMode)
+                                  const Icon(
+                                    Icons.send_rounded,
+                                    size: 18,
+                                    color: Colors.black,
+                                  )
+                                else if (item.isTwilio)
                                   _numberLogo(item.logo)
                                 else
                                   ImageWidget(
@@ -722,6 +947,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                   text: _formatPhone(item.number),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
+                                  color: shouldDisable
+                                      ? const Color(0xFF8C8C8C)
+                                      : Colors.black,
                                 ),
                               ],
                             ),
@@ -747,6 +975,13 @@ class _ChatScreenState extends State<ChatScreen> {
       return '(${local.substring(0, 3)}) ${local.substring(3, 6)}-${local.substring(6)}';
     }
     return number; // Return as-is if not a standard US number
+  }
+
+  String _sanitizeSmsNumber(String input) {
+    final trimmed = input.trim();
+    final digits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return trimmed;
+    return trimmed.startsWith('+') ? '+$digits' : digits;
   }
 
   /// Circular logo widget for a number
@@ -1142,6 +1377,68 @@ class _ChatScreenState extends State<ChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (_editingMessage != null) _editingBanner(),
+                  if (isSmsSelected &&
+                      _smsFromNumber.isNotEmpty &&
+                      _smsToNumber.isNotEmpty) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF4F0E4),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFD3B77A)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.sms_outlined,
+                            size: 14,
+                            color: Color(0xFF6B3B00),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextWidget(
+                              text:
+                                  "Twilio SMS mode • From $_smsFromNumber • To $_smsToNumber",
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF6B3B00),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                isSmsSelected = false;
+                                _smsFromNumber = "";
+                                _smsToNumber = "";
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF4DC),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFD3B77A),
+                                ),
+                              ),
+                              child: const TextWidget(
+                                text: "Back to App Chat",
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF6B3B00),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   TextField(
                     controller: _messageCtrl,
                     focusNode: _focusNode,
@@ -1161,7 +1458,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     },
                     decoration: InputDecoration(
                       hintText: isSmsSelected
-                          ? "Type your SMS… (Carrier charges may apply)"
+                          ? "Type your SMS... (Carrier charges may apply)"
                           : "Type your Message",
                       hintStyle: const TextStyle(
                         fontSize: 13,
@@ -1277,46 +1574,48 @@ class _ChatScreenState extends State<ChatScreen> {
             onTap: _onAddAttachmentPressed,
           ),
         Spacers.sbw12(),
-        GestureDetector(
-          key: const ValueKey('mic_btn'),
-          onTap: () {
-            if (_isChatDisabled) return;
-            if (widget.conversationId == null) return;
+        if (!isSmsSelected) ...[
+          GestureDetector(
+            key: const ValueKey('mic_btn'),
+            onTap: () {
+              if (_isChatDisabled) return;
+              if (widget.conversationId == null) return;
 
-            final pro = context.read<ChatPro>();
-            final auth = context.read<AuthPro>();
+              final pro = context.read<ChatPro>();
+              final auth = context.read<AuthPro>();
 
-            if (isRecording) {
-              // If it's already recording, tapping the mic again will send it
-              if (_recordDuration.inSeconds < 1) {
-                showToast(message: "Message too short");
-                pro.cancelRecording();
-              } else if (auth.user != null) {
-                pro.stopRecordingAndSend(
-                  conversationId: widget.conversationId!,
-                  currentUserId: auth.user!.id,
-                );
+              if (isRecording) {
+                // If it's already recording, tapping the mic again will send it
+                if (_recordDuration.inSeconds < 1) {
+                  showToast(message: "Message too short");
+                  pro.cancelRecording();
+                } else if (auth.user != null) {
+                  pro.stopRecordingAndSend(
+                    conversationId: widget.conversationId!,
+                    currentUserId: auth.user!.id,
+                  );
+                } else {
+                  pro.cancelRecording();
+                }
+                _stopRecordTimer();
               } else {
-                pro.cancelRecording();
+                // If not recording, tapping the mic starts it
+                pro.startVoiceRecording();
+                _startRecordTimer();
               }
-              _stopRecordTimer();
-            } else {
-              // If not recording, tapping the mic starts it
-              pro.startVoiceRecording();
-              _startRecordTimer();
-            }
-          },
-          child: AnimatedScale(
-            scale: isRecording ? 1.2 : 1.0,
-            duration: const Duration(milliseconds: 200),
-            child: Icon(
-              isRecording ? Icons.mic : Icons.mic_none,
-              color: isRecording ? Colors.red : Colors.black,
-              size: 24, // Original size
+            },
+            child: AnimatedScale(
+              scale: isRecording ? 1.2 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                isRecording ? Icons.mic : Icons.mic_none,
+                color: isRecording ? Colors.red : Colors.black,
+                size: 24, // Original size
+              ),
             ),
           ),
-        ),
-        Spacers.sbw12(),
+          Spacers.sbw12(),
+        ],
         if (isRecording)
           Expanded(
             child: Row(
@@ -1391,20 +1690,34 @@ class _ChatScreenState extends State<ChatScreen> {
             },
           ),
           Spacers.sbw12(),
-          Container(
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xffFFC107), width: 1.5),
-            ),
-            child: const Text(
-              "+ Project",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const Spacer(),
+          if (!isSmsSelected) ...[
+            if (!_isPeerAdminOrStaff(context.watch<ChatPro>()) &&
+                !_isExternalNumberGroup(context.watch<ChatPro>()))
+              GestureDetector(
+                onTap: _showCreateProjectPopup,
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xffFFC107),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Text(
+                    "+ Project",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            const Spacer(),
+          ] else
+            const Spacer(),
           GestureDetector(
             onTap: () {
               if (_editingMessage != null) {
@@ -1441,6 +1754,717 @@ class _ChatScreenState extends State<ChatScreen> {
       newMessage: newText,
     );
     _cancelEditing();
+  }
+
+  Future<void> _showCreateProjectPopup() async {
+    final projectPro = context.read<ProjectPro>();
+    if (!mounted) return;
+
+    final nameController = TextEditingController();
+    int? selectedTemplateId;
+    int? selectedClientId;
+    String? autoAssignedClientLabel;
+    String? autoAssignedClientImage;
+    int? selectedCustomerId;
+    final excludedStaffIds = <int>[];
+    var isSaving = false;
+    var isLoading = true;
+
+    String? selectedLabelFrom(
+      List<Map<String, String>> options,
+      int? selectedId,
+    ) {
+      if (selectedId == null) return null;
+      for (final item in options) {
+        if (int.tryParse((item['id'] ?? '').trim()) == selectedId) {
+          return item['label'];
+        }
+      }
+      return null;
+    }
+
+    String? selectedTemplateLabel() {
+      if (selectedTemplateId == null) return null;
+      for (final item in projectPro.projectBlueprints) {
+        if (item.id == selectedTemplateId) {
+          return item.name;
+        }
+      }
+      return null;
+    }
+
+    Map<String, String>? selectedClientOption(
+      List<Map<String, String>> clients,
+    ) {
+      if (selectedClientId == null) return null;
+      for (final item in clients) {
+        if (int.tryParse((item['id'] ?? '').trim()) == selectedClientId) {
+          return item;
+        }
+      }
+      return null;
+    }
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          // Trigger data load on first build
+          if (isLoading) {
+            Future.microtask(() async {
+              await projectPro.getProjectClientOptions();
+              await projectPro.getProjectCustomerOptions();
+              await projectPro.getProjectBlueprintLibrary();
+
+              // ── Auto-detect the assigned client from the conversation ──
+              final chatPro = context.read<ChatPro>();
+              if (widget.conversationId != null && widget.conversationId! > 0) {
+                final convo = chatPro.conversations.firstWhere(
+                  (c) => c.id == widget.conversationId,
+                  orElse: () => ChatConversation(
+                    id: -1, type: 'private', title: '', participants: [],
+                    image: '', unreadCount: 0, updatedAt: DateTime.now(), isDefault: true,
+                  ),
+                );
+                if (convo.id != -1 && convo.participants.isNotEmpty) {
+                  final participantsToCheck = convo.type == 'private'
+                      ? [convo.participants.firstWhere(
+                          (p) => p.id == widget.receiverUserId,
+                          orElse: () => ChatParticipant(
+                            name: '', username: '', lastName: '', isOnline: false, phoneNumbers: [],
+                          ),
+                        )]
+                      : convo.participants;
+
+                  final clients = projectPro.projectClientOptions
+                      .where((item) => (item['id'] ?? '').trim().isNotEmpty)
+                      .toList();
+
+                  for (final p in participantsToCheck) {
+                    final company = p.clientCompanyName ?? p.customerClientCompanyName;
+                    if (company == null || company.trim().isEmpty) continue;
+                    for (final client in clients) {
+                      if ((client['label'] ?? '').trim().toLowerCase() ==
+                          company.trim().toLowerCase()) {
+                        selectedClientId = int.tryParse((client['id'] ?? '').trim());
+                        autoAssignedClientLabel = client['label'];
+                        autoAssignedClientImage = client['image'];
+                        break;
+                      }
+                    }
+                    if (selectedClientId != null) break;
+                  }
+                }
+              }
+
+              if (dialogContext.mounted) {
+                setDialogState(() => isLoading = false);
+              }
+            });
+          }
+
+          final clients = projectPro.projectClientOptions
+              .where((item) => (item['id'] ?? '').trim().isNotEmpty)
+              .toList();
+          final customers = projectPro.projectCustomerOptions
+              .where((item) => (item['id'] ?? '').trim().isNotEmpty)
+              .toList();
+          final templateOptions = projectPro.projectBlueprints
+              .map((item) => {'id': item.id.toString(), 'label': item.name})
+              .toList();
+          final filteredCustomers = selectedClientId == null
+              ? customers
+              : customers.where((item) {
+                  final id = int.tryParse((item['client_id'] ?? '').trim());
+                  return id == selectedClientId;
+                }).toList();
+          final assignedStaff =
+              _extractAssignedStaffFromClient(selectedClientOption(clients))
+                  .where(
+                    (s) =>
+                        !excludedStaffIds.contains(int.tryParse(s['id'] ?? '')),
+                  )
+                  .toList();
+
+          return Dialog(
+            insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+            backgroundColor: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F3F5),
+                borderRadius: BorderRadius.circular(22.r),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(20.w, 18.h, 18.w, 14.h),
+                    child: Row(
+                      children: [
+                        Icon(
+                          CupertinoIcons.doc_plaintext,
+                          size: 21.sp,
+                          color: const Color(0xFF1E232B),
+                        ),
+                        SizedBox(width: 10.w),
+                        Expanded(
+                          child: Text(
+                            'Project',
+                            style: TextStyle(
+                              fontSize: 31 / 2.2,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF171B23),
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () => Navigator.of(dialogContext).pop(),
+                          child: Icon(
+                            Icons.close,
+                            size: 19.sp,
+                            color: const Color(0xFF535964),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: const Color(0xFFDADCE1),
+                  ),
+                  Flexible(
+                    child: Stack(
+                      children: [
+                        IgnorePointer(
+                          ignoring: isLoading,
+                          child: Opacity(
+                            opacity: isLoading ? 0.4 : 1.0,
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              child: Padding(
+                                padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 18.h),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildPopupFieldLabel('* Project Name'),
+                            SizedBox(height: 7.h),
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 12.w,
+                                vertical: 9.h,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F2F5),
+                                borderRadius: BorderRadius.circular(14.r),
+                                border: Border.all(
+                                  color: const Color(0xFFD8DAE0),
+                                ),
+                              ),
+                              child: TextField(
+                                controller: nameController,
+                                decoration: InputDecoration(
+                                  hintText: 'Type Project Name',
+                                  hintStyle: TextStyle(
+                                    fontSize: 12.sp,
+                                    color: const Color(0xFF9BA1AC),
+                                  ),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                ),
+                                style: TextStyle(
+                                  fontSize: 12.5.sp,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF242A34),
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 14.h),
+                            _buildPopupFieldLabel('Template (optional)'),
+                            SizedBox(height: 7.h),
+                            _buildProjectPopupDropdownField(
+                              selectedText: selectedTemplateLabel(),
+                              placeholder: 'Select project template',
+                              options: templateOptions,
+                              onPick: (value) => setDialogState(() {
+                                selectedTemplateId = int.tryParse(
+                                  (value['id'] ?? '').trim(),
+                                );
+                              }),
+                            ),
+                            SizedBox(height: 14.h),
+                            _buildPopupFieldLabel('Assigned Client'),
+                            SizedBox(height: 7.h),
+                            _buildAssignedClientPill(
+                              label: autoAssignedClientLabel,
+                              image: autoAssignedClientImage,
+                            ),
+                            SizedBox(height: 14.h),
+                            _buildPopupFieldLabel('Assigned Staff (auto)'),
+                            SizedBox(height: 7.h),
+                            _buildAssignedStaffAutoField(
+                              assignedStaff,
+                              onRemove: (id) => setDialogState(() {
+                                if (!excludedStaffIds.contains(id)) {
+                                  excludedStaffIds.add(id);
+                                }
+                              }),
+                            ),
+                            SizedBox(height: 14.h),
+                            _buildPopupFieldLabel('Assign Customer'),
+                            SizedBox(height: 7.h),
+                            _buildProjectPopupDropdownField(
+                              selectedText: selectedLabelFrom(
+                                filteredCustomers,
+                                selectedCustomerId,
+                              ),
+                              placeholder: 'Select customer',
+                              options: filteredCustomers,
+                              onPick: (value) => setDialogState(() {
+                                selectedCustomerId = int.tryParse(
+                                  (value['id'] ?? '').trim(),
+                                );
+                              }),
+                            ),
+                            SizedBox(height: 18.h),
+                            Center(
+                              child: InkWell(
+                                onTap: isSaving
+                                    ? null
+                                    : () async {
+                                        final projectName = nameController.text
+                                            .trim();
+                                        if (projectName.isEmpty) {
+                                          showToast(
+                                            message: 'Project name is required',
+                                          );
+                                          return;
+                                        }
+                                        if (selectedClientId == null) {
+                                          showToast(
+                                            message: 'No client detected for this chat',
+                                          );
+                                          return;
+                                        }
+                                        if (selectedCustomerId == null) {
+                                          showToast(
+                                            message: 'Please select a customer',
+                                          );
+                                          return;
+                                        }
+
+                                        setDialogState(() => isSaving = true);
+                                        Loaders.show();
+                                        final chatPro = context.read<ChatPro>();
+                                        final conversationId =
+                                            _resolveConversationForDuplicateCheck(
+                                              chatPro,
+                                            );
+
+                                        final created = await projectPro
+                                            .createProjectCoreFields(
+                                              name: projectName,
+                                              clientId: selectedClientId!,
+                                              customerId: selectedCustomerId!,
+                                              projectBlueprintId:
+                                                  selectedTemplateId,
+                                              conversationId: conversationId,
+                                              excludedStaffIds:
+                                                  excludedStaffIds,
+                                            );
+                                        Loaders.hide();
+
+                                        if (!dialogContext.mounted) return;
+                                        setDialogState(() => isSaving = false);
+                                        if (created) {
+                                          // Close dialog immediately
+                                          if (dialogContext.mounted) {
+                                            Navigator.of(dialogContext).pop();
+                                          }
+
+                                          // Clear fields
+                                          nameController.clear();
+                                          selectedClientId = null;
+                                          selectedCustomerId = null;
+                                          selectedTemplateId = null;
+                                          excludedStaffIds.clear();
+
+                                          // Refresh projects in the background
+                                          projectPro.getProjects(ctx: context);
+                                        }
+                                      },
+                                borderRadius: BorderRadius.circular(999.r),
+                                child: Container(
+                                  width: 180.w,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 24.w,
+                                    vertical: 9.h,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF27C25A),
+                                    borderRadius: BorderRadius.circular(999.r),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    isSaving ? 'Creating...' : 'Create New',
+                                    style: TextStyle(
+                                      fontSize: 13.sp,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (isLoading)
+                  Positioned.fill(
+                    child: Center(
+                      child: showLoader(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    // nameController.dispose(); // Removed to fix 'used after disposed' crash during pop animation
+  }
+
+  List<Map<String, String>> _extractAssignedStaffFromClient(
+    Map<String, String>? client,
+  ) {
+    final encoded = client?['assigned_staff']?.trim() ?? '';
+    if (encoded.isEmpty) return const <Map<String, String>>[];
+
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! List) return const <Map<String, String>>[];
+
+      final items = <Map<String, String>>[];
+      for (final member in decoded) {
+        if (member is! Map) continue;
+        final map = Map<String, dynamic>.from(member);
+        final id = map['id']?.toString() ?? '';
+        final name = map['name']?.toString().trim() ?? '';
+        final image = map['image']?.toString().trim() ?? '';
+        if (name.isEmpty) continue;
+        items.add({'id': id, 'name': name, 'image': image});
+      }
+      return items;
+    } catch (_) {
+      return const <Map<String, String>>[];
+    }
+  }
+
+  Widget _buildAssignedClientPill({
+    required String? label,
+    String? image,
+  }) {
+    if (label == null || label.trim().isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F2F5),
+          borderRadius: BorderRadius.circular(14.r),
+          border: Border.all(color: const Color(0xFFD8DAE0)),
+        ),
+        child: Text(
+          'No client assigned',
+          style: TextStyle(
+            fontSize: 12.sp,
+            color: const Color(0xFF9BA1AC),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(10.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F2F5),
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(color: const Color(0xFFD8DAE0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F5E9),
+              borderRadius: BorderRadius.circular(99.r),
+              border: Border.all(color: const Color(0xFFA5D6A7)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (image != null && image.trim().isNotEmpty) ...[
+                  ClipOval(
+                    child: ImageWidget(
+                      image: image,
+                      width: 20,
+                      height: 20,
+                      fit: BoxFit.cover,
+                      errorWidget: ImageWidget(
+                        image: Paths.user,
+                        width: 20,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
+                ],
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11.5.sp,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF2E7D32),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignedStaffAutoField(
+    List<Map<String, String>> staff, {
+    required void Function(int id) onRemove,
+  }) {
+    return Container(
+      width: double.infinity,
+
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 12.h),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F2F5),
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(color: const Color(0xFFD8DAE0)),
+      ),
+      child: staff.isEmpty
+          ? Text(
+              'No staff assigned',
+              style: TextStyle(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF9BA1AC),
+              ),
+            )
+          : Wrap(
+              spacing: 8.w,
+              runSpacing: 8.h,
+              children: [
+                for (final item in staff)
+                  Container(
+                    padding: EdgeInsets.fromLTRB(8.w, 5.h, 8.w, 5.h),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F3F5),
+                      borderRadius: BorderRadius.circular(10.r),
+                      border: Border.all(color: const Color(0xFFD9DCE3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 24.w,
+                          height: 24.h,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFE1E4EA),
+                            shape: BoxShape.circle,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            _staffInitial(item['name'] ?? ''),
+                            style: TextStyle(
+                              fontSize: 10.sp,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF7C818C),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        Text(
+                          item['name'] ?? '',
+                          style: TextStyle(
+                            fontSize: 11.5.sp,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF525866),
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        GestureDetector(
+                          onTap: () {
+                            final id = int.tryParse(item['id'] ?? '');
+                            if (id != null) onRemove(id);
+                          },
+                          child: ImageWidget(
+                            image: Paths.delete,
+                            width: 12,
+                            height: 12,
+                            color: const Color(0xFF1A1A1A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  String _staffInitial(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '-';
+    return trimmed[0].toUpperCase();
+  }
+
+  Widget _buildPopupFieldLabel(String text) {
+    final hasRequired = text.startsWith('*');
+    final content = hasRequired ? text.substring(1).trim() : text;
+    return RichText(
+      text: TextSpan(
+        children: [
+          if (hasRequired)
+            TextSpan(
+              text: '* ',
+              style: TextStyle(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFFE24A4A),
+              ),
+            ),
+          TextSpan(
+            text: content,
+            style: TextStyle(
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF262D37),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProjectPopupDropdownField({
+    required String? selectedText,
+    required String placeholder,
+    required List<Map<String, String>> options,
+    required ValueChanged<Map<String, String>> onPick,
+  }) {
+    return Builder(
+      builder: (pickerContext) => InkWell(
+        onTap: () async {
+          if (options.isEmpty) return;
+
+          final fieldBox = pickerContext.findRenderObject() as RenderBox;
+          final overlayBox =
+              Overlay.of(context).context.findRenderObject() as RenderBox;
+          final fieldTopLeft = fieldBox.localToGlobal(
+            Offset.zero,
+            ancestor: overlayBox,
+          );
+          final fieldBottomLeft = fieldBox.localToGlobal(
+            Offset(0, fieldBox.size.height),
+            ancestor: overlayBox,
+          );
+
+          final picked = await showMenu<Map<String, String>>(
+            context: context,
+            color: Colors.white,
+            elevation: 10,
+            constraints: BoxConstraints(
+              minWidth: fieldBox.size.width,
+              maxWidth: fieldBox.size.width,
+              maxHeight: 240.h,
+            ),
+            position: RelativeRect.fromLTRB(
+              fieldTopLeft.dx,
+              fieldBottomLeft.dy + 2.h,
+              overlayBox.size.width - (fieldTopLeft.dx + fieldBox.size.width),
+              overlayBox.size.height - fieldBottomLeft.dy,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            items: [
+              for (final item in options)
+                PopupMenuItem<Map<String, String>>(
+                  value: item,
+                  height: 38.h,
+                  child: Text(
+                    (item['label'] ?? '').trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF212834),
+                    ),
+                  ),
+                ),
+            ],
+          );
+
+          if (picked != null) {
+            onPick(picked);
+          }
+        },
+        borderRadius: BorderRadius.circular(14.r),
+        child: Container(
+          height: 44.h,
+          padding: EdgeInsets.symmetric(horizontal: 12.w),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F2F5),
+            borderRadius: BorderRadius.circular(14.r),
+            border: Border.all(color: const Color(0xFFD8DAE0)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  selectedText == null || selectedText.trim().isEmpty
+                      ? placeholder
+                      : selectedText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w500,
+                    color: selectedText == null || selectedText.trim().isEmpty
+                        ? const Color(0xFF9BA1AC)
+                        : const Color(0xFF212834),
+                  ),
+                ),
+              ),
+              Icon(
+                CupertinoIcons.chevron_down,
+                size: 15.sp,
+                color: const Color(0xFF8E95A1),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _onSendPressed() async {
@@ -1486,6 +2510,22 @@ class _ChatScreenState extends State<ChatScreen> {
     _focusNode.requestFocus();
     final pro = getChatPro(context);
     final authpro = getAuthPro(context);
+
+    if (isSmsSelected && _smsFromNumber.isNotEmpty && _smsToNumber.isNotEmpty) {
+      _messageCtrl.clear();
+      final sent = await pro.sendTwilioTextMessage(
+        currentUserId: authpro.user!.id,
+        toNumber: _smsToNumber,
+        fromNumber: _smsFromNumber,
+        message: text,
+        openedConversationId: widget.conversationId,
+      );
+      if (sent) {
+        _initScrollToBottom();
+      }
+      return;
+    }
+
     int? conversationId = widget.conversationId;
     // STEP 1: If no conversationId yet, check existing history or create new
     if (conversationId == null) {
@@ -1717,6 +2757,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }) async {
     final isImage = _isImageFileName(fileName);
     final captionCtrl = TextEditingController();
+    String draftCaption = '';
     final chatPro = getChatPro(context);
     final resolvedConversationId = _resolveConversationForDuplicateCheck(
       chatPro,
@@ -1969,6 +3010,9 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                               child: TextField(
                                 controller: captionCtrl,
+                                onChanged: (value) {
+                                  draftCaption = value;
+                                },
                                 style: const TextStyle(color: Colors.white),
                                 decoration: const InputDecoration(
                                   hintText: 'Add a caption…',
@@ -1984,7 +3028,11 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           const SizedBox(width: 10),
                           GestureDetector(
-                            onTap: () => Navigator.pop(ctx, true),
+                            onTap: () {
+                              FocusScope.of(ctx).unfocus();
+                              draftCaption = captionCtrl.text;
+                              Navigator.pop(ctx, true);
+                            },
                             child: Container(
                               width: 48,
                               height: 48,
@@ -2015,7 +3063,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final pro = getChatPro(context);
       final authpro = getAuthPro(context);
-      final caption = captionCtrl.text.trim();
+      final caption =
+          (draftCaption.trim().isNotEmpty ? draftCaption : captionCtrl.text)
+              .trim();
 
       int? conversationId = widget.conversationId;
       if (conversationId == null) {
@@ -2037,6 +3087,24 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
       if (conversationId == null) return;
+
+      if (isSmsSelected &&
+          _smsFromNumber.isNotEmpty &&
+          _smsToNumber.isNotEmpty) {
+        final sent = await pro.sendTwilioMmsMessage(
+          currentUserId: authpro.user!.id,
+          toNumber: _smsToNumber,
+          fromNumber: _smsFromNumber,
+          file: file,
+          message: caption,
+          openedConversationId: widget.conversationId ?? conversationId,
+        );
+        if (sent) {
+          _clearPendingAttachmentMeta();
+          _initScrollToBottom();
+        }
+        return;
+      }
 
       if (hasDuplicateNotice) {
         if (preferReshareOlder && duplicateMatchPreview != null) {
@@ -2385,7 +3453,11 @@ class _ChatScreenState extends State<ChatScreen> {
       children: [
         GestureDetector(
           onTap: () {
-            setState(() => isSmsSelected = false);
+            setState(() {
+              isSmsSelected = false;
+              _smsFromNumber = "";
+              _smsToNumber = "";
+            });
           },
           child: Container(
             height: 32,
@@ -2413,6 +3485,7 @@ class _ChatScreenState extends State<ChatScreen> {
             setState(() {
               isSmsSelected = true;
               selectedSmsNumber = value;
+              _smsFromNumber = _sanitizeSmsNumber(value);
             });
           },
           itemBuilder: (context) {
@@ -2843,6 +3916,46 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _bubble(ChatMessage msg, {String? highlightQuery}) {
+    if (msg.systemCard != null) {
+      Color statusColor = Colors.grey;
+      IconData statusIcon = Icons.done;
+      if (msg.isRead == true) {
+        statusIcon = Icons.done_all;
+        statusColor = Colors.blue;
+      } else if (msg.isDelivered == true) {
+        statusIcon = Icons.done_all;
+      }
+
+      if (msg.type == 'reminder') {
+        return ReminderMesgBubble(
+          title: msg.systemCard!.title ?? '',
+          description: msg.systemCard!.description ?? '',
+          buttonLabel: msg.systemCard!.buttonLabel,
+          buttonUrl: msg.systemCard!.buttonUrl,
+          event: msg.systemCard!.event,
+          isMe: msg.isMe,
+          metaText:
+              "${msg.channel == 'sms' ? 'SMS Chat' : 'App Chat'} • ${formatMessageTime(msg.createdAt.toString())}",
+          statusIcon: statusIcon,
+          statusColor: statusColor,
+        );
+      }
+
+      return ProjectChatPebble(
+        card: msg.systemCard!,
+        isMe: msg.isMe,
+        metaText:
+            "${msg.channel == 'sms' ? 'SMS Chat' : 'App Chat'} • ${formatMessageTime(msg.createdAt.toString())}",
+        statusIcon: statusIcon,
+        statusColor: statusColor,
+        onAttachmentTap: () {
+          if (_isImageAttachmentMessage(msg)) {
+            _openImagePreview(initialMessageId: msg.id);
+          }
+        },
+      );
+    }
+
     if (_isDeletedTextMessage(msg)) {
       return _deletedMessageBubble(msg);
     }
@@ -4202,7 +5315,8 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Flexible(
             child: TextWidget(
-              text: 'APP Chat • ${formatMessageTime(msg.createdAt.toString())}',
+              text:
+                  "${msg.channel == 'sms' ? 'SMS Chat' : 'APP Chat'} • ${formatMessageTime(msg.createdAt.toString())}",
               fontSize: 10,
               color: Colors.black54,
               fontWeight: FontWeight.w400,

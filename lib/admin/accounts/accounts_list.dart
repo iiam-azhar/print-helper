@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:print_helper/admin/accounts/account_info_screen.dart';
 import 'package:print_helper/admin/accounts/add_account.dart';
 import 'package:print_helper/admin/accounts/edit_account.dart';
 import 'package:print_helper/admin/filter/filter_screen.dart';
@@ -465,17 +466,23 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         children: [
                           Positioned(
                             top: pos.dy + size.height + 6,
-                            left: pos.dx - 110,
+                            right:
+                                MediaQuery.of(context).size.width -
+                                (pos.dx + size.width),
                             child: GestureDetector(
                               onTap: () {},
                               child: Container(
+                                width: 225.w,
                                 padding: EdgeInsets.symmetric(
-                                  horizontal: 14.w,
-                                  vertical: 12.h,
+                                  horizontal: 10.w,
+                                  vertical: 10.h,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.95),
-                                  borderRadius: BorderRadius.circular(16.r),
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(18.r),
+                                  border: Border.all(
+                                    color: const Color(0xFFE5E7EB),
+                                  ),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withValues(
@@ -487,9 +494,26 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                   ],
                                 ),
 
-                                child: Row(
+                                child: Column(
                                   mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
+                                    _popupIcon(
+                                      icon: Paths.info,
+                                      label: "Info",
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        navTo(
+                                          context: context,
+                                          page: AccountInfoScreen(
+                                            account: item,
+                                          ),
+                                        );
+                                      },
+                                    ),
+
+                                    _popupDivider(),
                                     _popupIcon(
                                       icon: Paths.login,
                                       label: "Login",
@@ -506,7 +530,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                       },
                                     ),
 
-                                    Spacers.sbw20(),
+                                    _popupDivider(),
                                     _popupIcon(
                                       icon: Paths.edit,
                                       label: "Edit",
@@ -526,10 +550,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                       },
                                     ),
 
-                                    Spacers.sbw20(),
+                                    _popupDivider(),
                                     _popupIcon(
                                       icon: Paths.delete,
                                       label: "Delete",
+                                      isDestructive: true,
                                       onTap: () {
                                         _confirmDelete(context, item.id);
                                       },
@@ -621,26 +646,34 @@ class _AccountsScreenState extends State<AccountsScreen> {
     );
   }
 
+  Widget _popupDivider() =>
+      Divider(height: 1, thickness: 0.5, color: const Color(0xFFE5E7EB));
+
   Widget _popupIcon({
     required String icon,
     required String label,
     required VoidCallback onTap,
+    bool isDestructive = false,
   }) {
+    final color = isDestructive ? const Color(0xFFEF4444) : Colors.black87;
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ImageWidget(image: icon, width: 22),
-          Spacers.sb2(),
-          TextWidget(
-            text: label,
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            color: Colors.black87,
-            decoration: TextDecoration.none,
-          ),
-        ],
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 8.h, horizontal: 6.w),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ImageWidget(image: icon, width: 18, color: color),
+            SizedBox(width: 10.w),
+            TextWidget(
+              text: label,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: color,
+              decoration: TextDecoration.none,
+            ),
+          ],
+        ),
       ),
     );
   }

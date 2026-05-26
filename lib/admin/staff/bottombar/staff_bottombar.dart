@@ -10,6 +10,8 @@ import '../../chat/view/chat_list.dart';
 import '../../client/clients_list.dart';
 import '../../drawer/drawer.dart';
 import '../../../widgets/toasts.dart';
+import '../../files/files_list.dart';
+import '../../projects/projects.dart';
 
 class StaffBottomBar extends StatefulWidget {
   final int pageNum;
@@ -38,9 +40,9 @@ class _StaffBottomBarState extends State<StaffBottomBar>
         isFromClient: false,
         onChatTap: () => setState(() => pageNum = 2),
       ),
-      const SizedBox(),
+      const FilesScreen(),
       const ChatList(),
-      const SizedBox(),
+      const ProjectsPage(),
       const SizedBox(),
     ];
   }

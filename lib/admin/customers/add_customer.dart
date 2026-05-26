@@ -3,11 +3,14 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:print_helper/utils/console_util.dart';
-import 'package:print_helper/utils/regx.dart';
-import 'package:print_helper/widgets/custom_button.dart';
-import 'package:print_helper/widgets/field_widget.dart';
-import 'package:print_helper/widgets/toasts.dart';
+import '../../utils/console_util.dart';
+import '../../utils/regx.dart';
+import '../../widgets/custom_button.dart';
+import '../../widgets/field_widget.dart';
+import '../../widgets/toasts.dart';
+import '../../providers/setting_pro.dart';
+import '../../models/settings_models.dart';
+import 'package:provider/provider.dart';
 
 import '../../constants/colors.dart';
 import '../../constants/paths.dart';
@@ -68,10 +71,17 @@ class AddCustomerState extends State<AddCustomer> {
   @override
   void initState() {
     super.initState();
+    _selectedType = cmpnyPrsnl[0];
     contactForms.add(ContactFormModel());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final custPro = getAdminPro(context);
       custPro.fetchAllDropdownData(context);
+      final settings = context.read<SettingsPro>();
+      settings.loadSettings(ctx: context).then((_) {
+        if (mounted) {
+          settings.getCustomerCompanyTypes();
+        }
+      });
     });
   }
 
@@ -126,7 +136,7 @@ class AddCustomerState extends State<AddCustomer> {
       clientLanguages: selectedLanguageIds,
       status: 1,
       contacts: contactForms,
-      companyType: _selectedType.toString(),
+      companyType: _selectedType?.name ?? "Company",
       custImage: selectedImage,
       context: context,
       clientId: widget.clientId ?? 0,
@@ -134,7 +144,7 @@ class AddCustomerState extends State<AddCustomer> {
       custRank: selectedCustRank ?? 0,
     );
     if (success) {
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     }
   }
 
@@ -156,16 +166,17 @@ class AddCustomerState extends State<AddCustomer> {
             child: Column(
               children: [
                 _header(context),
-                Divider(thickness: 2.w, color: const Color(0x5F9E9E9E)),
                 Expanded(
                   child: SingleChildScrollView(
                     child: Form(
                       key: _formKey,
                       child: Column(
                         children: [
-                          Spacers.sb10(),
-                          profileImage(),
-                          Spacers.sb15(),
+                          if (_selectedType?.id == 1) ...[
+                            Spacers.sb10(),
+                            profileImage(),
+                            Spacers.sb15(),
+                          ],
                           _formBody(),
                           Spacers.sb25(),
                           scrollUp(context),
@@ -233,10 +244,20 @@ class AddCustomerState extends State<AddCustomer> {
   Widget _formBody() {
     final pro = getAdminPro(context);
     final cust = getCustPro(context);
+    final settingsPro = context.watch<SettingsPro>();
+
+    final typeSection = settingsPro.sections.firstWhere(
+      (s) => s.title.toLowerCase().contains("customer company"),
+      orElse: () => SettingsSection(id: 0, title: '', items: []),
+    );
+    final companyTypes = typeSection.items
+        .map((e) => DropdownItem(id: e.id, name: e.name))
+        .toList();
+
     final Color primaryColor =
         widget.isFromClient && cust.client?.brandingPrimaryColor != null
-        ? hexToColor(cust.client!.brandingPrimaryColor)
-        : AppColors.primary;
+            ? hexToColor(cust.client!.brandingPrimaryColor)
+            : AppColors.primary;
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.w),
       child: Column(
@@ -252,23 +273,21 @@ class AddCustomerState extends State<AddCustomer> {
           Spacers.sb8(),
           _roundedTextField(
             controller: cmpnyNmeCtrl,
-            label: 'Company Name',
+            label: _selectedType?.id == 1 ? '*Company Name' : 'Company Name',
             hint: 'Type Company Name',
-            errorText: 'This field is required',
+            errorText: _selectedType?.id == 1 ? 'Required' : null,
             regErrorText: 'Please enter a valid company name',
             regExpCondition: Regx.addressRegExp,
           ),
           Spacers.sb8(),
           _roundedDropdown(
             parentContext: context,
-            label: '*Customer\'s Company Type',
-            value: pro.custCmpnyType.any((e) => e.id == selectedCompanyType)
-                ? pro.custCmpnyType.firstWhere(
-                    (e) => e.id == selectedCompanyType,
-                  )
+            label: 'Customer\'s Company Type',
+            value: companyTypes.any((e) => e.id == selectedCompanyType)
+                ? companyTypes.firstWhere((e) => e.id == selectedCompanyType)
                 : null,
             hint: 'Select',
-            items: pro.custCmpnyType,
+            items: companyTypes,
             onChanged: (item) {
               setState(() => selectedCompanyType = item?.id);
             },
@@ -276,7 +295,7 @@ class AddCustomerState extends State<AddCustomer> {
           Spacers.sb8(),
           _roundedDropdown(
             parentContext: context,
-            label: '*Customer\'s Rank',
+            label: 'Customer\'s Rank',
             value: pro.customerRank.any((e) => e.id == selectedCustRank)
                 ? pro.customerRank.firstWhere((e) => e.id == selectedCustRank)
                 : null,
@@ -901,8 +920,8 @@ class AddCustomerState extends State<AddCustomer> {
               border: Border.all(color: Colors.grey.shade300),
               color: Colors.white,
             ),
-            child: SizedBox(
-              height: 250.h,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: 250.h),
               child: SingleChildScrollView(
                 physics: BouncingScrollPhysics(),
                 child: Column(
@@ -1010,39 +1029,25 @@ class AddCustomerState extends State<AddCustomer> {
   }
 
   Widget _header(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 25.w, vertical: 10.w),
-      child: Column(
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30.r)),
+      ),
+      child: Row(
         children: [
-          Container(
-            width: 45.w,
-            height: 5.h,
-            decoration: BoxDecoration(
-              color: Colors.black12,
-              borderRadius: BorderRadius.circular(10.r),
+          Expanded(
+            child: TextWidget(
+              text: "New Customer",
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: Colors.white,
             ),
           ),
-          Spacers.sb10(),
-          Row(
-            children: [
-              ImageWidget(image: Paths.customers, fit: BoxFit.cover, width: 27),
-              Spacers.sbw10(),
-              Expanded(
-                child: TextWidget(
-                  text: "Customer",
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Icon(
-                  Icons.close,
-                  size: 26.sp,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Icon(Icons.close, size: 24.sp, color: Colors.white),
           ),
         ],
       ),
@@ -1147,32 +1152,50 @@ class AddCustomerState extends State<AddCustomer> {
               borderRadius: BorderRadius.circular(12.r),
               borderSide: const BorderSide(color: Colors.red, width: 1),
             ),
+            errorStyle: TextStyle(
+              color: AppColors.red,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12.r),
               borderSide: const BorderSide(color: Colors.red, width: 1),
             ),
           ),
           hint: TextWidget(
-            text: hint,
+            text: items.isEmpty ? "No data" : hint,
             fontWeight: FontWeight.w400,
             fontSize: 14,
           ),
-          items: items.map((item) {
-            return DropdownMenuItem(
-              value: item,
-              child: TextWidget(
-                text: item.name,
-                fontWeight: FontWeight.w400,
-                fontSize: 14,
-              ),
-            );
-          }).toList(),
+          items: items.isEmpty
+              ? [
+                  DropdownMenuItem(
+                    value: null,
+                    enabled: false,
+                    child: TextWidget(
+                      text: "No data",
+                      color: Colors.grey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ]
+              : items.map((item) {
+                  return DropdownMenuItem(
+                    value: item,
+                    child: TextWidget(
+                      text: item.name,
+                      fontWeight: FontWeight.w400,
+                      fontSize: 14,
+                    ),
+                  );
+                }).toList(),
           onChanged: (item) {
             onChanged(item);
           },
           validator: (v) {
             if (label.startsWith('*') && v == null) {
-              return 'This field is required';
+              return 'Required';
             }
             return null;
           },

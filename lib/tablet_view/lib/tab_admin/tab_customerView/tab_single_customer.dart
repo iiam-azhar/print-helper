@@ -93,7 +93,7 @@ class _SingleCustomerState extends State<SingleCustomer> {
               builder: (context, pro, _) {
                 final auth = context.read<AuthPro>();
                 final loggedCustomerId = auth.user?.customerId;
-                print("loggedCustomerId $loggedCustomerId");
+                debugPrint("loggedCustomerId $loggedCustomerId");
                 if (pro.customersLoad) {
                   return Center(child: showLoader());
                 }
@@ -367,8 +367,8 @@ class _SingleCustomerState extends State<SingleCustomer> {
               _iconButton(
                 icon: Paths.edit,
                 onTap: () {
-                  print("${item.id}customer idddddd");
-                  print("${item.clientId}client idddddd");
+                  debugPrint("${item.id}customer idddddd");
+                  debugPrint("${item.clientId}client idddddd");
                   _openRightSideSheet(
                     context,
                     EditCustomer(customerId: item.id, clientId: item.clientId),

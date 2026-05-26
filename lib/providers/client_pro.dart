@@ -5,7 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:print_helper/services/api_routes.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/accounts_models.dart';
+import '../models/billing_models.dart';
 import '../models/client_models.dart';
+import '../models/client_info_tabs_model.dart';
 import '../models/contact_form_models.dart';
 import '../models/edit_client_models.dart';
 import '../models/states_models.dart';
@@ -25,10 +27,24 @@ class ClientPro extends ChangeNotifier {
   List<DropdownItem> stateDropdown = [];
   List<DropdownItem> cityDropdown = [];
   List<StaffModel> staffList = [];
+
+  // Paginated staff picker state
+  List<StaffModel> pagedStaffList = [];
+  int staffCurrentPage = 1;
+  int staffLastPage = 1;
+  bool isLoadingStaff = false;
+  String staffSearchQuery = '';
+
   Map<String, dynamic> clientFilters = {};
   String search = '';
   int currentPage = 1;
   int lastPage = 1;
+  bool clientInfoTabsLoad = false;
+
+  // ── Services & Pricing ──────────────────────────────────────────────────
+  bool servicesPricingLoad = false;
+  ServicesPricingModel? servicesPricing;
+  ClientInfoTabsModel? currentClientInfoTabs;
   ClientModel? _selectedClient;
   ClientModel? get selectedClient => _selectedClient;
 
@@ -63,9 +79,9 @@ class ClientPro extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchStaff() async {
+  Future<void> fetchStaff({bool showLoader = true}) async {
     try {
-      Loaders.show();
+      if (showLoader) Loaders.show();
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
       final response = await ApiService().getDataFromApi(
@@ -78,7 +94,61 @@ class ClientPro extends ChangeNotifier {
     } catch (e) {
       printData(title: "Staff API error:", data: e, e: true);
     } finally {
-      Loaders.hide();
+      if (showLoader) Loaders.hide();
+    }
+  }
+
+  /// Paginated staff fetch for the assign-specialist picker.
+  /// Call with [reset]=true (or a new [search]) to start from page 1.
+  Future<void> fetchStaffPaged({
+    int perPage = 10,
+    String search = '',
+    bool reset = false,
+  }) async {
+    if (isLoadingStaff) return;
+    if (!reset && staffCurrentPage > staffLastPage) return;
+
+    if (reset || search != staffSearchQuery) {
+      staffSearchQuery = search;
+      staffCurrentPage = 1;
+      pagedStaffList.clear();
+    }
+
+    isLoadingStaff = true;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+      final params = StringBuffer(
+        'accounts/list?page=$staffCurrentPage&per_page=$perPage',
+      );
+      if (search.trim().isNotEmpty) {
+        params.write('&search=${Uri.encodeComponent(search.trim())}');
+      }
+
+      final response = await ApiService().getDataFromApi(
+        api: params.toString(),
+        headers: {"Authorization": "Bearer $token"},
+      );
+
+      final meta = response["meta"];
+      if (meta != null) {
+        staffLastPage = meta["last_page"] ?? 1;
+        staffCurrentPage = (meta["current_page"] ?? staffCurrentPage) + 1;
+      } else {
+        // API doesn't support pagination — fall back to all-at-once
+        staffLastPage = 1;
+        staffCurrentPage = 2; // prevent further fetches
+      }
+
+      final List list = response["data"] ?? [];
+      pagedStaffList.addAll(list.map((e) => StaffModel.fromJson(e)));
+    } catch (e) {
+      printData(title: "Staff Paged API error:", data: e, e: true);
+    } finally {
+      isLoadingStaff = false;
+      notifyListeners();
     }
   }
 
@@ -267,6 +337,7 @@ class ClientPro extends ChangeNotifier {
     required String brandingSecondary,
     required String brandingUrl,
     File? brandinglogo,
+    File? brandingFavicon,
     File? clientImage,
     required dynamic context,
   }) async {
@@ -275,6 +346,7 @@ class ClientPro extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
       final uri = Uri.parse('${ApiRoutes.baseUrl}clients/$clientId/update');
+      printData(title: "URI =>", data: uri);
       final request = http.MultipartRequest("POST", uri);
       request.headers.addAll({
         "Accept": "application/json",
@@ -359,12 +431,46 @@ class ClientPro extends ChangeNotifier {
           await http.MultipartFile.fromPath("client_image", clientImage.path),
         );
       }
+      printData(title: "LOGO FILE =>", data: brandinglogo?.path ?? 'NULL');
       if (brandinglogo != null) {
         request.files.add(
           await http.MultipartFile.fromPath(
             "branding_logo_file",
             brandinglogo.path,
           ),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath("branding_logo", brandinglogo.path),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath("logo", brandinglogo.path),
+        );
+      }
+      printData(
+        title: "FAVICON FILE =>",
+        data: brandingFavicon?.path ?? 'NULL',
+      );
+      if (brandingFavicon != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            "favicon_image",
+            brandingFavicon.path,
+          ),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            "branding_favicon_file",
+            brandingFavicon.path,
+          ),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            "branding_favicon",
+            brandingFavicon.path,
+          ),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath("favicon", brandingFavicon.path),
         );
       }
       final streamed = await request.send();
@@ -373,6 +479,9 @@ class ClientPro extends ChangeNotifier {
       printData(title: "UPDATE CLIENT BODY:", data: response.body);
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
+        final resData = body["data"] as Map<String, dynamic>? ?? {};
+        printData(title: "UPDATE - favicon_image =>", data: resData["favicon_image"]);
+        printData(title: "UPDATE - branding_favicon =>", data: resData["branding_favicon"]);
         if (body["success"] == true || body["success"] == "true") {
           await getClients(ctx: context);
           return true;
@@ -392,9 +501,429 @@ class ClientPro extends ChangeNotifier {
     }
   }
 
-  Future<EditClientModel?> getClientDetails(int clientId) async {
+  Future<bool> updateClientAssignedStaff({
+    required int clientId,
+    required List<int> assignedStaff,
+    bool showLoader = false,
+  }) async {
+    try {
+      if (showLoader) Loaders.show();
+
+      final details = await getClientDetails(clientId, showLoader: false);
+      if (details == null) {
+        showToast(message: "Unable to load client details");
+        return false;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+      final uri = Uri.parse('${ApiRoutes.baseUrl}clients/$clientId/update');
+      final request = http.MultipartRequest("POST", uri);
+
+      request.headers.addAll({
+        "Accept": "application/json",
+        "Authorization": "Bearer $token",
+      });
+
+      // Send required baseline client fields, then overwrite assigned_staff only.
+      request.fields["company_name"] = details.companyName;
+      request.fields["address"] = details.address;
+      request.fields["address_2"] = details.address2 ?? '';
+      request.fields["state"] = '${details.state?.id ?? ''}';
+      request.fields["city"] = '${details.city?.id ?? ''}';
+      request.fields["zipcode"] = details.zipcode;
+      request.fields["status"] = details.status ? '1' : '0';
+      request.fields["company_type"] = details.companyType ?? '';
+      request.fields["client_rank"] = '${details.clientRank?.id ?? ''}';
+      request.fields["branding_primary_color"] = details.brandingPrimaryColor;
+      request.fields["branding_secondary_color"] =
+          details.brandingSecondaryColor;
+      request.fields["branding_url"] = details.brandingUrl ?? '';
+
+      for (int i = 0; i < details.languages.length; i++) {
+        request.fields["client_languages[$i]"] = details.languages[i].id
+            .toString();
+      }
+
+      for (int i = 0; i < assignedStaff.length; i++) {
+        request.fields["assigned_staff[$i]"] = assignedStaff[i].toString();
+      }
+
+      printData(title: "UPDATE ASSIGNED STAFF PAYLOAD:", data: request.fields);
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+      printData(
+        title: "UPDATE ASSIGNED STAFF STATUS:",
+        data: response.statusCode,
+      );
+      printData(title: "UPDATE ASSIGNED STAFF BODY:", data: response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        final success = body["success"] == true || body["success"] == "true";
+        if (success) {
+          await getClientInfoTabs(clientId, showLoading: false);
+          return true;
+        }
+      }
+
+      _handleApiErrors(response);
+      return false;
+    } catch (e, st) {
+      printData(
+        title: "UPDATE ASSIGNED STAFF ERROR:",
+        data: "$e\n$st",
+        e: true,
+      );
+      return false;
+    } finally {
+      if (showLoader) Loaders.hide();
+    }
+  }
+
+  Future<bool> updateClientInternalOpsContacts({
+    required int clientId,
+    required List<int> contactIds,
+    bool showLoader = false,
+  }) async {
+    try {
+      if (showLoader) Loaders.show();
+
+      final details = await getClientDetails(clientId, showLoader: false);
+      if (details == null) {
+        showToast(message: "Unable to load client details");
+        return false;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+      final uri = Uri.parse('${ApiRoutes.baseUrl}clients/$clientId/update');
+      final request = http.MultipartRequest("POST", uri);
+
+      request.headers.addAll({
+        "Accept": "application/json",
+        "Authorization": "Bearer $token",
+      });
+
+      // Send required baseline client fields, then update internal ops contacts only.
+      request.fields["company_name"] = details.companyName;
+      request.fields["address"] = details.address;
+      request.fields["address_2"] = details.address2 ?? '';
+      request.fields["state"] = '${details.state?.id ?? ''}';
+      request.fields["city"] = '${details.city?.id ?? ''}';
+      request.fields["zipcode"] = details.zipcode;
+      request.fields["status"] = details.status ? '1' : '0';
+      request.fields["company_type"] = details.companyType ?? '';
+      request.fields["client_rank"] = '${details.clientRank?.id ?? ''}';
+      request.fields["branding_primary_color"] = details.brandingPrimaryColor;
+      request.fields["branding_secondary_color"] =
+          details.brandingSecondaryColor;
+      request.fields["branding_url"] = details.brandingUrl ?? '';
+
+      for (int i = 0; i < details.languages.length; i++) {
+        request.fields["client_languages[$i]"] = details.languages[i].id
+            .toString();
+      }
+
+      for (int i = 0; i < contactIds.length; i++) {
+        request.fields["internal_ops_contacts[$i]"] = contactIds[i].toString();
+      }
+
+      printData(
+        title: "UPDATE INTERNAL OPS CONTACTS PAYLOAD:",
+        data: request.fields,
+      );
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+      printData(
+        title: "UPDATE INTERNAL OPS CONTACTS STATUS:",
+        data: response.statusCode,
+      );
+      printData(
+        title: "UPDATE INTERNAL OPS CONTACTS BODY:",
+        data: response.body,
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        final success = body["success"] == true || body["success"] == "true";
+        if (success) {
+          await getClientInfoTabs(clientId, showLoading: false);
+          return true;
+        }
+      }
+
+      _handleApiErrors(response);
+      return false;
+    } catch (e, st) {
+      printData(
+        title: "UPDATE INTERNAL OPS CONTACTS ERROR:",
+        data: "$e\n$st",
+        e: true,
+      );
+      return false;
+    } finally {
+      if (showLoader) Loaders.hide();
+    }
+  }
+
+  Future<bool> assignSpecialists({
+    required int clientId,
+    required List<int> specialistIds,
+    bool showLoader = true,
+  }) async {
+    try {
+      if (showLoader) Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+
+      final payload = {"specialist_ids": specialistIds};
+      printData(title: "ASSIGN SPECIALISTS BODY:", data: payload);
+
+      final response = await ApiService().postDataToApi(
+        api: ApiRoutes.clientAssignedStaff(clientId),
+        isPut: true,
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        payload: payload,
+      );
+      printData(title: "ASSIGN SPECIALISTS RESPONSE:", data: response);
+
+      if (response["success"] == true || response["success"] == "true") {
+        return true;
+      }
+      _handleApiErrorMap(response);
+      return false;
+    } catch (e) {
+      printData(title: "ASSIGN SPECIALISTS ERROR:", data: e, e: true);
+      return false;
+    } finally {
+      if (showLoader) Loaders.hide();
+    }
+  }
+
+  Future<bool> assignSupervisor({
+    required int clientId,
+    required int supervisorId,
+    bool showLoader = true,
+  }) async {
+    try {
+      if (showLoader) Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+
+      final payload = {"supervisor_id": supervisorId};
+      printData(title: "ASSIGN SUPERVISOR BODY:", data: payload);
+
+      final response = await ApiService().postDataToApi(
+        api: ApiRoutes.clientAssignedStaff(clientId),
+        isPut: true,
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        payload: payload,
+      );
+      printData(title: "ASSIGN SUPERVISOR RESPONSE:", data: response);
+
+      if (response["success"] == true || response["success"] == "true") {
+        return true;
+      }
+      _handleApiErrorMap(response);
+      return false;
+    } catch (e) {
+      printData(title: "ASSIGN SUPERVISOR ERROR:", data: e, e: true);
+      return false;
+    } finally {
+      if (showLoader) Loaders.hide();
+    }
+  }
+
+  Future<bool> updateClientBrandingAssets({
+    required int clientId,
+    File? brandingLogo,
+    File? brandingFavicon,
+    required String companyName,
+    required String address,
+    String? address2,
+    String? state,
+    String? city,
+    String? zipcode,
+    int? status,
+    String? brandingPrimary,
+    String? brandingSecondary,
+    String? brandingUrl,
+  }) async {
     try {
       Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+      final uri = Uri.parse('${ApiRoutes.baseUrl}clients/$clientId/update');
+      final request = http.MultipartRequest("POST", uri);
+
+      request.headers.addAll({
+        "Accept": "application/json",
+        "Authorization": "Bearer $token",
+      });
+
+      request.fields["company_name"] = companyName.trim();
+      request.fields["address"] = address.trim();
+      request.fields["address_2"] = (address2 ?? '').trim();
+      request.fields["state"] = (state ?? '').trim();
+      request.fields["city"] = (city ?? '').trim();
+      request.fields["zipcode"] = (zipcode ?? '').trim();
+      if (status != null) {
+        request.fields["status"] = status.toString();
+      }
+
+      if (brandingPrimary != null && brandingPrimary.trim().isNotEmpty) {
+        request.fields["branding_primary_color"] = brandingPrimary.trim();
+      }
+      if (brandingSecondary != null && brandingSecondary.trim().isNotEmpty) {
+        request.fields["branding_secondary_color"] = brandingSecondary.trim();
+      }
+      if (brandingUrl != null) {
+        request.fields["branding_url"] = brandingUrl.trim();
+      }
+
+      printData(
+        title: "🔼 BRANDING UPLOAD - Logo Selected",
+        data: brandingLogo != null ? "YES: ${brandingLogo.path}" : "NO",
+      );
+      printData(
+        title: "🔼 BRANDING UPLOAD - Favicon Selected",
+        data: brandingFavicon != null ? "YES: ${brandingFavicon.path}" : "NO",
+      );
+
+      if (brandingLogo != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            "branding_logo_file",
+            brandingLogo.path,
+          ),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath("branding_logo", brandingLogo.path),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath("logo", brandingLogo.path),
+        );
+        printData(
+          title: "✅ BRANDING - Logo file queued for upload",
+          data: brandingLogo.path,
+        );
+      }
+
+      if (brandingFavicon != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            "favicon_image",
+            brandingFavicon.path,
+          ),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            "branding_favicon_file",
+            brandingFavicon.path,
+          ),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            "branding_favicon",
+            brandingFavicon.path,
+          ),
+        );
+        request.files.add(
+          await http.MultipartFile.fromPath("favicon", brandingFavicon.path),
+        );
+        printData(
+          title: "✅ BRANDING - Favicon file queued for upload",
+          data: brandingFavicon.path,
+        );
+      }
+
+      printData(
+        title: "📤 SENDING MULTIPART REQUEST",
+        data: {
+          "url": uri.toString(),
+          "fields_count": request.fields.length,
+          "files_count": request.files.length,
+          "company_name": companyName,
+          "branding_fields": {
+            "primary": brandingPrimary,
+            "secondary": brandingSecondary,
+            "url": brandingUrl,
+          },
+        },
+      );
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+      printData(
+        title: "📥 BRANDING RESPONSE - Status Code",
+        data: response.statusCode,
+      );
+      printData(title: "📥 BRANDING RESPONSE - Full Body", data: response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        final success = body["success"] == true || body["success"] == "true";
+
+        // Log the data response from server
+        printData(title: "✨ SERVER RESPONSE DATA:", data: body["data"]);
+
+        if (success) {
+          // Check if server returned updated logo/favicon URLs
+          if (body["data"] is Map<String, dynamic>) {
+            final data = body["data"] as Map<String, dynamic>;
+            printData(
+              title: "🖼️ NEW LOGO FROM SERVER:",
+              data:
+                  data["logo"] ??
+                  data["branding_logo"] ??
+                  "NOT FOUND IN RESPONSE",
+            );
+            printData(
+              title: "🎨 NEW FAVICON FROM SERVER:",
+              data:
+                  data["favicon"] ??
+                  data["branding_favicon"] ??
+                  "NOT FOUND IN RESPONSE",
+            );
+          }
+
+          printData(
+            title: "⏳ SILENTLY REFRESHING CLIENT DATA",
+            data: "calling getClientInfoTabs with showLoading=false",
+          );
+          await getClientInfoTabs(clientId, showLoading: false);
+          printData(
+            title: "✅ DATA REFRESH COMPLETE",
+            data: "currentClientInfoTabs updated",
+          );
+          return true;
+        }
+      }
+
+      _handleApiErrors(response);
+      return false;
+    } catch (e, st) {
+      printData(title: "UPDATE BRANDING ERROR:", data: "$e\n$st", e: true);
+      showToast(message: "Failed to update branding assets");
+      return false;
+    } finally {
+      Loaders.hide();
+    }
+  }
+
+  Future<EditClientModel?> getClientDetails(
+    int clientId, {
+    bool showLoader = true,
+  }) async {
+    try {
+      if (showLoader) Loaders.show();
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token") ?? "";
       final url = Uri.parse(
@@ -421,7 +950,117 @@ class ClientPro extends ChangeNotifier {
       printData(title: "ERROR in getClientDetails:", data: "$e $st", e: true);
       return null;
     } finally {
-      Loaders.hide();
+      if (showLoader) Loaders.hide();
+    }
+  }
+
+  Future<void> getClientInfoTabs(
+    int clientId, {
+    bool showLoading = true,
+  }) async {
+    if (showLoading) {
+      clientInfoTabsLoad = true;
+      notifyListeners();
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+      final response = await ApiService().getDataFromApi(
+        api: ApiRoutes.clientInfoTabs(clientId),
+        headers: {"Authorization": "Bearer $token"},
+      );
+
+      if (response is Map<String, dynamic> &&
+          response["success"] == true &&
+          response["data"] is Map<String, dynamic>) {
+        currentClientInfoTabs = ClientInfoTabsModel.fromJson(
+          response["data"] as Map<String, dynamic>,
+        );
+      } else {
+        currentClientInfoTabs = null;
+      }
+    } catch (e) {
+      printData(title: "Client Info Tabs Error:", data: e, e: true);
+      currentClientInfoTabs = null;
+    }
+    if (showLoading) {
+      clientInfoTabsLoad = false;
+      notifyListeners();
+    } else {
+      notifyListeners();
+    }
+  }
+
+  Future<bool> toggleClientChecklistItem({
+    required int clientId,
+    required int checklistId,
+    required int itemIndex,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final roleName = (prefs.getString("role_name") ?? "")
+          .trim()
+          .toLowerCase();
+      if (roleName != "admin") {
+        showToast(message: "Only Admin can check or uncheck checklist items.");
+        return false;
+      }
+      final token = prefs.getString("token") ?? "";
+      final response = await ApiService().postDataToApi(
+        api: ApiRoutes.clientChecklistItemToggle(
+          clientId,
+          checklistId,
+          itemIndex,
+        ),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Accept": "application/json",
+        },
+        payload: const {},
+      );
+
+      if (response is Map<String, dynamic> && response["success"] == true) {
+        showToast(message: response["message"] ?? "Checklist item updated");
+
+        // Update local state immediately with response data
+        if (currentClientInfoTabs != null) {
+          final data = response["data"] as Map<String, dynamic>?;
+          final serverItemIndex = (data?["item_index"] is int)
+              ? data!["item_index"] as int
+              : int.tryParse('${data?["item_index"]}') ?? itemIndex;
+          final itemCompleted = data?["completed"] == true;
+
+          // Find and update the specific checklist item by its actual item index.
+          for (var checklist in currentClientInfoTabs!.onboarding) {
+            if (checklist.id == checklistId) {
+              final localItemPos = checklist.items.indexWhere(
+                (it) => it.index == serverItemIndex,
+              );
+              if (localItemPos == -1) break;
+
+              final existing = checklist.items[localItemPos];
+              checklist.items[localItemPos] = ClientOnboardingItemModel(
+                index: existing.index,
+                text: existing.text,
+                isCompleted: itemCompleted,
+              );
+              break;
+            }
+          }
+
+          notifyListeners();
+        }
+
+        // Refresh in background to ensure data consistency
+        await getClientInfoTabs(clientId, showLoading: false);
+        return true;
+      }
+
+      showToast(message: response["message"] ?? "Checklist item update failed");
+      return false;
+    } catch (e) {
+      printData(title: "Client checklist toggle error:", data: e, e: true);
+      return false;
     }
   }
 
@@ -553,6 +1192,87 @@ class ClientPro extends ChangeNotifier {
     getClients(ctx: context);
   }
 
+  Future<bool> resetContactPassword({
+    required BuildContext ctx,
+    required int contactId,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    try {
+      Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+
+      final payload = {
+        "contact_id": contactId,
+        "password": password,
+        "password_confirmation": passwordConfirmation,
+      };
+      printData(title: "RESET PASSWORD BODY:", data: payload);
+
+      final response = await ApiService().postDataToApi(
+        api: ApiRoutes.resetContactPassword,
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        payload: payload,
+      );
+      printData(title: "RESET PASSWORD RESPONSE:", data: response);
+
+      if (response != null && response["success"] == true) {
+        showToast(
+          message: response["message"] ?? "Password reset successfully",
+        );
+        return true;
+      } else {
+        _handleApiErrorMap(response);
+        return false;
+      }
+    } catch (e) {
+      showToast(message: "An error occurred");
+      return false;
+    } finally {
+      Loaders.hide();
+    }
+  }
+
+  Future<bool> unassignStaff({
+    required int clientId,
+    required int staffId,
+  }) async {
+    try {
+      Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+
+      final response = await ApiService().postDataToApi(
+        api: ApiRoutes.deleteAssignedStaff(clientId, staffId),
+        isDelete: true,
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+      );
+      printData(title: "UNASSIGN STAFF RESPONSE:", data: response);
+
+      if (response != null && response["success"] == true) {
+        showToast(message: response["message"] ?? "Staff removed successfully");
+        return true;
+      } else {
+        _handleApiErrorMap(response);
+        return false;
+      }
+    } catch (e) {
+      showToast(message: "An error occurred");
+      return false;
+    } finally {
+      Loaders.hide();
+    }
+  }
+
   int get appliedFilterCount {
     int count = 0;
     clientFilters.forEach((key, value) {
@@ -570,6 +1290,109 @@ class ClientPro extends ChangeNotifier {
     getClients(ctx: context);
   }
 
+  // ── Services & Pricing ──────────────────────────────────────────────────
+
+  /// Fetches `GET services/pricing` and stores the result in [servicesPricing].
+  Future<void> fetchServicesPricing() async {
+    servicesPricingLoad = true;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      printData(
+        title: '── fetchServicesPricing CALL ──',
+        data: 'Endpoint: ${ApiRoutes.servicesPricing}',
+      );
+
+      final response = await ApiService().getDataFromApi(
+        api: ApiRoutes.servicesPricing,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      printData(
+        title: '── fetchServicesPricing RESPONSE ──',
+        data: response,
+      );
+
+      if (response is Map<String, dynamic> && response['success'] == true) {
+        servicesPricing = ServicesPricingModel.fromJson(response);
+        printData(
+          title: '── fetchServicesPricing PARSED ──',
+          data: 'phPortalWeekly: ${servicesPricing?.phPortalWeekly}, '
+              'addons: ${servicesPricing?.addons.length}, '
+              'rateCardGroups: ${servicesPricing?.rateCardGroups.length}',
+        );
+      } else {
+        printData(
+          title: 'Services Pricing Error:',
+          data: response,
+          e: true,
+        );
+      }
+    } catch (e, st) {
+      printData(
+        title: 'fetchServicesPricing Exception:',
+        data: '$e\n$st',
+        e: true,
+      );
+    } finally {
+      servicesPricingLoad = false;
+      notifyListeners();
+    }
+  }
+
+  /// Updates services pricing settings by sending a POST request to `services/pricing`.
+  Future<bool> updateServicesPricing(Map<String, dynamic> payload) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      printData(
+        title: '── updateServicesPricing CALL ──',
+        data: payload,
+      );
+
+      final response = await ApiService().postDataToApi(
+        api: ApiRoutes.servicesPricing,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        payload: payload,
+      );
+
+      printData(
+        title: '── updateServicesPricing RESPONSE ──',
+        data: response,
+      );
+
+      if (response is Map<String, dynamic> && response['success'] == true) {
+        servicesPricing = ServicesPricingModel.fromJson(response);
+        notifyListeners();
+        return true;
+      } else {
+        printData(
+          title: 'updateServicesPricing Error:',
+          data: response,
+          e: true,
+        );
+        if (response is Map<String, dynamic> && response.containsKey('message')) {
+          showToast(message: response['message']);
+        }
+        return false;
+      }
+    } catch (e, st) {
+      printData(
+        title: 'updateServicesPricing Exception:',
+        data: '$e\n$st',
+        e: true,
+      );
+      showToast(message: 'Error updating services pricing: $e');
+      return false;
+    }
+  }
+
   void _handleApiErrors(http.Response res) {
     try {
       final body = jsonDecode(res.body);
@@ -585,6 +1408,53 @@ class ClientPro extends ChangeNotifier {
       }
     } catch (e) {
       showToast(message: "An error occurred. Please try again.");
+    }
+  }
+
+  void _handleApiErrorMap(dynamic response) {
+    if (response is! Map) return;
+    if (response.containsKey('errors')) {
+      final Map<String, dynamic> errors = response['errors'];
+      errors.forEach((key, value) {
+        if (value is List && value.isNotEmpty) {
+          showToast(message: value[0]);
+        }
+      });
+    } else if (response.containsKey('message')) {
+      showToast(message: response['message']);
+    }
+  }
+
+  Future<bool> signClientAgreement({
+    required int clientId,
+    required String signerName,
+    required String signedDate,
+  }) async {
+    try {
+      Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+
+      final response = await ApiService().postDataToApi(
+        api: ApiRoutes.signClientAgreement(clientId),
+        payload: {"signer_name": signerName},
+        headers: {"Authorization": "Bearer $token"},
+      );
+
+      if (response["success"] == true) {
+        await getClientInfoTabs(clientId, showLoading: false);
+        showToast(message: "Agreement signed successfully!");
+        return true;
+      } else {
+        showToast(message: response["message"] ?? "Failed to sign agreement");
+        return false;
+      }
+    } catch (e) {
+      printData(title: "Sign Agreement Error:", data: e, e: true);
+      showToast(message: "Error signing agreement");
+      return false;
+    } finally {
+      Loaders.hide();
     }
   }
 }

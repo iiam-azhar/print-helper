@@ -3,14 +3,18 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  app_links
   connectivity_plus
+  desktop_webview_window
   emoji_picker_flutter
   file_selector_windows
   firebase_core
+  flutter_inappwebview_windows
   flutter_secure_storage_windows
   permission_handler_windows
   record_windows
   url_launcher_windows
+  window_to_front
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

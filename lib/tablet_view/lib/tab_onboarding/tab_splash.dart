@@ -32,7 +32,7 @@ class _TabSplashState extends State<TabSplash> {
         final prefs = await SharedPreferences.getInstance();
         final token = prefs.getString("token");
         final role = prefs.getString("role_name");
-        print("$role role nameee");
+        debugPrint("$role role nameee");
         if (token != null && token.isNotEmpty) {
           await Provider.of<AuthPro>(
             context,

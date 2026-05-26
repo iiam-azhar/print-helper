@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:print_helper/providers/auth_pro.dart';
 import 'package:print_helper/providers/client_pro.dart';
+import 'tab_client_info_screen.dart';
+import 'tab_client_billing_screen.dart';
 import 'tab_add_client.dart';
 import '../tab_constants/paths.dart';
 import 'package:print_helper/models/client_models.dart';
@@ -488,16 +489,91 @@ class _ClientScreenState extends State<ClientScreen> {
                                       borderRadius: BorderRadius.circular(16),
                                     ),
                                     onSelected: (value) {
-                                      if (value == 'edit') {
+                                      if (value == 'info') {
+                                        if (widget.onMenuTap != null) {
+                                          widget.onMenuTap!(
+                                            "client_info",
+                                            item.id,
+                                          );
+                                        } else {
+                                          navTo(
+                                            context: context,
+                                            page: TabClientInfoScreen(
+                                              clientId: item.id,
+                                            ),
+                                          );
+                                        }
+                                      } else if (value == 'network') {
+                                        if (widget.onMenuTap != null) {
+                                          widget.onMenuTap!(
+                                            "customers",
+                                            item.id,
+                                          );
+                                        }
+                                      } else if (value == 'edit') {
                                         _openRightSideSheet(
                                           context,
                                           EditClient(clientId: item.id),
                                         );
+                                      } else if (value == 'billing') {
+                                        if (widget.onMenuTap != null) {
+                                          widget.onMenuTap!(
+                                            "client_billing",
+                                            item.id,
+                                          );
+                                        } else {
+                                          navTo(
+                                            context: context,
+                                            page: TabClientBillingScreen(
+                                              clientId: item.id,
+                                            ),
+                                          );
+                                        }
                                       } else if (value == 'delete') {
                                         _confirmDelete(context, item.id);
                                       }
                                     },
                                     itemBuilder: (_) => [
+                                      PopupMenuItem<String>(
+                                        value: 'info',
+                                        height: 40,
+                                        child: Row(
+                                          children: [
+                                            ImageWidget(
+                                              image: Paths.info,
+                                              width: 18,
+                                              color: Colors.black87,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            const TextWidget(
+                                              text: 'Info',
+                                              fontSize: 14,
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      PopupMenuItem<String>(
+                                        value: 'network',
+                                        height: 40,
+                                        child: Row(
+                                          children: [
+                                            ImageWidget(
+                                              image: Paths.customers,
+                                              width: 18,
+                                              color: Colors.black87,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            const TextWidget(
+                                              text: 'My Network',
+                                              fontSize: 14,
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                       PopupMenuItem<String>(
                                         value: 'edit',
                                         height: 40,
@@ -511,6 +587,26 @@ class _ClientScreenState extends State<ClientScreen> {
                                             const SizedBox(width: 10),
                                             const TextWidget(
                                               text: 'Edit',
+                                              fontSize: 14,
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      PopupMenuItem<String>(
+                                        value: 'billing',
+                                        height: 40,
+                                        child: Row(
+                                          children: [
+                                            ImageWidget(
+                                              image: Paths.billingIcon,
+                                              width: 18,
+                                              color: Colors.black87,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            const TextWidget(
+                                              text: 'Billing',
                                               fontSize: 14,
                                               color: Colors.black,
                                               fontWeight: FontWeight.w500,
@@ -840,7 +936,8 @@ class _ClientScreenState extends State<ClientScreen> {
           Spacers.sb10(),
           Consumer<ClientPro>(
             builder: (context, provider, _) {
-              if (provider.appliedFilterCount == 0) return const SizedBox.shrink();
+              if (provider.appliedFilterCount == 0)
+                return const SizedBox.shrink();
               return GestureDetector(
                 onTap: () {
                   provider.clearClientFilters(context);

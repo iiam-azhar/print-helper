@@ -276,6 +276,7 @@ class AddCustomerState extends State<AddCustomer> {
                 : null,
             hint: 'Select',
             items: pro.custCmpnyType,
+            emptyText: 'No types available',
             onChanged: (item) {
               setState(() => selectedCompanyType = item?.id);
             },
@@ -289,6 +290,7 @@ class AddCustomerState extends State<AddCustomer> {
                 : null,
             hint: 'Select',
             items: pro.customerRank,
+            emptyText: 'No ranks available',
             onChanged: (item) {
               setState(() => selectedCustRank = item?.id);
             },
@@ -914,8 +916,8 @@ class AddCustomerState extends State<AddCustomer> {
               border: Border.all(color: Colors.grey.shade300),
               color: Colors.white,
             ),
-            child: SizedBox(
-              height: 250,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 250),
               child: SingleChildScrollView(
                 physics: BouncingScrollPhysics(),
                 child: Column(
@@ -1109,7 +1111,9 @@ class AddCustomerState extends State<AddCustomer> {
     required String hint,
     required List<DropdownItem> items,
     required ValueChanged<DropdownItem?> onChanged,
+    String? emptyText,
   }) {
+    final bool isEmpty = items.isEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1125,17 +1129,17 @@ class AddCustomerState extends State<AddCustomer> {
         Spacers.sb5(),
         DropdownButtonFormField<DropdownItem>(
           borderRadius: BorderRadius.circular(12),
-          initialValue: value,
+          value: isEmpty ? null : value,
           isExpanded: true,
           dropdownColor: Colors.white,
-          icon: const Icon(
+          icon: Icon(
             Icons.keyboard_arrow_down_rounded,
             size: 30,
-            color: AppColors.black,
+            color: isEmpty ? Colors.grey.shade400 : AppColors.black,
           ),
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.white,
+            fillColor: isEmpty ? Colors.grey.shade100 : Colors.white,
             contentPadding: EdgeInsets.symmetric(horizontal: 13, vertical: 15),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -1159,9 +1163,10 @@ class AddCustomerState extends State<AddCustomer> {
             ),
           ),
           hint: TextWidget(
-            text: hint,
+            text: isEmpty ? (emptyText ?? hint) : hint,
             fontWeight: FontWeight.w400,
             fontSize: 14,
+            color: isEmpty ? Colors.grey.shade500 : Colors.black54,
           ),
           items: items.map((item) {
             return DropdownMenuItem(
@@ -1173,7 +1178,7 @@ class AddCustomerState extends State<AddCustomer> {
               ),
             );
           }).toList(),
-          onChanged: (item) {
+          onChanged: isEmpty ? null : (item) {
             onChanged(item);
           },
           validator: (v) {

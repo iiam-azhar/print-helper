@@ -13,6 +13,11 @@ import 'package:provider/provider.dart';
 // use mobile chat provider
 import 'package:print_helper/admin/chat/provider/chat_pro.dart';
 import 'sidebar_shimmer.dart';
+import '../tab_services/helpers.dart';
+import 'package:print_helper/models/accounts_models.dart';
+import 'package:print_helper/tablet_view/lib/tab_admin/tab_accounts/tab_account_info_screen_tablet.dart';
+import 'package:print_helper/tablet_view/lib/tab_widgets/tab_toasts.dart';
+import 'package:print_helper/tablet_view/lib/tab_client/tab_client_info_screen.dart';
 
 class SideBar extends StatefulWidget {
   final String activePage;
@@ -30,7 +35,6 @@ class SideBar extends StatefulWidget {
 }
 
 class _SideBarState extends State<SideBar> {
-  bool billingExpanded = true;
   bool get isContact => widget.role == "CONTACT";
   bool get isStaff => widget.role == "STAFF";
   bool get isAdmin => widget.role == "ADMIN";
@@ -83,11 +87,7 @@ class _SideBarState extends State<SideBar> {
             return LayoutBuilder(
               builder: (context, constraints) {
                 bool isCollapsed = MediaQuery.of(context).size.width < 1050;
-                double width = isCollapsed ? 80 : 300;
-                bool billingActive =
-                    widget.activePage == "invoices" ||
-                    widget.activePage == "subscriptions" ||
-                    widget.activePage == "orders";
+                double width = isCollapsed ? 80 : 255;
 
                 Color sidebarColor;
                 Color secondaryColor;
@@ -150,7 +150,7 @@ class _SideBarState extends State<SideBar> {
                     children: [
                       Expanded(
                         child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          padding: const EdgeInsets.symmetric(vertical: 30),
                           child: Column(
                             crossAxisAlignment: isCollapsed
                                 ? CrossAxisAlignment.center
@@ -201,16 +201,15 @@ class _SideBarState extends State<SideBar> {
                                 active: widget.activePage == "files",
                                 clipro: clipro,
                               ),
-                              !isCustomer
-                                  ? _menuItem(
-                                      icon: Paths.timeIcon,
-                                      title: "Time Track",
-                                      page: "time",
-                                      collapsed: isCollapsed,
-                                      active: widget.activePage == "time",
-                                      clipro: clipro,
-                                    )
-                                  : SizedBox(),
+                              _menuItem(
+                                icon: Paths.email,
+                                title: "Email",
+                                page: "email",
+                                collapsed: isCollapsed,
+                                active: widget.activePage == "email",
+                                clipro: clipro,
+                              ),
+
                               _menuItem(
                                 icon: isContact
                                     ? Paths.customers
@@ -242,87 +241,16 @@ class _SideBarState extends State<SideBar> {
                                   active: widget.activePage == "accounts",
                                   clipro: clipro,
                                 ),
-                              if (isAdmin) ...[
-                                Padding(
-                                  padding: EdgeInsets.only(
-                                    left: isCollapsed ? 0 : 20,
-                                    top: 18,
-                                    right: 20,
-                                  ),
-                                  child: GestureDetector(
-                                    onTap: () => setState(
-                                      () => billingExpanded = !billingExpanded,
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment: isCollapsed
-                                            ? MainAxisAlignment.center
-                                            : MainAxisAlignment.start,
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: billingActive
-                                                  ? AppColors.amber
-                                                  : Colors.transparent,
-                                              borderRadius:
-                                                  BorderRadius.circular(50),
-                                            ),
-                                            child: ImageWidget(
-                                              image: Paths.billingIcon,
-                                              width: 24,
-                                              color: billingActive
-                                                  ? AppColors.black
-                                                  : Colors.white,
-                                            ),
-                                          ),
-                                          if (!isCollapsed) ...[
-                                            const SizedBox(width: 15),
-                                            TextWidget(
-                                              text: "Billing",
-                                              color: Colors.white,
-                                              fontSize: 14,
-                                              decoration: TextDecoration.none,
-                                              fontWeight: FontWeight.w300,
-                                            ),
-                                            const Spacer(),
-                                            ImageWidget(
-                                              image: billingExpanded
-                                                  ? Paths.arrowUp
-                                                  : Paths.arrowDwn,
-                                              width: 18,
-                                              color: billingExpanded
-                                                  ? AppColors.primary
-                                                  : AppColors.white,
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                              if (!isAdmin)
+                                _menuItem(
+                                  icon: Paths.billingIcon,
+                                  title: "Payment",
+                                  page: "payment",
+                                  collapsed: isCollapsed,
+                                  active: widget.activePage == "payment",
+                                  clipro: clipro,
                                 ),
-                                if (billingExpanded && !isCollapsed) ...[
-                                  const SizedBox(height: 15),
-                                  _subMenuItem(
-                                    icon: Paths.invoices,
-                                    title: "Invoices",
-                                    page: "invoices",
-                                  ),
-                                  _subMenuItem(
-                                    icon: Paths.subscriptions,
-                                    title: "Subscriptions",
-                                    page: "subscriptions",
-                                  ),
-                                  _subMenuItem(
-                                    icon: Paths.orders,
-                                    title: "Orders",
-                                    page: "orders",
-                                  ),
-                                ],
-                              ],
+
                               if (isAdmin)
                                 _menuItem(
                                   icon: Paths.settings,
@@ -344,90 +272,120 @@ class _SideBarState extends State<SideBar> {
                           ),
                         ),
                       ),
-                      Padding(
-                        padding: EdgeInsets.only(
-                          left: isCollapsed ? 0 : 20,
-                          bottom: 8,
-                        ),
-                        child: Consumer<AuthPro>(
-                          builder: (context, auth, _) {
-                            final name = auth.user?.name;
-                            return Row(
-                              mainAxisAlignment: isCollapsed
-                                  ? MainAxisAlignment.center
-                                  : MainAxisAlignment.start,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(40),
-                                  child: ImageWidget(
-                                    image:
-                                        (auth.user?.image?.isNotEmpty ?? false)
-                                        ? auth.user!.image!
-                                        : Paths.user,
-                                    width: 38,
-                                    height: 38,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                                if (!isCollapsed) ...[
-                                  const SizedBox(width: 14),
-                                  TextWidget(
-                                    text: (name != null && name.isNotEmpty)
-                                        ? name
-                                        : "My Account",
-                                    color: isStaff || isContact || isCustomer
-                                        ? Colors.white
-                                        : Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    decoration: TextDecoration.none,
-                                  ),
-                                ],
-                              ],
+                      GestureDetector(
+                        onTap: () {
+                          final auth = context.read<AuthPro>();
+                          final user = auth.user;
+                          if (user == null) return;
+
+                          if (isContact && user.clientId != null) {
+                            navTo(
+                              context: context,
+                              page: TabClientInfoScreen(
+                                clientId: user.clientId!,
+                              ),
                             );
-                          },
+                          } else if (isStaff) {
+                            final account = AccountModel(
+                              id: user.id,
+                              clientId: user.clientId,
+                              isPrimary: user.isPrimary,
+                              name: user.name,
+                              lastName: user.lastName,
+                              email: user.email,
+                              username: user.username,
+                              emailVerifiedAt: null,
+                              image: user.image,
+                              imageUrl: user.image,
+                              language: user.language,
+                              role: user.role,
+                              accountType: user.accountType,
+                              status: user.status,
+                              createdAt: user.createdAt,
+                              updatedAt: "",
+                              createdBy: null,
+                              updatedBy: null,
+                              customerId: user.customerId,
+                              deletedAt: null,
+                              roleName: user.roleName,
+                              createdByName: "",
+                              phones: [],
+                              emails: [],
+                              creator: null,
+                              staffDetails: null,
+                            );
+                            navTo(
+                              context: context,
+                              page: TabAccountInfoTabletScreen(
+                                account: account,
+                              ),
+                            );
+                          }
+                        },
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            left: isCollapsed ? 0 : 20,
+                            bottom: 8,
+                          ),
+                          child: Consumer<AuthPro>(
+                            builder: (context, auth, _) {
+                              final name = auth.user?.name;
+                              return Row(
+                                mainAxisAlignment: isCollapsed
+                                    ? MainAxisAlignment.center
+                                    : MainAxisAlignment.start,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(40),
+                                    child: ImageWidget(
+                                      image:
+                                          (auth.user?.image?.isNotEmpty ??
+                                              false)
+                                          ? auth.user!.image!
+                                          : Paths.user,
+                                      width: 38,
+                                      height: 38,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  if (!isCollapsed) ...[
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          TextWidget(
+                                            text:
+                                                (name != null &&
+                                                    name.isNotEmpty)
+                                                ? name
+                                                : "My Account",
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            decoration: TextDecoration.none,
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const TextWidget(
+                                            text: "My Profile",
+                                            color: Colors.white70,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w400,
+                                            decoration: TextDecoration.none,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
                         ),
                       ),
-                      if (isStaff || isAdmin)
-                        Container(
-                          margin: EdgeInsets.symmetric(
-                            horizontal: isCollapsed ? 10 : 20,
-                          ),
-                          padding: EdgeInsets.symmetric(
-                            vertical: 16,
-                            horizontal: isCollapsed ? 0 : 18,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isContact ? secondaryColor : AppColors.amber,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: AppColors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.play_arrow,
-                                  color: Colors.black,
-                                  size: 24,
-                                ),
-                              ),
-                              if (!isCollapsed) ...[
-                                const SizedBox(width: 10),
-                                const TextWidget(
-                                  text: "00:00:00",
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                  decoration: TextDecoration.none,
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
+
                       const SizedBox(height: 10),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -508,10 +466,10 @@ class _SideBarState extends State<SideBar> {
     }
     return GestureDetector(
       onTap: () {
-        // if (title == "Logout") {
-        //   final authPro = Provider.of<AuthPro>(context, listen: false);
-        //   authPro.logout(context);
-        // }
+        if (page == "payment") {
+          showToast(message: "Payment module coming soon");
+          return;
+        }
         if (widget.onMenuTap != null) widget.onMenuTap!(page);
       },
       child: Padding(
@@ -574,14 +532,18 @@ class _SideBarState extends State<SideBar> {
             ),
             if (!collapsed) ...[
               const SizedBox(width: 15),
-              TextWidget(
-                text: title,
-                color: isStaff || isContact || isCustomer
-                    ? AppColors.white
-                    : Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-                decoration: TextDecoration.none,
+              Expanded(
+                child: TextWidget(
+                  text: title,
+                  color: isStaff || isContact || isCustomer
+                      ? AppColors.white
+                      : Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  decoration: TextDecoration.none,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ],
@@ -590,47 +552,7 @@ class _SideBarState extends State<SideBar> {
     );
   }
 
-  Widget _subMenuItem({
-    required String icon,
-    required String title,
-    required String page,
-  }) {
-    bool active = widget.activePage == page;
-    return GestureDetector(
-      onTap: () {
-        if (widget.onMenuTap != null) widget.onMenuTap!(page);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        margin: const EdgeInsets.only(left: 45),
 
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: active ? AppColors.primary : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              child: ImageWidget(
-                image: icon,
-                width: 24,
-                color: active ? Colors.black : Colors.white,
-              ),
-            ),
-            const SizedBox(width: 15),
-            TextWidget(
-              text: title,
-              color: Colors.white,
-              decoration: TextDecoration.none,
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Color hexToColor(String hex) {
     hex = hex.replaceAll('#', '');
