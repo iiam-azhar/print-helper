@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:print_helper/widgets/text_widget.dart';
+import 'package:provider/provider.dart';
+import 'package:print_helper/providers/client_pro.dart';
+import 'package:print_helper/models/client_billing_tabs_model.dart';
 
 class CreditEntry {
   final String date;
@@ -27,24 +30,48 @@ class DiscountsCreditsMobile extends StatefulWidget {
 }
 
 class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
-  final List<CreditEntry> _credits = [
-    CreditEntry(
-      date: "Apr 14, 2026",
-      description: "Referral discount — referred FastPrint LA",
-      amount: 200.00,
-      appliedTo: "Apr 14–20 invoice",
-      addedBy: "Jesús M.",
-    ),
-  ];
+  final List<ClientBillingCreditHistoryModel> _localAddedCredits = [];
 
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
 
   double get _availableBalance {
-    return _credits
+    final discounts = context.watch<ClientPro>().currentClientBillingTabs?.discountsCredits;
+    double apiBalance = 0.0;
+    if (discounts?.summary != null) {
+      final val = discounts!.summary['available_credit_balance'] ?? discounts.summary['availableCreditBalance'];
+      if (val != null) {
+        apiBalance = double.tryParse(val.toString()) ?? 0.0;
+      }
+    }
+    final localPending = _localAddedCredits
         .where((e) => e.appliedTo.toLowerCase() == 'pending')
         .fold(0.0, (sum, item) => sum + item.amount);
+    return apiBalance + localPending;
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr);
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return "${months[dt.month - 1]} ${dt.day}, ${dt.year}";
+    } catch (_) {
+      return dateStr;
+    }
   }
 
   @override
@@ -60,11 +87,11 @@ class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
       final desc = _descriptionController.text.trim();
       final amt = double.tryParse(amtStr) ?? 0.0;
 
-      if (amt <= 0) {
+      if (amt == 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: TextWidget(
-              text: "Please enter an amount greater than 0",
+              text: "Please enter a non-zero amount",
               fontSize: 13,
               fontWeight: FontWeight.normal,
               color: Colors.white,
@@ -75,43 +102,29 @@ class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
         return;
       }
 
-      setState(() {
-        _credits.insert(
-          0,
-          CreditEntry(
-            date: _getFormattedToday(),
-            description: desc,
-            amount: amt,
-            appliedTo: "Pending",
-            addedBy: "Admin",
-          ),
-        );
+      // Unfocus immediately when clicking add
+      FocusManager.instance.primaryFocus?.unfocus();
+
+      final clientPro = context.read<ClientPro>();
+      final clientId = clientPro.currentClientBillingTabs?.client.id ?? 0;
+      if (clientId == 0) return;
+      final currentWeek = clientPro.currentClientBillingTabs?.week.start ?? '';
+
+      clientPro.addCredit(clientId: clientId, amount: amt, reason: desc).then((
+        success,
+      ) {
+        if (success) {
+          _amountController.clear();
+          _descriptionController.clear();
+          FocusManager.instance.primaryFocus?.unfocus();
+          clientPro.getClientBillingTabs(
+            clientId,
+            currentWeek,
+            showLoading: false,
+          );
+        }
       });
-
-      _amountController.clear();
-      _descriptionController.clear();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: TextWidget(
-            text: "Credit/Discount added successfully",
-            fontSize: 13,
-            fontWeight: FontWeight.normal,
-            color: Colors.white,
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
     }
-  }
-
-  String _getFormattedToday() {
-    final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    return "${months[now.month - 1]} ${now.day}, ${now.year}";
   }
 
   @override
@@ -174,7 +187,7 @@ class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
                 ),
                 SizedBox(height: 4.h),
                 TextWidget(
-                  text: _availableBalance > 0 
+                  text: _availableBalance > 0
                       ? "Pending credits will auto-apply on next invoice"
                       : "No pending credits — auto-applies on next invoice",
                   fontSize: 11.sp,
@@ -213,10 +226,7 @@ class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            height: 3.h,
-            color: const Color(0xFFFACC15),
-          ),
+          Container(height: 3.h, color: const Color(0xFFFACC15)),
           Padding(
             padding: EdgeInsets.all(16.w),
             child: Form(
@@ -232,17 +242,28 @@ class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
                     letterSpacing: 0.5,
                   ),
                   SizedBox(height: 16.h),
-                  
+
                   // Amount Input Field
                   _buildInputLabel("AMOUNT (\$)"),
                   TextFormField(
                     controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: GoogleFonts.poppins(fontSize: 13.sp, color: Colors.black),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    style: GoogleFonts.poppins(
+                      fontSize: 13.sp,
+                      color: Colors.black,
+                    ),
                     decoration: InputDecoration(
                       hintText: "0.00",
-                      hintStyle: GoogleFonts.poppins(fontSize: 13.sp, color: Colors.grey.shade400),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+                      hintStyle: GoogleFonts.poppins(
+                        fontSize: 13.sp,
+                        color: Colors.grey.shade400,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12.w,
+                        vertical: 10.h,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(6.r),
                         borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -273,11 +294,21 @@ class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
                   TextFormField(
                     controller: _descriptionController,
                     maxLines: 2,
-                    style: GoogleFonts.poppins(fontSize: 13.sp, color: Colors.black),
+                    style: GoogleFonts.poppins(
+                      fontSize: 13.sp,
+                      color: Colors.black,
+                    ),
                     decoration: InputDecoration(
-                      hintText: "e.g. Referral discount — referred FastPrint LA",
-                      hintStyle: GoogleFonts.poppins(fontSize: 13.sp, color: Colors.grey.shade400),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+                      hintText:
+                          "e.g. Referral discount — referred FastPrint LA",
+                      hintStyle: GoogleFonts.poppins(
+                        fontSize: 13.sp,
+                        color: Colors.grey.shade400,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12.w,
+                        vertical: 10.h,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(6.r),
                         borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -309,7 +340,10 @@ class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8.r),
                       ),
-                      padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 12.h),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 18.w,
+                        vertical: 12.h,
+                      ),
                     ),
                     onPressed: _handleAddCredit,
                     child: Row(
@@ -377,16 +411,55 @@ class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
         children: [
           // Header
           Padding(
-            padding: EdgeInsets.all(16.w),
-            child: TextWidget(
-              text: "CREDIT HISTORY",
-              fontSize: 12.sp,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade600,
-              letterSpacing: 0.5,
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextWidget(
+                  text: "CREDIT HISTORY",
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade600,
+                  letterSpacing: 0.5,
+                ),
+                GestureDetector(
+                  onTap: () {
+                    final clientPro = context.read<ClientPro>();
+                    final clientId =
+                        clientPro.currentClientBillingTabs?.client.id ?? 0;
+                    final currentWeek =
+                        clientPro.currentClientBillingTabs?.week.start ?? '';
+                    if (clientId != 0 && currentWeek.isNotEmpty) {
+                      clientPro.getClientBillingTabs(clientId, currentWeek);
+                    }
+                  },
+                  child: Container(
+                    padding: EdgeInsets.all(8.w),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    child: context.watch<ClientPro>().clientBillingTabsLoad
+                        ? SizedBox(
+                            width: 16.w,
+                            height: 16.w,
+                            child: const CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: Colors.black,
+                            ),
+                          )
+                        : Icon(
+                            Icons.refresh,
+                            size: 16.sp,
+                            color: Colors.black,
+                          ),
+                  ),
+                ),
+              ],
             ),
           ),
-          
+
           // Table
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -397,109 +470,146 @@ class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
                   // Table Header Row
                   Container(
                     color: const Color(0xFFF9FAFB),
-                    padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 16.w),
+                    padding: EdgeInsets.symmetric(
+                      vertical: 10.h,
+                      horizontal: 16.w,
+                    ),
                     child: Row(
                       children: [
                         Expanded(flex: 2, child: _buildTableHeader("DATE")),
-                        Expanded(flex: 4, child: _buildTableHeader("DESCRIPTION")),
+                        Expanded(
+                          flex: 4,
+                          child: _buildTableHeader("DESCRIPTION"),
+                        ),
                         Expanded(flex: 2, child: _buildTableHeader("AMOUNT")),
-                        Expanded(flex: 3, child: _buildTableHeader("APPLIED TO")),
+                        Expanded(
+                          flex: 3,
+                          child: _buildTableHeader("APPLIED TO"),
+                        ),
                         Expanded(flex: 2, child: _buildTableHeader("ADDED BY")),
                       ],
                     ),
                   ),
 
                   // Data Rows
-                  ...List.generate(_credits.length, (index) {
-                    final entry = _credits[index];
-                    final isPending = entry.appliedTo.toLowerCase() == 'pending';
-                    return Container(
-                      padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
-                      decoration: const BoxDecoration(
-                        border: Border(bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1)),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: TextWidget(
-                              text: entry.date,
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.normal,
-                              color: Colors.grey.shade800,
+                  ...(() {
+                    final apiCredits =
+                        context
+                            .watch<ClientPro>()
+                            .currentClientBillingTabs
+                            ?.discountsCredits
+                            .items ??
+                        [];
+
+                    return apiCredits.map((entry) {
+                      return Container(
+                        padding: EdgeInsets.symmetric(
+                          vertical: 14.h,
+                          horizontal: 16.w,
+                        ),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: Color(0xFFF3F4F6),
+                              width: 1,
                             ),
                           ),
-                          Expanded(
-                            flex: 4,
-                            child: TextWidget(
-                              text: entry.description,
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.normal,
-                              color: Colors.black,
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: TextWidget(
-                              text: "\$${entry.amount.toStringAsFixed(2)}",
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF10B981), // Green
-                            ),
-                          ),
-                          Expanded(
-                            flex: 3,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-                                decoration: BoxDecoration(
-                                  color: isPending 
-                                      ? const Color(0xFFFEF9C3) // Light yellow
-                                      : const Color(0xFFDCFCE7), // Light green
-                                  borderRadius: BorderRadius.circular(12.r),
-                                ),
-                                child: TextWidget(
-                                  text: entry.appliedTo,
-                                  fontSize: 10.sp,
-                                  fontWeight: FontWeight.bold,
-                                  color: isPending 
-                                      ? const Color(0xFF854D0E) // Dark yellow/gold
-                                      : const Color(0xFF15803D), // Dark green
-                                ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextWidget(
+                                text: _formatDate(entry.createdAt),
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.normal,
+                                color: Colors.grey.shade800,
                               ),
                             ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: TextWidget(
-                              text: entry.addedBy,
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.normal,
-                              color: Colors.grey.shade600,
+                            Expanded(
+                              flex: 4,
+                              child: TextWidget(
+                                text: entry.reason,
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.normal,
+                                color: Colors.black,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                            Expanded(
+                              flex: 2,
+                              child: TextWidget(
+                                text: entry.amount < 0
+                                    ? "-\$${entry.amount.abs().toStringAsFixed(2)}"
+                                    : "\$${entry.amount.toStringAsFixed(2)}",
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.bold,
+                                color: entry.amount < 0
+                                    ? const Color(0xFFEF4444)
+                                    : const Color(0xFF10B981),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: TextWidget(
+                                text: entry.appliedTo,
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.normal,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: TextWidget(
+                                text: entry.addedBy,
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.normal,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    });
+                  })(),
                 ],
               ),
             ),
           ),
 
-          // "No other credits on record" label
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: 20.h),
-            child: const Center(
-              child: TextWidget(
-                text: "No other credits on record",
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
-                color: Colors.grey,
-              ),
-            ),
-          ),
+          // Pagination
+          ...(() {
+            final discounts =
+                context
+                    .watch<ClientPro>()
+                    .currentClientBillingTabs
+                    ?.discountsCredits;
+            final pagination = discounts?.pagination ?? {};
+            final activePage = pagination['current_page'] ?? 1;
+            final totalPages = pagination['last_page'] ?? 1;
+
+            if (totalPages > 1) {
+              return [
+                _buildPagination(
+                  currentPage: activePage,
+                  totalPages: totalPages,
+                  onPageChanged: (page) {
+                    final clientPro = context.read<ClientPro>();
+                    final clientId = clientPro.currentClientBillingTabs?.client.id ?? 0;
+                    final currentWeek = clientPro.currentClientBillingTabs?.week.start ?? '';
+                    if (clientId != 0) {
+                      clientPro.getClientBillingTabs(
+                        clientId,
+                        currentWeek,
+                        creditsPage: page,
+                      );
+                    }
+                  },
+                ),
+                SizedBox(height: 12.h),
+              ];
+            }
+            return const <Widget>[];
+          })(),
         ],
       ),
     );
@@ -511,6 +621,126 @@ class _DiscountsCreditsMobileState extends State<DiscountsCreditsMobile> {
       fontSize: 10.sp,
       fontWeight: FontWeight.bold,
       color: Colors.grey.shade500,
+    );
+  }
+
+  Widget _buildPagination({
+    required int currentPage,
+    required int totalPages,
+    required ValueChanged<int> onPageChanged,
+  }) {
+    List<int> pages = [];
+    if (totalPages <= 5) {
+      pages = List.generate(totalPages, (i) => i + 1);
+    } else {
+      pages.add(1);
+      if (currentPage > 3) pages.add(-1); // ellipsis
+      int start = (currentPage - 1).clamp(2, totalPages - 2);
+      int end = (currentPage + 1).clamp(2, totalPages - 1);
+      for (int i = start; i <= end; i++) {
+        pages.add(i);
+      }
+      if (currentPage < totalPages - 2) pages.add(-1); // ellipsis
+      pages.add(totalPages);
+    }
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _pageCircle(
+                icon: Icons.keyboard_double_arrow_left,
+                enabled: currentPage > 1,
+                onTap: () => onPageChanged(1),
+              ),
+              _pageCircle(
+                icon: Icons.chevron_left,
+                enabled: currentPage > 1,
+                onTap: () => onPageChanged(currentPage - 1),
+              ),
+              SizedBox(width: 4.w),
+              ...pages.map((p) {
+                if (p == -1) {
+                  return Container(
+                    margin: EdgeInsets.symmetric(horizontal: 4.w),
+                    child: TextWidget(
+                      text: "...",
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.normal,
+                      color: Colors.grey,
+                    ),
+                  );
+                }
+                final bool isActive = p == currentPage;
+                return GestureDetector(
+                  onTap: () => onPageChanged(p),
+                  child: Container(
+                    width: 28.w,
+                    height: 28.w,
+                    margin: EdgeInsets.symmetric(horizontal: 2.w),
+                    decoration: BoxDecoration(
+                      color: isActive ? const Color(0xFFFACC15) : Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    child: Center(
+                      child: TextWidget(
+                        text: "$p",
+                        fontSize: 11.sp,
+                        color: isActive ? Colors.black : Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              SizedBox(width: 4.w),
+              _pageCircle(
+                icon: Icons.chevron_right,
+                enabled: currentPage < totalPages,
+                onTap: () => onPageChanged(currentPage + 1),
+              ),
+              _pageCircle(
+                icon: Icons.keyboard_double_arrow_right,
+                enabled: currentPage < totalPages,
+                onTap: () => onPageChanged(totalPages),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pageCircle({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 28.w,
+        height: 28.w,
+        margin: EdgeInsets.symmetric(horizontal: 2.w),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: enabled ? Colors.white : Colors.grey.shade100,
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: Center(
+          child: Icon(
+            icon,
+            size: 14.sp,
+            color: enabled ? Colors.black87 : Colors.grey,
+          ),
+        ),
+      ),
     );
   }
 }

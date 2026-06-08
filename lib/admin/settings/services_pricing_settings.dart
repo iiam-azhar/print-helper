@@ -3,10 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:print_helper/providers/client_pro.dart';
 import 'package:print_helper/models/billing_models.dart';
 
 import '../../constants/colors.dart';
+import '../../constants/paths.dart';
+import '../../widgets/image_widget.dart';
 import '../../widgets/text_widget.dart';
 import '../../widgets/toasts.dart';
 
@@ -27,8 +30,9 @@ class _ServicesPricingSettingsMobileState
   late List<SpecialistConfig> _specialists;
 
   // --- PH Portal State ---
-  final TextEditingController _weeklyPriceController =
-      TextEditingController(text: '345.4');
+  final TextEditingController _weeklyPriceController = TextEditingController(
+    text: '345.4',
+  );
 
   // --- Add-on Services State ---
   late List<AddonServiceConfig> _addons;
@@ -44,15 +48,17 @@ class _ServicesPricingSettingsMobileState
     super.initState();
     _initializeFallback(); // populate with defaults first
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshData().then((_) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
-      }).catchError((_) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
-      });
+      _refreshData()
+          .then((_) {
+            if (mounted) {
+              setState(() => _isLoading = false);
+            }
+          })
+          .catchError((_) {
+            if (mounted) {
+              setState(() => _isLoading = false);
+            }
+          });
     });
   }
 
@@ -80,14 +86,16 @@ class _ServicesPricingSettingsMobileState
           name: group.accountTypeName,
           wholesaleBase: ws.basePrice,
           wholesaleDiscount: ws.volumeDiscount,
-          wholesalePercentages: ws.levelPercentages
-              .map((k, v) => MapEntry(_capitalise(k), v)),
-          wholesaleIconSvg: ws.iconSvg,
+          wholesalePercentages: ws.levelPercentages.map(
+            (k, v) => MapEntry(_capitalise(k), v),
+          ),
+          wholesaleIconSvg: ws.iconSvgUrl,
           retailBase: rt.basePrice,
           retailDiscount: rt.volumeDiscount,
-          retailPercentages: rt.levelPercentages
-              .map((k, v) => MapEntry(_capitalise(k), v)),
-          retailIconSvg: rt.iconSvg,
+          retailPercentages: rt.levelPercentages.map(
+            (k, v) => MapEntry(_capitalise(k), v),
+          ),
+          retailIconSvg: rt.iconSvgUrl,
         ),
       );
     }
@@ -95,18 +103,22 @@ class _ServicesPricingSettingsMobileState
     // Add-ons
     _addons.clear();
     for (final a in pricing.addons) {
-      _addons.add(AddonServiceConfig(
-        name: a.name,
-        unit: a.billingUnit,
-        included: a.included,
-        price: a.weeklyPrice,
-      ));
+      _addons.add(
+        AddonServiceConfig(
+          name: a.name,
+          unit: a.billingUnit,
+          included: a.included,
+          price: a.weeklyPrice,
+        ),
+      );
     }
 
     // DPC launch packages
     _launchPackages.clear();
     for (final d in pricing.dpcTerms) {
-      _launchPackages.add(LaunchPackageConfig(months: d.months, total: d.totalPrice));
+      _launchPackages.add(
+        LaunchPackageConfig(id: d.id, months: d.months, total: d.totalPrice),
+      );
     }
 
     // Earnings floors
@@ -178,15 +190,60 @@ class _ServicesPricingSettingsMobileState
     ];
 
     _addons = [
-      AddonServiceConfig(name: 'File Storage', unit: 'per 500GB/wk', included: 0, price: 0.69),
-      AddonServiceConfig(name: 'Email Connections', unit: 'per extra email slot', included: 0, price: 4.62),
-      AddonServiceConfig(name: 'Support Lines', unit: 'per extra phone number', included: 1, price: 0.69),
-      AddonServiceConfig(name: 'Incoming Call Minutes', unit: 'per extra minute', included: 5, price: 0.05),
-      AddonServiceConfig(name: 'Outgoing Call Minutes', unit: 'per extra minute', included: 5, price: 0.07),
-      AddonServiceConfig(name: 'Incoming SMS', unit: 'per extra SMS', included: 5, price: 0.01),
-      AddonServiceConfig(name: 'Outgoing SMS', unit: 'per extra SMS', included: 5, price: 0.02),
-      AddonServiceConfig(name: 'Incoming MMS', unit: 'per extra MMS', included: 5, price: 0.05),
-      AddonServiceConfig(name: 'Outgoing MMS', unit: 'per extra MMS', included: 5, price: 0.1),
+      AddonServiceConfig(
+        name: 'File Storage',
+        unit: 'per 500GB/wk',
+        included: 0,
+        price: 0.69,
+      ),
+      AddonServiceConfig(
+        name: 'Email Connections',
+        unit: 'per extra email slot',
+        included: 0,
+        price: 4.62,
+      ),
+      AddonServiceConfig(
+        name: 'Support Lines',
+        unit: 'per extra phone number',
+        included: 1,
+        price: 0.69,
+      ),
+      AddonServiceConfig(
+        name: 'Incoming Call Minutes',
+        unit: 'per extra minute',
+        included: 5,
+        price: 0.05,
+      ),
+      AddonServiceConfig(
+        name: 'Outgoing Call Minutes',
+        unit: 'per extra minute',
+        included: 5,
+        price: 0.07,
+      ),
+      AddonServiceConfig(
+        name: 'Incoming SMS',
+        unit: 'per extra SMS',
+        included: 5,
+        price: 0.01,
+      ),
+      AddonServiceConfig(
+        name: 'Outgoing SMS',
+        unit: 'per extra SMS',
+        included: 5,
+        price: 0.02,
+      ),
+      AddonServiceConfig(
+        name: 'Incoming MMS',
+        unit: 'per extra MMS',
+        included: 5,
+        price: 0.05,
+      ),
+      AddonServiceConfig(
+        name: 'Outgoing MMS',
+        unit: 'per extra MMS',
+        included: 5,
+        price: 0.1,
+      ),
     ];
 
     _launchPackages = [
@@ -216,7 +273,8 @@ class _ServicesPricingSettingsMobileState
     if (pricing == null) return {};
 
     // 1. Ph Portal Weekly
-    final phPortalWeekly = double.tryParse(_weeklyPriceController.text) ?? pricing.phPortalWeekly;
+    final phPortalWeekly =
+        double.tryParse(_weeklyPriceController.text) ?? pricing.phPortalWeekly;
 
     // 2. Rate Card Groups
     final List<Map<String, dynamic>> rateCardGroupsJson = [];
@@ -233,16 +291,20 @@ class _ServicesPricingSettingsMobileState
 
       // Wholesale card
       final double wsBase = spec != null
-          ? (double.tryParse(spec.wholesaleBaseCtrl.text) ?? group.wholesale.basePrice)
+          ? (double.tryParse(spec.wholesaleBaseCtrl.text) ??
+                group.wholesale.basePrice)
           : group.wholesale.basePrice;
       final double wsDiscount = spec != null
-          ? (double.tryParse(spec.wholesaleDiscountCtrl.text) ?? group.wholesale.volumeDiscount)
+          ? (double.tryParse(spec.wholesaleDiscountCtrl.text) ??
+                group.wholesale.volumeDiscount)
           : group.wholesale.volumeDiscount;
       final Map<String, dynamic> wsPercentages = {};
       group.wholesale.levelPercentages.forEach((key, val) {
         final uiKey = _capitalise(key);
         final pctCtrl = spec?.wholesalePercentagesCtrls[uiKey];
-        wsPercentages[key] = pctCtrl != null ? (double.tryParse(pctCtrl.text) ?? val) : val;
+        wsPercentages[key] = pctCtrl != null
+            ? (double.tryParse(pctCtrl.text) ?? val)
+            : val;
       });
 
       final List<Map<String, dynamic>> wsVolumes = [];
@@ -257,16 +319,20 @@ class _ServicesPricingSettingsMobileState
 
       // Retail card
       final double rtBase = spec != null
-          ? (double.tryParse(spec.retailBaseCtrl.text) ?? group.retail.basePrice)
+          ? (double.tryParse(spec.retailBaseCtrl.text) ??
+                group.retail.basePrice)
           : group.retail.basePrice;
       final double rtDiscount = spec != null
-          ? (double.tryParse(spec.retailDiscountCtrl.text) ?? group.retail.volumeDiscount)
+          ? (double.tryParse(spec.retailDiscountCtrl.text) ??
+                group.retail.volumeDiscount)
           : group.retail.volumeDiscount;
       final Map<String, dynamic> rtPercentages = {};
       group.retail.levelPercentages.forEach((key, val) {
         final uiKey = _capitalise(key);
         final pctCtrl = spec?.retailPercentagesCtrls[uiKey];
-        rtPercentages[key] = pctCtrl != null ? (double.tryParse(pctCtrl.text) ?? val) : val;
+        rtPercentages[key] = pctCtrl != null
+            ? (double.tryParse(pctCtrl.text) ?? val)
+            : val;
       });
 
       final List<Map<String, dynamic>> rtVolumes = [];
@@ -295,7 +361,7 @@ class _ServicesPricingSettingsMobileState
           "volume_discount": rtDiscount,
           "level_percentages": rtPercentages,
           "volumes": rtVolumes,
-        }
+        },
       });
     }
 
@@ -307,7 +373,9 @@ class _ServicesPricingSettingsMobileState
       if (i < _addons.length) {
         uiAddon = _addons[i];
       }
-      final String includedVal = uiAddon != null ? uiAddon.includedCtrl.text : addon.included.toString();
+      final String includedVal = uiAddon != null
+          ? uiAddon.includedCtrl.text
+          : addon.included.toString();
       final double priceVal = uiAddon != null
           ? (double.tryParse(uiAddon.priceCtrl.text) ?? addon.weeklyPrice)
           : addon.weeklyPrice;
@@ -339,34 +407,31 @@ class _ServicesPricingSettingsMobileState
     }
 
     // 5. Weekly Bonuses
-    final List<Map<String, dynamic>> weeklyBonusesJson = pricing.weeklyBonuses.map((b) => {
-      "id": b.id,
-      "amounts": b.amounts,
-    }).toList();
+    final List<Map<String, dynamic>> weeklyBonusesJson = pricing.weeklyBonuses
+        .map((b) => {"id": b.id, "amounts": b.amounts})
+        .toList();
 
     // 6. One-time Bonuses
-    final List<Map<String, dynamic>> onetimeBonusesJson = pricing.onetimeBonuses.map((b) => {
-      "id": b.id,
-      "amounts": b.amounts,
-    }).toList();
+    final List<Map<String, dynamic>> onetimeBonusesJson = pricing.onetimeBonuses
+        .map((b) => {"id": b.id, "amounts": b.amounts})
+        .toList();
 
     // 7. Supervisor Bonuses
-    final List<Map<String, dynamic>> supervisorBonusesJson = pricing.supervisorBonuses.map((b) => {
-      "id": b.id,
-      "amount_per_point": b.amountPerPoint,
-    }).toList();
+    final List<Map<String, dynamic>> supervisorBonusesJson = pricing
+        .supervisorBonuses
+        .map((b) => {"id": b.id, "amount_per_point": b.amountPerPoint})
+        .toList();
 
     // 8. Level Floors
     final List<Map<String, dynamic>> levelFloorsJson = [];
     for (final floor in pricing.levelFloors) {
       final uiKey = _capitalise(floor.level);
       final floorCtrl = _floorControllers[uiKey];
-      final double minVal = floorCtrl != null ? (double.tryParse(floorCtrl.text) ?? floor.weeklyMinimum) : floor.weeklyMinimum;
+      final double minVal = floorCtrl != null
+          ? (double.tryParse(floorCtrl.text) ?? floor.weeklyMinimum)
+          : floor.weeklyMinimum;
 
-      levelFloorsJson.add({
-        "id": floor.id,
-        "weekly_minimum": minVal,
-      });
+      levelFloorsJson.add({"id": floor.id, "weekly_minimum": minVal});
     }
 
     return {
@@ -379,7 +444,7 @@ class _ServicesPricingSettingsMobileState
         "supervisorBonuses": supervisorBonusesJson,
         "levelFloors": levelFloorsJson,
         "phPortalWeekly": phPortalWeekly,
-      }
+      },
     };
   }
 
@@ -397,7 +462,9 @@ class _ServicesPricingSettingsMobileState
 
     final elapsed = DateTime.now().difference(startTime);
     if (elapsed.inMilliseconds < 800) {
-      await Future.delayed(Duration(milliseconds: 800 - elapsed.inMilliseconds));
+      await Future.delayed(
+        Duration(milliseconds: 800 - elapsed.inMilliseconds),
+      );
     }
     setState(() => _isSaving = false);
 
@@ -430,7 +497,8 @@ class _ServicesPricingSettingsMobileState
                   ),
                   SizedBox(height: 4.h),
                   TextWidget(
-                    text: 'Configure all rates, bonuses and add-on pricing in one place.',
+                    text:
+                        'Configure all rates, bonuses and add-on pricing in one place.',
                     fontSize: 12.sp,
                     fontWeight: FontWeight.normal,
                     color: const Color(0xFF4B5563),
@@ -461,7 +529,8 @@ class _ServicesPricingSettingsMobileState
                   _buildSectionHeader('Recurring Add-on Services'),
                   SizedBox(height: 2.h),
                   TextWidget(
-                    text: 'These are charged weekly to clients who activate them.',
+                    text:
+                        'These are charged weekly to clients who activate them.',
                     fontSize: 11.sp,
                     fontWeight: FontWeight.normal,
                     color: const Color(0xFF6B7280),
@@ -487,7 +556,8 @@ class _ServicesPricingSettingsMobileState
                   _buildSectionHeader('Specialist Earnings Floor (Per Level)'),
                   SizedBox(height: 2.h),
                   TextWidget(
-                    text: 'Print Helpers covers the difference if weekly earnings fall below minimums.',
+                    text:
+                        'Print Helpers covers the difference if weekly earnings fall below minimums.',
                     fontSize: 11.sp,
                     fontWeight: FontWeight.normal,
                     color: const Color(0xFF6B7280),
@@ -496,7 +566,8 @@ class _ServicesPricingSettingsMobileState
                   _buildFloorGrid(),
                   SizedBox(height: 8.h),
                   TextWidget(
-                    text: 'Example: If Gold specialist earns \$110 (below \$120), Print Helpers adds \$10.',
+                    text:
+                        'Example: If Gold specialist earns \$110 (below \$120), Print Helpers adds \$10.',
                     fontSize: 10.sp,
                     fontWeight: FontWeight.w500,
                     color: const Color(0xFF6B7280),
@@ -625,7 +696,11 @@ class _ServicesPricingSettingsMobileState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber_rounded, color: const Color(0xFFD97706), size: 18.w),
+          Icon(
+            Icons.warning_amber_rounded,
+            color: const Color(0xFFD97706),
+            size: 18.w,
+          ),
           SizedBox(width: 8.w),
           Expanded(
             child: Text(
@@ -762,12 +837,25 @@ class _ServicesPricingSettingsMobileState
                   ),
                 ),
                 if (iconSvg.isNotEmpty)
-                  SvgPicture.string(
-                    iconSvg,
-                    colorFilter: ColorFilter.mode(Colors.grey.shade400, BlendMode.srcIn),
-                    width: 18.w,
-                    height: 18.w,
-                  )
+                  iconSvg.startsWith('http')
+                      ? SvgPicture.network(
+                          iconSvg,
+                          colorFilter: ColorFilter.mode(
+                            Colors.grey.shade400,
+                            BlendMode.srcIn,
+                          ),
+                          width: 18.w,
+                          height: 18.w,
+                        )
+                      : SvgPicture.string(
+                          iconSvg,
+                          colorFilter: ColorFilter.mode(
+                            Colors.grey.shade400,
+                            BlendMode.srcIn,
+                          ),
+                          width: 18.w,
+                          height: 18.w,
+                        )
                 else
                   Icon(icon, color: Colors.grey.shade400, size: 18.w),
               ],
@@ -808,7 +896,7 @@ class _ServicesPricingSettingsMobileState
                   children: [
                     Expanded(
                       child: _buildInputField(
-                        label: 'Assoc %',
+                        label: 'Associate %',
                         controller: percentageControllers['Associate']!,
                         centerText: true,
                         onChanged: onChanged,
@@ -839,7 +927,7 @@ class _ServicesPricingSettingsMobileState
                   children: [
                     Expanded(
                       child: _buildInputField(
-                        label: 'Plat %',
+                        label: 'Platinum %',
                         controller: percentageControllers['Platinum']!,
                         centerText: true,
                         onChanged: onChanged,
@@ -848,7 +936,7 @@ class _ServicesPricingSettingsMobileState
                     SizedBox(width: 6.w),
                     Expanded(
                       child: _buildInputField(
-                        label: 'Diam %',
+                        label: 'Diamond %',
                         controller: percentageControllers['Diamond']!,
                         centerText: true,
                         onChanged: onChanged,
@@ -857,7 +945,7 @@ class _ServicesPricingSettingsMobileState
                     SizedBox(width: 6.w),
                     Expanded(
                       child: _buildInputField(
-                        label: 'Part %',
+                        label: 'Partner %',
                         controller: percentageControllers['Partner']!,
                         centerText: true,
                         onChanged: onChanged,
@@ -886,7 +974,8 @@ class _ServicesPricingSettingsMobileState
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: SizedBox(
-                      width: 540.w, // fits all columns comfortably in scroll view
+                      width:
+                          540.w, // fits all columns comfortably in scroll view
                       child: Table(
                         columnWidths: const {
                           0: FlexColumnWidth(1.2), // Volume
@@ -901,7 +990,9 @@ class _ServicesPricingSettingsMobileState
                         children: [
                           TableRow(
                             decoration: const BoxDecoration(
-                              border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+                              border: Border(
+                                bottom: BorderSide(color: Color(0xFFE5E7EB)),
+                              ),
                             ),
                             children: [
                               _buildTableHeaderCell('Volume'),
@@ -957,14 +1048,16 @@ class _ServicesPricingSettingsMobileState
     final String volumeLabel = isWholesale
         ? '${(index + 1) * 50}/wk'
         : index == 0
-            ? '10/wk'
-            : index == 1
-                ? '20/wk'
-                : index == 2
-                    ? '50/wk'
-                    : '100/wk';
+        ? '10/wk'
+        : index == 1
+        ? '20/wk'
+        : index == 2
+        ? '50/wk'
+        : '100/wk';
 
-    final double clientPrice = double.parse((basePrice - (index * discount)).toStringAsFixed(3));
+    final double clientPrice = double.parse(
+      (basePrice - (index * discount)).toStringAsFixed(3),
+    );
     final double displayClientPrice = clientPrice < 0 ? 0.0 : clientPrice;
 
     return TableRow(
@@ -993,16 +1086,19 @@ class _ServicesPricingSettingsMobileState
         for (final rank in percentageCtrls.keys)
           Padding(
             padding: EdgeInsets.symmetric(vertical: 6.h, horizontal: 4.w),
-            child: Builder(builder: (context) {
-              final double pct = double.tryParse(percentageCtrls[rank]!.text) ?? 0.0;
-              final double share = displayClientPrice * (pct / 100.0);
-              return TextWidget(
-                text: '\$${share.toStringAsFixed(3)}',
-                fontSize: 9.sp,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF4B5563),
-              );
-            }),
+            child: Builder(
+              builder: (context) {
+                final double pct =
+                    double.tryParse(percentageCtrls[rank]!.text) ?? 0.0;
+                final double share = displayClientPrice * (pct / 100.0);
+                return TextWidget(
+                  text: '\$${share.toStringAsFixed(3)}',
+                  fontSize: 9.sp,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF4B5563),
+                );
+              },
+            ),
           ),
       ],
     );
@@ -1072,7 +1168,10 @@ class _ServicesPricingSettingsMobileState
               children: [
                 // Combined Service & Billing Unit
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 10.w,
+                    vertical: 8.h,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1101,18 +1200,30 @@ class _ServicesPricingSettingsMobileState
                       controller: addon.includedCtrl,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w500,
+                      ),
                       decoration: InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 6.h),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.r)),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 8.w,
+                          vertical: 6.h,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8.r),
+                        ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8.r),
-                          borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFD1D5DB),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8.r),
-                          borderSide: const BorderSide(color: AppColors.primary),
+                          borderSide: const BorderSide(
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                     ),
@@ -1125,21 +1236,38 @@ class _ServicesPricingSettingsMobileState
                     height: 34.h,
                     child: TextField(
                       controller: addon.priceCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w500),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w500,
+                      ),
                       decoration: InputDecoration(
                         isDense: true,
                         prefixText: '\$ ',
-                        prefixStyle: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w500),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 6.h),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.r)),
+                        prefixStyle: TextStyle(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 8.w,
+                          vertical: 6.h,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8.r),
+                        ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8.r),
-                          borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFD1D5DB),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8.r),
-                          borderSide: const BorderSide(color: AppColors.primary),
+                          borderSide: const BorderSide(
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                     ),
@@ -1189,7 +1317,10 @@ class _ServicesPricingSettingsMobileState
                 GestureDetector(
                   onTap: _showAddTermDialog,
                   child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 8.w,
+                      vertical: 4.h,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF10B981),
                       borderRadius: BorderRadius.circular(6.r),
@@ -1242,14 +1373,14 @@ class _ServicesPricingSettingsMobileState
                         color: const Color(0xFF111827),
                       ),
                       IconButton(
-                        icon: Icon(Icons.delete_outline_rounded, color: const Color(0xFFEF4444), size: 18.w),
+                        icon: ImageWidget(
+                          image: Paths.delete,
+                          width: 18,
+                          height: 18,
+                        ),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        onPressed: () {
-                          setState(() {
-                            _launchPackages.remove(pkg);
-                          });
-                        },
+                        onPressed: () => _confirmDeleteTerm(context, pkg),
                       ),
                     ],
                   ),
@@ -1271,22 +1402,40 @@ class _ServicesPricingSettingsMobileState
                               height: 34.h,
                               child: TextField(
                                 controller: pkg.totalCtrl,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w500),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                style: TextStyle(
+                                  fontSize: 12.sp,
+                                  fontWeight: FontWeight.w500,
+                                ),
                                 onChanged: (_) => setState(() {}),
                                 decoration: InputDecoration(
                                   isDense: true,
                                   prefixText: '\$ ',
-                                  prefixStyle: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w500),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 6.h),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.r)),
+                                  prefixStyle: TextStyle(
+                                    fontSize: 12.sp,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 8.w,
+                                    vertical: 6.h,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.r),
+                                  ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8.r),
-                                    borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFFD1D5DB),
+                                    ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8.r),
-                                    borderSide: const BorderSide(color: AppColors.primary),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.primary,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1306,16 +1455,19 @@ class _ServicesPricingSettingsMobileState
                               color: const Color(0xFF6B7280),
                             ),
                             SizedBox(height: 6.h),
-                            Builder(builder: (context) {
-                              final double total = double.tryParse(pkg.totalCtrl.text) ?? 0.0;
-                              final double monthly = total / pkg.months;
-                              return TextWidget(
-                                text: '\$${monthly.toStringAsFixed(2)}',
-                                fontSize: 13.sp,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF111827),
-                              );
-                            }),
+                            Builder(
+                              builder: (context) {
+                                final double total =
+                                    double.tryParse(pkg.totalCtrl.text) ?? 0.0;
+                                final double monthly = total / pkg.months;
+                                return TextWidget(
+                                  text: '\$${monthly.toStringAsFixed(2)}',
+                                  fontSize: 13.sp,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF111827),
+                                );
+                              },
+                            ),
                           ],
                         ),
                       ),
@@ -1331,17 +1483,20 @@ class _ServicesPricingSettingsMobileState
                               color: const Color(0xFF6B7280),
                             ),
                             SizedBox(height: 6.h),
-                            Builder(builder: (context) {
-                              final double total = double.tryParse(pkg.totalCtrl.text) ?? 0.0;
-                              final double monthly = total / pkg.months;
-                              final double weekly = monthly / 4.33;
-                              return TextWidget(
-                                text: '\$${weekly.toStringAsFixed(2)}',
-                                fontSize: 13.sp,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF111827),
-                              );
-                            }),
+                            Builder(
+                              builder: (context) {
+                                final double total =
+                                    double.tryParse(pkg.totalCtrl.text) ?? 0.0;
+                                final double monthly = total / pkg.months;
+                                final double weekly = monthly / 4.33;
+                                return TextWidget(
+                                  text: '\$${weekly.toStringAsFixed(2)}',
+                                  fontSize: 13.sp,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF111827),
+                                );
+                              },
+                            ),
                           ],
                         ),
                       ),
@@ -1361,81 +1516,380 @@ class _ServicesPricingSettingsMobileState
   Future<void> _showAddTermDialog() async {
     final termCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
+    bool isSavingTerm = false;
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16.r)),
-          ),
-          padding: EdgeInsets.all(16.w),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextWidget(
-                text: 'Add Contract Term',
-                fontSize: 16.sp,
-                fontWeight: FontWeight.bold,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setStateDialog) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
               ),
-              SizedBox(height: 12.h),
-              TextField(
-                controller: termCtrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'Contract Term (Months)',
-                  hintText: 'e.g. 24',
-                ),
-              ),
-              SizedBox(height: 10.h),
-              TextField(
-                controller: priceCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Total Price (\$)',
-                  hintText: 'e.g. 999',
-                ),
-              ),
-              SizedBox(height: 16.h),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              padding: EdgeInsets.all(20.w),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cancel'),
-                  ),
-                  SizedBox(width: 8.w),
-                  ElevatedButton(
-                    onPressed: () {
-                      final int months = int.tryParse(termCtrl.text) ?? 0;
-                      final double total = double.tryParse(priceCtrl.text) ?? 0.0;
-                      if (months <= 0 || total <= 0) {
-                        showToast(message: 'Invalid values entered');
-                        return;
-                      }
-                      setState(() {
-                        _launchPackages.add(LaunchPackageConfig(months: months, total: total));
-                      });
-                      Navigator.pop(ctx);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.black,
+                  Text(
+                    'Add Contract Term',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF0F172A),
                     ),
-                    child: const Text('Add'),
+                  ),
+                  SizedBox(height: 16.h),
+                  Text(
+                    'MONTHS',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF64748B),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  SizedBox(height: 6.h),
+                  TextField(
+                    controller: termCtrl,
+                    enabled: !isSavingTerm,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: GoogleFonts.poppins(
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF0F172A),
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '18',
+                      hintStyle: GoogleFonts.poppins(
+                        color: const Color(0xFF94A3B8),
+                        fontSize: 14.sp,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16.w,
+                        vertical: 12.h,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.r),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.r),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.r),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF10B981),
+                          width: 1.5,
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 16.h),
+                  Text(
+                    'TOTAL PRICE',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF64748B),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  SizedBox(height: 6.h),
+                  TextField(
+                    controller: priceCtrl,
+                    enabled: !isSavingTerm,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    style: GoogleFonts.poppins(
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF0F172A),
+                    ),
+                    decoration: InputDecoration(
+                      prefixIcon: Padding(
+                        padding: EdgeInsets.only(left: 16.w, right: 8.w),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '\$',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 0,
+                        minHeight: 0,
+                      ),
+                      hintText: '6600',
+                      hintStyle: GoogleFonts.poppins(
+                        color: const Color(0xFF94A3B8),
+                        fontSize: 14.sp,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16.w,
+                        vertical: 12.h,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.r),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.r),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.r),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF10B981),
+                          width: 1.5,
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 20.h),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton(
+                        onPressed: isSavingTerm
+                            ? null
+                            : () => Navigator.pop(ctx),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFFE2E8F0)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8.r),
+                          ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 20.w,
+                            vertical: 12.h,
+                          ),
+                          backgroundColor: const Color(0xFFF8FAFC),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13.5.sp,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF475569),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 8.w),
+                      ElevatedButton(
+                        onPressed: isSavingTerm
+                            ? null
+                            : () async {
+                                final int months =
+                                    int.tryParse(termCtrl.text) ?? 0;
+                                final double total =
+                                    double.tryParse(priceCtrl.text) ?? 0.0;
+                                if (months <= 0 || total <= 0) {
+                                  showToast(message: 'Invalid values entered');
+                                  return;
+                                }
+
+                                final clientPro = context.read<ClientPro>();
+                                final navigator = Navigator.of(dialogCtx);
+
+                                setStateDialog(() {
+                                  isSavingTerm = true;
+                                });
+
+                                final success = await clientPro
+                                    .createContractTerm(
+                                      months: months,
+                                      totalPrice: total,
+                                    );
+
+                                if (success) {
+                                  final updatedPricing =
+                                      clientPro.servicesPricing;
+                                  if (updatedPricing != null && mounted) {
+                                    setState(() {
+                                      _loadFromApi(updatedPricing);
+                                    });
+                                  }
+                                  navigator.pop();
+                                } else {
+                                  setStateDialog(() {
+                                    isSavingTerm = false;
+                                  });
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8.r),
+                          ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 20.w,
+                            vertical: 12.h,
+                          ),
+                          elevation: 0,
+                        ),
+                        child: isSavingTerm
+                            ? SizedBox(
+                                width: 16.w,
+                                height: 16.w,
+                                child: const CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.add,
+                                    size: 14.w,
+                                    color: Colors.white,
+                                  ),
+                                  SizedBox(width: 4.w),
+                                  Text(
+                                    'Add Term',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13.5.sp,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
+    );
+  }
+
+  void _confirmDeleteTerm(BuildContext context, LaunchPackageConfig pkg) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        bool isDeleting = false;
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text(
+                'Delete Contract Term',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16.sp,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+              content: Text(
+                'Are you sure you want to delete the ${pkg.months} months contract term?',
+                style: GoogleFonts.poppins(
+                  fontSize: 14.sp,
+                  color: const Color(0xFF475569),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(dialogCtx),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.poppins(
+                      color: const Color(0xFF64748B),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.sp,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isDeleting
+                      ? null
+                      : () async {
+                          setStateDialog(() {
+                            isDeleting = true;
+                          });
+
+                          final clientPro = context.read<ClientPro>();
+                          final navigator = Navigator.of(dialogCtx);
+
+                          bool success = false;
+                          if (pkg.id != null) {
+                            success = await clientPro.deleteContractTerm(
+                              pkg.id!,
+                            );
+                          } else {
+                            success = true;
+                          }
+
+                          if (success) {
+                            final updatedPricing = clientPro.servicesPricing;
+                            if (updatedPricing != null && mounted) {
+                              setState(() {
+                                _loadFromApi(updatedPricing);
+                              });
+                            }
+                            navigator.pop();
+                          } else {
+                            setStateDialog(() {
+                              isDeleting = false;
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8.r),
+                    ),
+                  ),
+                  child: isDeleting
+                      ? SizedBox(
+                          width: 16.w,
+                          height: 16.w,
+                          child: const CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          'Delete',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontSize: 13.sp,
+                          ),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1545,9 +1999,17 @@ class _ServicesPricingSettingsMobileState
             decoration: InputDecoration(
               isDense: true,
               prefixText: prefixText,
-              prefixStyle: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w500),
-              contentPadding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.r)),
+              prefixStyle: TextStyle(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w500,
+              ),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 10.w,
+                vertical: 6.h,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8.r),
+              ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8.r),
                 borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
@@ -1597,18 +2059,28 @@ class SpecialistConfig {
     this.wholesaleIconSvg = '',
     this.retailIconSvg = '',
   }) {
-    wholesaleBaseCtrl = TextEditingController(text: wholesaleBase.toStringAsFixed(0));
-    wholesaleDiscountCtrl = TextEditingController(text: wholesaleDiscount.toStringAsFixed(1));
+    wholesaleBaseCtrl = TextEditingController(
+      text: wholesaleBase.toStringAsFixed(0),
+    );
+    wholesaleDiscountCtrl = TextEditingController(
+      text: wholesaleDiscount.toStringAsFixed(1),
+    );
     for (final rank in wholesalePercentages.keys) {
-      final ctrl = TextEditingController(text: wholesalePercentages[rank]!.toStringAsFixed(0));
+      final ctrl = TextEditingController(
+        text: wholesalePercentages[rank]!.toStringAsFixed(0),
+      );
       _addPercentageClampListener(ctrl);
       wholesalePercentagesCtrls[rank] = ctrl;
     }
 
     retailBaseCtrl = TextEditingController(text: retailBase.toStringAsFixed(0));
-    retailDiscountCtrl = TextEditingController(text: retailDiscount.toStringAsFixed(1));
+    retailDiscountCtrl = TextEditingController(
+      text: retailDiscount.toStringAsFixed(1),
+    );
     for (final rank in retailPercentages.keys) {
-      final ctrl = TextEditingController(text: retailPercentages[rank]!.toStringAsFixed(0));
+      final ctrl = TextEditingController(
+        text: retailPercentages[rank]!.toStringAsFixed(0),
+      );
       _addPercentageClampListener(ctrl);
       retailPercentagesCtrls[rank] = ctrl;
     }
@@ -1650,15 +2122,13 @@ class AddonServiceConfig {
 }
 
 class LaunchPackageConfig {
+  final int? id;
   final int months;
   final double total;
 
   late final TextEditingController totalCtrl;
 
-  LaunchPackageConfig({
-    required this.months,
-    required this.total,
-  }) {
+  LaunchPackageConfig({this.id, required this.months, required this.total}) {
     totalCtrl = TextEditingController(text: total.toStringAsFixed(0));
   }
 }

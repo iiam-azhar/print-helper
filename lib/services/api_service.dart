@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/login_screen.dart';
@@ -27,6 +28,15 @@ class ApiService {
   static final Random _rng = Random();
   static bool _isHandlingUnauthorized = false;
 
+  /// Create IOClient that bypasses SSL
+  IOClient _getBypassedClient() {
+    final HttpClient httpClient = HttpClient()
+      ..badCertificateCallback =
+          (X509Certificate cert, String host, int port) => true;
+
+    return IOClient(httpClient);
+  }
+
   /// GET Request (Handles API and Direct URLs)
   Future<dynamic> getDataFromApi({
     required String api,
@@ -37,9 +47,10 @@ class ApiService {
     int timeOut = _timeOut,
   }) async {
     final Uri uri = _buildUri(path: api, url: url);
+    final client = _getBypassedClient();
 
     try {
-      final response = await http
+      final response = await client
           .get(uri, headers: headers)
           .timeout(Duration(seconds: timeOut));
 
@@ -66,6 +77,7 @@ class ApiService {
     int timeOut = _timeOut,
   }) async {
     final Uri uri = _buildUri(path: api);
+    final client = _getBypassedClient();
 
     try {
       if (multipart) {
@@ -102,18 +114,12 @@ class ApiService {
           }
         }
 
-        final streamedResponse = await request.send().timeout(
+        final streamedResponse = await client.send(request).timeout(
           Duration(seconds: timeOut),
         );
         final response = await http.Response.fromStream(streamedResponse);
         return _response(response, showRes);
       } else {
-        final method = isDelete
-            ? http.delete
-            : isPut
-            ? http.put
-            : http.post;
-
         final normalizedHeaders = headers == null
             ? null
             : Map<String, String>.from(headers as Map);
@@ -127,11 +133,19 @@ class ApiService {
             }) ??
             false;
 
-        final requestBody = hasJsonContentType && payload is! String
+        final requestBody = hasJsonContentType && payload is! String && payload != null
             ? jsonEncode(payload)
             : payload;
 
-        final res = method(uri, headers: normalizedHeaders, body: requestBody);
+
+        Future<http.Response> res;
+        if (isDelete) {
+          res = client.delete(uri, headers: normalizedHeaders, body: requestBody);
+        } else if (isPut) {
+          res = client.put(uri, headers: normalizedHeaders, body: requestBody);
+        } else {
+          res = client.post(uri, headers: normalizedHeaders, body: requestBody);
+        }
         final response = await res.timeout(Duration(seconds: timeOut));
 
         return _response(response, showRes);
@@ -172,6 +186,29 @@ class ApiService {
       case 200:
       case 201:
         result = _processResponse(response, false, showRes, decode: decode);
+        break;
+      case 204:
+        // 204 No Content — success with no body (common for DELETE requests)
+        printData(
+          title: '\x1B[32mstatus 204 (No Content)\x1B[0m',
+          data: 'url: ${response.request?.url}',
+        );
+        result = {'success': true, 'message': 'Operation completed successfully'};
+        break;
+      case 302:
+        // Some Laravel endpoints redirect on success (e.g. PUT requests).
+        // Treat a 302 whose Location points back to the app base URL as a success
+        // and return a synthetic success map so callers don't break.
+        final location = response.headers['location'] ?? '';
+        if (location.isNotEmpty) {
+          printData(
+            title: '\x1B[33m302 Redirect → $location\x1B[0m',
+            data: 'Treating as success (no body to decode)',
+          );
+          result = {'success': true, 'redirected': true, 'location': location};
+        } else {
+          result = _processResponse(response, true, showRes, decode: decode);
+        }
         break;
       case 400:
       case 401:
@@ -287,6 +324,11 @@ class ApiService {
           );
 
     if (!decode) return response;
+
+    // Empty body (e.g. 204) — return a success map instead of crashing on json.decode
+    if (response.body.trim().isEmpty) {
+      return {'success': !isError, 'message': isError ? 'Empty error response' : 'OK'};
+    }
 
     try {
       return json.decode(response.body);

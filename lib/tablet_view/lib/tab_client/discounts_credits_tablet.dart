@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:print_helper/providers/client_pro.dart';
+import 'package:print_helper/models/client_billing_tabs_model.dart';
 
 class CreditEntry {
   final String date;
@@ -25,24 +28,48 @@ class DiscountsCreditsTablet extends StatefulWidget {
 }
 
 class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
-  final List<CreditEntry> _credits = [
-    CreditEntry(
-      date: "Apr 14, 2026",
-      description: "Referral discount — referred FastPrint LA",
-      amount: 200.00,
-      appliedTo: "Apr 14–20 invoice",
-      addedBy: "Jesús M.",
-    ),
-  ];
+  final List<ClientBillingCreditHistoryModel> _localAddedCredits = [];
 
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
 
   double get _availableBalance {
-    return _credits
+    final discounts = context.watch<ClientPro>().currentClientBillingTabs?.discountsCredits;
+    double apiBalance = 0.0;
+    if (discounts?.summary != null) {
+      final val = discounts!.summary['available_credit_balance'] ?? discounts.summary['availableCreditBalance'];
+      if (val != null) {
+        apiBalance = double.tryParse(val.toString()) ?? 0.0;
+      }
+    }
+    final localPending = _localAddedCredits
         .where((e) => e.appliedTo.toLowerCase() == 'pending')
         .fold(0.0, (sum, item) => sum + item.amount);
+    return apiBalance + localPending;
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr);
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return "${months[dt.month - 1]} ${dt.day}, ${dt.year}";
+    } catch (_) {
+      return dateStr;
+    }
   }
 
   @override
@@ -58,11 +85,11 @@ class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
       final desc = _descriptionController.text.trim();
       final amt = double.tryParse(amtStr) ?? 0.0;
 
-      if (amt <= 0) {
+      if (amt == 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              "Please enter an amount greater than 0",
+              "Please enter a non-zero amount",
               style: GoogleFonts.poppins(color: Colors.white, fontSize: 13),
             ),
             backgroundColor: Colors.red,
@@ -71,41 +98,29 @@ class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
         return;
       }
 
-      setState(() {
-        _credits.insert(
-          0,
-          CreditEntry(
-            date: _getFormattedToday(),
-            description: desc,
-            amount: amt,
-            appliedTo: "Pending",
-            addedBy: "Admin",
-          ),
-        );
+      // Unfocus immediately when clicking add
+      FocusManager.instance.primaryFocus?.unfocus();
+
+      final clientPro = context.read<ClientPro>();
+      final clientId = clientPro.currentClientBillingTabs?.client.id ?? 0;
+      if (clientId == 0) return;
+      final currentWeek = clientPro.currentClientBillingTabs?.week.start ?? '';
+
+      clientPro.addCredit(clientId: clientId, amount: amt, reason: desc).then((
+        success,
+      ) {
+        if (success) {
+          _amountController.clear();
+          _descriptionController.clear();
+          FocusManager.instance.primaryFocus?.unfocus();
+          clientPro.getClientBillingTabs(
+            clientId,
+            currentWeek,
+            showLoading: false,
+          );
+        }
       });
-
-      _amountController.clear();
-      _descriptionController.clear();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Credit/Discount added successfully",
-            style: GoogleFonts.poppins(color: Colors.white, fontSize: 13),
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
     }
-  }
-
-  String _getFormattedToday() {
-    final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    return "${months[now.month - 1]} ${now.day}, ${now.year}";
   }
 
   @override
@@ -212,10 +227,7 @@ class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            height: 3,
-            color: const Color(0xFFFACC15),
-          ),
+          Container(height: 3, color: const Color(0xFFFACC15)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Form(
@@ -247,23 +259,41 @@ class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
                             _buildInputLabel("AMOUNT (\$)"),
                             TextFormField(
                               controller: _amountController,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              style: GoogleFonts.poppins(fontSize: 12.5, color: Colors.black),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              style: GoogleFonts.poppins(
+                                fontSize: 12.5,
+                                color: Colors.black,
+                              ),
                               decoration: InputDecoration(
                                 hintText: "0.00",
-                                hintStyle: GoogleFonts.poppins(fontSize: 12.5, color: Colors.grey.shade400),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                hintStyle: GoogleFonts.poppins(
+                                  fontSize: 12.5,
+                                  color: Colors.grey.shade400,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: Color(0xFFFACC15)),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFFACC15),
+                                  ),
                                 ),
                               ),
                               validator: (value) {
@@ -290,22 +320,38 @@ class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
                             _buildInputLabel("REASON / DESCRIPTION"),
                             TextFormField(
                               controller: _descriptionController,
-                              style: GoogleFonts.poppins(fontSize: 12.5, color: Colors.black),
+                              style: GoogleFonts.poppins(
+                                fontSize: 12.5,
+                                color: Colors.black,
+                              ),
                               decoration: InputDecoration(
-                                hintText: "e.g. Referral discount — referred FastPrint LA",
-                                hintStyle: GoogleFonts.poppins(fontSize: 12.5, color: Colors.grey.shade400),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                hintText:
+                                    "e.g. Referral discount — referred FastPrint LA",
+                                hintStyle: GoogleFonts.poppins(
+                                  fontSize: 12.5,
+                                  color: Colors.grey.shade400,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: Color(0xFFFACC15)),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFFACC15),
+                                  ),
                                 ),
                               ),
                               validator: (value) {
@@ -331,7 +377,10 @@ class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                     ),
                     onPressed: _handleAddCredit,
                     child: Row(
@@ -340,7 +389,7 @@ class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
                         const Icon(Icons.add, size: 14, color: Colors.black),
                         const SizedBox(width: 4),
                         Text(
-                           "Add Credit",
+                          "Add Credit",
                           style: GoogleFonts.poppins(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -402,14 +451,53 @@ class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
           // Header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Text(
-              "CREDIT HISTORY",
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade600,
-                letterSpacing: 0.5,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "CREDIT HISTORY",
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () {
+                    final clientPro = context.read<ClientPro>();
+                    final clientId =
+                        clientPro.currentClientBillingTabs?.client.id ?? 0;
+                    final currentWeek =
+                        clientPro.currentClientBillingTabs?.week.start ?? '';
+                    if (clientId != 0 && currentWeek.isNotEmpty) {
+                      clientPro.getClientBillingTabs(clientId, currentWeek);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: context.watch<ClientPro>().clientBillingTabsLoad
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: Colors.black,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.refresh,
+                            size: 16,
+                            color: Colors.black,
+                          ),
+                  ),
+                ),
+              ],
             ),
           ),
 
@@ -445,77 +533,94 @@ class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
                 ],
               ),
               // Data Rows
-              ..._credits.map((entry) {
-                final isPending = entry.appliedTo.toLowerCase() == 'pending';
-                return TableRow(
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1),
-                    ),
-                  ),
-                  children: [
-                    _buildTableCell(entry.date),
-                    _buildTableCell(entry.description, isBold: false),
-                    TableCell(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        child: Text(
-                          "\$${entry.amount.toStringAsFixed(2)}",
-                          style: GoogleFonts.poppins(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF10B981),
-                          ),
-                        ),
+              ...(() {
+                final apiCredits =
+                    context
+                        .watch<ClientPro>()
+                        .currentClientBillingTabs
+                        ?.discountsCredits
+                        .items ??
+                    [];
+
+                return apiCredits.map((entry) {
+                  return TableRow(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1),
                       ),
                     ),
-                    TableCell(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: isPending
-                                  ? const Color(0xFFFEF9C3)
-                                  : const Color(0xFFDCFCE7),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              entry.appliedTo,
-                              style: GoogleFonts.poppins(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
-                                color: isPending
-                                    ? const Color(0xFF854D0E)
-                                    : const Color(0xFF15803D),
-                              ),
+                    children: [
+                      _buildTableCell(_formatDate(entry.createdAt)),
+                      _buildTableCell(entry.reason, isBold: false),
+                      TableCell(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 10,
+                          ),
+                          child: Text(
+                            entry.amount < 0
+                                ? "-\$${entry.amount.abs().toStringAsFixed(2)}"
+                                : "\$${entry.amount.toStringAsFixed(2)}",
+                            style: GoogleFonts.poppins(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: entry.amount < 0
+                                  ? const Color(0xFFEF4444)
+                                  : const Color(0xFF10B981),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    _buildTableCell(entry.addedBy, color: Colors.grey.shade600),
-                  ],
-                );
-              }),
+                      _buildTableCell(
+                        entry.appliedTo,
+                        color: Colors.grey.shade600,
+                      ),
+                      _buildTableCell(
+                        entry.addedBy,
+                        color: Colors.grey.shade600,
+                      ),
+                    ],
+                  );
+                });
+              })(),
             ],
           ),
 
-          // Legend / Centered text
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: Text(
-                "No other credits on record",
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  color: Colors.grey,
+          // Pagination
+          ...(() {
+            final discounts =
+                context
+                    .watch<ClientPro>()
+                    .currentClientBillingTabs
+                    ?.discountsCredits;
+            final pagination = discounts?.pagination ?? {};
+            final activePage = pagination['current_page'] ?? 1;
+            final totalPages = pagination['last_page'] ?? 1;
+
+            if (totalPages > 1) {
+              return [
+                _buildPagination(
+                  currentPage: activePage,
+                  totalPages: totalPages,
+                  onPageChanged: (page) {
+                    final clientPro = context.read<ClientPro>();
+                    final clientId = clientPro.currentClientBillingTabs?.client.id ?? 0;
+                    final currentWeek = clientPro.currentClientBillingTabs?.week.start ?? '';
+                    if (clientId != 0) {
+                      clientPro.getClientBillingTabs(
+                        clientId,
+                        currentWeek,
+                        creditsPage: page,
+                      );
+                    }
+                  },
                 ),
-              ),
-            ),
-          ),
+                const SizedBox(height: 12),
+              ];
+            }
+            return const <Widget>[];
+          })(),
         ],
       ),
     );
@@ -544,6 +649,126 @@ class _DiscountsCreditsTabletState extends State<DiscountsCreditsTablet> {
           fontSize: 11.5,
           fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
           color: color ?? Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPagination({
+    required int currentPage,
+    required int totalPages,
+    required ValueChanged<int> onPageChanged,
+  }) {
+    List<int> pages = [];
+    if (totalPages <= 7) {
+      pages = List.generate(totalPages, (i) => i + 1);
+    } else {
+      pages.add(1);
+      if (currentPage > 3) pages.add(-1); // ellipsis
+      int start = (currentPage - 1).clamp(2, totalPages - 2);
+      int end = (currentPage + 1).clamp(2, totalPages - 1);
+      for (int i = start; i <= end; i++) {
+        pages.add(i);
+      }
+      if (currentPage < totalPages - 2) pages.add(-1); // ellipsis
+      pages.add(totalPages);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pageCircle(
+              icon: Icons.keyboard_double_arrow_left,
+              enabled: currentPage > 1,
+              onTap: () => onPageChanged(1),
+            ),
+            _pageCircle(
+              icon: Icons.chevron_left,
+              enabled: currentPage > 1,
+              onTap: () => onPageChanged(currentPage - 1),
+            ),
+            const SizedBox(width: 8),
+            ...pages.map((p) {
+              if (p == -1) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    "...",
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      color: Colors.grey,
+                    ),
+                  ),
+                );
+              }
+              final bool isActive = p == currentPage;
+              return GestureDetector(
+                onTap: () => onPageChanged(p),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: isActive ? const Color(0xFFFACC15) : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      "$p",
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: isActive ? Colors.black : Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(width: 8),
+            _pageCircle(
+              icon: Icons.chevron_right,
+              enabled: currentPage < totalPages,
+              onTap: () => onPageChanged(currentPage + 1),
+            ),
+            _pageCircle(
+              icon: Icons.keyboard_double_arrow_right,
+              enabled: currentPage < totalPages,
+              onTap: () => onPageChanged(totalPages),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pageCircle({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 32,
+        height: 32,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: enabled ? Colors.white : Colors.grey.shade100,
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: Center(
+          child: Icon(
+            icon,
+            size: 16,
+            color: enabled ? Colors.black87 : Colors.grey,
+          ),
         ),
       ),
     );

@@ -122,11 +122,13 @@ class CustomAlert extends StatelessWidget {
       backgroundColor: AppColors.white,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 20.w),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 340.w),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 20.w),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             Align(
               alignment: Alignment.topRight,
               child: GestureDetector(
@@ -164,7 +166,8 @@ class CustomAlert extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget buttons(
@@ -224,7 +227,13 @@ class CustomInfo extends StatelessWidget {
     return Dialog(
       insetPadding: EdgeInsets.symmetric(horizontal: 57.w),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40.r)),
-      child: Padding(padding: EdgeInsets.all(12.w), child: infoWidget(context)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 340.w),
+        child: Padding(
+          padding: EdgeInsets.all(12.w),
+          child: infoWidget(context),
+        ),
+      ),
     );
   }
 

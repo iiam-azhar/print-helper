@@ -126,7 +126,7 @@ class RateCardModel {
   final String name;
   final String chargeUnit;
   final String icon;
-  final String iconSvg;
+  final String iconSvgUrl;
   final double basePrice;
   final double volumeDiscount;
   final Map<String, double> levelPercentages;
@@ -140,7 +140,7 @@ class RateCardModel {
     required this.name,
     required this.chargeUnit,
     required this.icon,
-    required this.iconSvg,
+    required this.iconSvgUrl,
     required this.basePrice,
     required this.volumeDiscount,
     required this.levelPercentages,
@@ -159,7 +159,7 @@ class RateCardModel {
       name: (json['name'] ?? '').toString(),
       chargeUnit: (json['charge_unit'] ?? '').toString(),
       icon: (json['icon'] ?? '').toString(),
-      iconSvg: (json['icon_svg'] ?? '').toString(),
+      iconSvgUrl: (json['icon_svg_url'] ?? json['icon_svg'] ?? '').toString(),
       basePrice: _toDouble(json['base_price']),
       volumeDiscount: _toDouble(json['volume_discount']),
       levelPercentages: percs,

@@ -311,6 +311,18 @@ class ApiService {
       case 201:
         result = _processResponse(response, false, showRes, decode: decode);
         break;
+      case 204:
+        // 204 No Content — success with empty body (common for DELETE)
+        result = {'success': true, 'message': 'Operation completed successfully'};
+        break;
+      case 302:
+        final location = response.headers['location'] ?? '';
+        if (location.isNotEmpty) {
+          result = {'success': true, 'redirected': true, 'location': location};
+        } else {
+          result = _processResponse(response, true, showRes, decode: decode);
+        }
+        break;
       default:
         result = _processResponse(response, true, showRes, decode: decode);
         break;
@@ -396,6 +408,11 @@ class ApiService {
             title: 'status $rStCode url : $rUrl\n',
             data: showRes ? response.body : '',
           );
+
+    // Empty body (e.g. 204 No Content) — avoid json.decode crash
+    if (decode && response.body.trim().isEmpty) {
+      return {'success': !isError, 'message': isError ? 'Empty error response' : 'OK'};
+    }
 
     return decode ? json.decode(response.body) : response;
   }

@@ -8,6 +8,8 @@ import '../tab_widgets/tab_image_widget.dart';
 import '../tab_widgets/tab_toasts.dart';
 import 'discounts_credits_tablet.dart';
 import 'referrals_tablet.dart';
+import 'package:print_helper/models/client_billing_tabs_model.dart';
+import 'package:print_helper/admin/client/dialog_add_entry.dart';
 
 class TabClientBillingScreen extends StatefulWidget {
   final int clientId;
@@ -25,17 +27,39 @@ class TabClientBillingScreen extends StatefulWidget {
 
 class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
   int _activeTab = 0; // default is Services tab (index 0)
+  String _orderLogTypeFilter = 'All types';
+  String _orderLogDayFilter = 'All days';
   bool _isSaving = false;
   bool _isSyncing = false;
+  bool _isInitialLoading = true;
+  bool _isWeekLoading = false;
 
-  int _callsIn = 0;
-  int _callsOut = 3;
+  bool get _isWeekClosed {
+    final clientPro = context.read<ClientPro>();
+    return clientPro.currentClientBillingTabs?.week.isClosed ?? false;
+  }
 
-  int _smsIn = 0;
-  int _smsOut = 6;
+  ClientBillingUsageBreakdownModel? get _breakdown =>
+      _clientPro.currentClientBillingTabs?.usage.breakdown;
 
-  int _mmsIn = 0;
-  int _mmsOut = 1;
+  double get _callsIn => _breakdown?.calls.incoming.used ?? 0.0;
+  double get _callsOut => _breakdown?.calls.outgoing.used ?? 3.0;
+
+  double get _smsIn => _breakdown?.sms.incoming.used ?? 0.0;
+  double get _smsOut => _breakdown?.sms.outgoing.used ?? 6.0;
+
+  double get _mmsIn => _breakdown?.mms.incoming.used ?? 0.0;
+  double get _mmsOut => _breakdown?.mms.outgoing.used ?? 1.0;
+
+  String _formatDouble(double value) {
+    if (value == value.toInt()) {
+      return value.toInt().toString();
+    }
+    return value
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'\.0+$'), '')
+        .replaceAll(RegExp(r'(\.\d*?[1-9])0+$'), r'\1');
+  }
 
   // Specialist Access Toggles
   bool _staffAccess = false;
@@ -50,10 +74,279 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
 
   bool _emailConnectionsActive = true;
   int _emailConnectionsQty = 0;
+  final List<ExtraChargeItem> _extraCharges = [];
+  bool _hasEditedExtraCharges = false;
+
+  // initState moved below with week calculation
+
+  late String _selectedWeek;
+
+  String _calculateCurrentWeekStart() {
+    final now = DateTime.now();
+    // Find Monday of current week (weekday: 1=Mon, 7=Sun)
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    return '${monday.year}-${monday.month.toString().padLeft(2, '0')}-${monday.day.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedWeek = _calculateCurrentWeekStart();
+    _fetchBillingTabs();
+  }
+
+  @override
+  void dispose() {
+    for (var item in _extraCharges) {
+      item.descController.dispose();
+      item.amountController.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _fetchBillingTabs({bool isWeekChange = false}) async {
+    final clientPro = context.read<ClientPro>();
+    if (isWeekChange) {
+      setState(() => _isWeekLoading = true);
+    }
+    try {
+      await clientPro.getClientBillingTabs(
+        widget.clientId,
+        _selectedWeek,
+        showLoading: false,
+      );
+      _syncLocalStateFromBilling(clientPro);
+    } catch (_) {
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInitialLoading = false;
+          _isWeekLoading = false;
+        });
+      }
+    }
+  }
+
+  void _goToPreviousWeek() {
+    for (var item in _extraCharges) {
+      item.descController.dispose();
+      item.amountController.dispose();
+    }
+    _extraCharges.clear();
+    _hasEditedExtraCharges = false;
+
+    final week = context.read<ClientPro>().currentClientBillingTabs?.week;
+    if (week != null && week.previous.isNotEmpty) {
+      _selectedWeek = week.previous;
+    } else {
+      final current = DateTime.parse(_selectedWeek);
+      final prev = current.subtract(const Duration(days: 7));
+      _selectedWeek =
+          '${prev.year}-${prev.month.toString().padLeft(2, '0')}-${prev.day.toString().padLeft(2, '0')}';
+    }
+    _fetchBillingTabs(isWeekChange: true);
+  }
+
+  void _goToNextWeek() {
+    for (var item in _extraCharges) {
+      item.descController.dispose();
+      item.amountController.dispose();
+    }
+    _extraCharges.clear();
+    _hasEditedExtraCharges = false;
+
+    final week = context.read<ClientPro>().currentClientBillingTabs?.week;
+    if (week != null && week.next.isNotEmpty) {
+      _selectedWeek = week.next;
+    } else {
+      final current = DateTime.parse(_selectedWeek);
+      final next = current.add(const Duration(days: 7));
+      _selectedWeek =
+          '${next.year}-${next.month.toString().padLeft(2, '0')}-${next.day.toString().padLeft(2, '0')}';
+    }
+    _fetchBillingTabs(isWeekChange: true);
+  }
+
+  ClientPro get _clientPro => Provider.of<ClientPro>(context, listen: true);
+
+  String get _pricingMode =>
+      _clientPro.currentClientBillingTabs?.billing.pricingMode.toLowerCase() ??
+      'free';
+
+  Future<void> _updatePricingMode(String mode) async {
+    final clientPro = context.read<ClientPro>();
+    final currentMode =
+        clientPro.currentClientBillingTabs?.billing.pricingMode.toLowerCase() ??
+        'free';
+    if (currentMode == mode) return;
+    final success = await clientPro.updatePricingMode(
+      clientId: widget.clientId,
+      mode: mode,
+    );
+    // After a successful pricing mode change, reload billing tabs to get
+    // updated prices, charges, and addon values that depend on the active mode.
+    if (success && mounted) {
+      final currentWeek =
+          clientPro.currentClientBillingTabs?.week.start ?? _selectedWeek;
+      await clientPro.getClientBillingTabs(
+        widget.clientId,
+        currentWeek,
+        showLoading: false,
+      );
+      // Re-sync local state from the fresh API data
+      _syncLocalStateFromBilling(clientPro);
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// Syncs local widget state (addon toggles/quantities, specialist access)
+  /// from the current provider billing data.
+  void _syncLocalStateFromBilling(ClientPro clientPro) {
+    final billing = clientPro.currentClientBillingTabs?.billing;
+    if (billing == null) return;
+    for (var row in billing.addons) {
+      if (row.key == 'support_lines') {
+        _supportLinesActive = row.isActive;
+        _supportLinesQty = row.quantity;
+      } else if (row.key == 'extra_storage') {
+        _fileStorageActive = row.isActive;
+        _fileStorageQty = row.quantity;
+      } else if (row.key == 'extra_emails') {
+        _emailConnectionsActive = row.isActive;
+        _emailConnectionsQty = row.quantity;
+      }
+    }
+    for (var row in billing.specialistRows) {
+      if (row.accountTypeId == 2 || row.name.toLowerCase().contains('staff')) {
+        _staffAccess = row.isEnabled;
+      } else if (row.accountTypeId == 3 ||
+          row.name.toLowerCase().contains('graphic')) {
+        _graphicDesignerAccess = row.isEnabled;
+      }
+    }
+
+    _extraCharges.clear();
+    _hasEditedExtraCharges = false;
+    final weekChargeBreakdown = clientPro.currentClientBillingTabs?.weeklyVolume.weekChargeBreakdown;
+    if (weekChargeBreakdown != null) {
+      for (var charge in weekChargeBreakdown.addedExtraCharges) {
+        _extraCharges.add(
+          ExtraChargeItem(
+            description: charge.description,
+            amount: charge.amount,
+          ),
+        );
+      }
+    }
+  }
+
+  ClientBillingAddonModel? _getAddon(String slug, String namePattern) {
+    final addons = _clientPro.currentClientBillingTabs?.billing.addons;
+    if (addons == null) return null;
+    try {
+      return addons.firstWhere(
+        (a) =>
+            a.slug.toLowerCase() == slug.toLowerCase() ||
+            a.name.toLowerCase().contains(namePattern.toLowerCase()),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  double get _phPortalWeekly =>
+      _clientPro.currentClientBillingTabs?.billing.phPortalWeekly ?? 345.40;
+
+  double get _supportLineWeeklyPrice =>
+      _getAddon('support-lines', 'support line')?.weeklyPrice ?? 0.69;
+  int get _supportLinesIncluded =>
+      int.tryParse(
+        _getAddon('support-lines', 'support line')?.included ?? '',
+      ) ??
+      1;
+
+  double get _storageWeeklyPrice =>
+      _getAddon('file-storage', 'storage')?.weeklyPrice ?? 0.69;
+
+  double get _emailWeeklyPrice =>
+      _getAddon('email-connections', 'email')?.weeklyPrice ?? 4.62;
+  int get _emailIncluded =>
+      int.tryParse(_getAddon('email-connections', 'email')?.included ?? '') ??
+      0;
+
+  int get _callsInIncluded => _breakdown?.calls.incoming.included.toInt() ?? 5;
+  double get _callsInRate => _breakdown?.calls.overage.inRate ?? 0.05;
+  int get _callsOutIncluded => _breakdown?.calls.outgoing.included.toInt() ?? 5;
+  double get _callsOutRate => _breakdown?.calls.overage.outRate ?? 0.07;
+
+  int get _smsInIncluded => _breakdown?.sms.incoming.included.toInt() ?? 5;
+  double get _smsInRate => _breakdown?.sms.overage.inRate ?? 0.01;
+  int get _smsOutIncluded => _breakdown?.sms.outgoing.included.toInt() ?? 5;
+  double get _smsOutRate => _breakdown?.sms.overage.outRate ?? 0.02;
+
+  int get _mmsInIncluded => _breakdown?.mms.incoming.included.toInt() ?? 5;
+  double get _mmsInRate => _breakdown?.mms.overage.inRate ?? 0.05;
+  int get _mmsOutIncluded => _breakdown?.mms.outgoing.included.toInt() ?? 5;
+  double get _mmsOutRate => _breakdown?.mms.overage.outRate ?? 0.10;
+
+  double get _storageRate => _storageWeeklyPrice;
+  double get _supportLineRate => _supportLineWeeklyPrice;
+  double get _emailRate => _emailWeeklyPrice;
+
+  double get _supportLineCost =>
+      _supportLinesActive ? (_supportLinesQty * _supportLineWeeklyPrice) : 0.0;
+  double get _storageCost =>
+      _fileStorageActive ? (_fileStorageQty * _storageWeeklyPrice) : 0.0;
+  double get _emailCost => _emailConnectionsActive
+      ? (_emailConnectionsQty * _emailWeeklyPrice)
+      : 0.0;
+  double get _callsInOverage => _callsIn > _callsInIncluded
+      ? ((_callsIn - _callsInIncluded) * _callsInRate)
+      : 0.0;
+  double get _callsOutOverage => _callsOut > _callsOutIncluded
+      ? ((_callsOut - _callsOutIncluded) * _callsOutRate)
+      : 0.0;
+  double get _smsInOverage =>
+      _smsIn > _smsInIncluded ? ((_smsIn - _smsInIncluded) * _smsInRate) : 0.0;
+  double get _smsOutOverage => _smsOut > _smsOutIncluded
+      ? ((_smsOut - _smsOutIncluded) * _smsOutRate)
+      : 0.0;
+  double get _mmsInOverage =>
+      _mmsIn > _mmsInIncluded ? ((_mmsIn - _mmsInIncluded) * _mmsInRate) : 0.0;
+  double get _mmsOutOverage => _mmsOut > _mmsOutIncluded
+      ? ((_mmsOut - _mmsOutIncluded) * _mmsOutRate)
+      : 0.0;
+
+  double get _overageCost =>
+      _callsInOverage +
+      _callsOutOverage +
+      _smsInOverage +
+      _smsOutOverage +
+      _mmsInOverage +
+      _mmsOutOverage;
+  int get _callsIncluded => _callsOutIncluded;
+  int get _smsIncluded => _smsOutIncluded;
+  int get _mmsIncluded => _mmsOutIncluded;
+  double get _smsOverage => _smsOutOverage;
+  double get _totalWeeklyCharge =>
+      (_pricingMode == 'free' ? 0.0 : _phPortalWeekly) +
+      _supportLineCost +
+      _storageCost +
+      _emailCost +
+      _overageCost;
 
   @override
   Widget build(BuildContext context) {
-    final clientPro = Provider.of<ClientPro>(context, listen: true);
+    if (_isInitialLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF3F4F6),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFFFACC15)),
+        ),
+      );
+    }
+
+    final clientPro = _clientPro;
     ClientModel? client;
     try {
       client = clientPro.clients.firstWhere((c) => c.id == widget.clientId);
@@ -61,42 +354,17 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
       client = null;
     }
 
-    final companyName = client?.companyName ?? "Tron";
-    final isClientActive = client?.status ?? true;
-    final clientLogo = client?.logo ?? "";
-    final clientType = client?.companyType ?? "Client Ltd";
-    final clientSince = client != null
+    final apiClient = clientPro.currentClientBillingTabs?.client;
+    final companyName = apiClient?.companyName ?? client?.companyName ?? "Tron";
+    final isClientActive = apiClient?.status ?? client?.status ?? true;
+    final clientLogo = apiClient?.imageUrl ?? client?.logo ?? "";
+    final clientType =
+        apiClient?.companyType ?? client?.companyType ?? "Client Ltd";
+    final clientSince = apiClient?.clientSince != null
+        ? "Client since ${apiClient!.clientSince}"
+        : client != null
         ? "Client since ${client.createdDate}"
         : "Client since May 20, 2026";
-
-    // Weekly charge calculations (hardcoded until client billing API is connected)
-    const double phPortalWeekly       = 345.40;
-    const double supportLineWeeklyPrice = 0.69;
-    const double storageWeeklyPrice     = 0.69;
-    const double emailWeeklyPrice       = 4.62;
-    const int    supportLinesIncluded   = 1;
-    const int    emailIncluded          = 0;
-    const int    callsIncluded          = 5;
-    const int    smsIncluded            = 5;
-    const int    mmsIncluded            = 5;
-    const double callsInRate            = 0.05;
-    const double callsOutRate           = 0.07;
-    const double smsInRate              = 0.01;
-    const double smsOutRate             = 0.02;
-    const double mmsInRate              = 0.05;
-    const double mmsOutRate             = 0.10;
-    const double storageRate            = storageWeeklyPrice;
-    const double supportLineRate        = supportLineWeeklyPrice;
-    const double emailRate              = emailWeeklyPrice;
-
-    final double supportLineCost = _supportLinesActive ? (_supportLinesQty * supportLineWeeklyPrice) : 0.0;
-    final double storageCost     = _fileStorageActive  ? (_fileStorageQty  * storageWeeklyPrice)     : 0.0;
-    final double emailCost       = _emailConnectionsActive ? (_emailConnectionsQty * emailWeeklyPrice) : 0.0;
-    final double smsOverage      = _smsOut > smsIncluded
-        ? ((_smsOut - smsIncluded) * smsOutRate)
-        : 0.0;
-    final double overageCost     = smsOverage;
-    final double totalWeeklyCharge = phPortalWeekly + supportLineCost + storageCost + emailCost + overageCost;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -124,7 +392,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                       isActive: isClientActive,
                       type: clientType,
                       since: clientSince,
-                      weeklyCharge: totalWeeklyCharge,
+                      weeklyCharge: _totalWeeklyCharge,
                     ),
                     const SizedBox(height: 12),
 
@@ -136,27 +404,27 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                     if (_activeTab == 0) ...[
                       // PH Portal Black Banner
                       _buildPHPortalBanner(
-                        overageCost,
-                        phPortalWeekly: phPortalWeekly,
+                        _overageCost,
+                        phPortalWeekly: _phPortalWeekly,
                       ),
                       const SizedBox(height: 16),
 
                       // Usage & Configuration
                       _buildUsageConfigurationSection(
-                        callsIncluded: callsIncluded,
-                        smsIncluded: smsIncluded,
-                        mmsIncluded: mmsIncluded,
-                        callsInRate: callsInRate,
-                        callsOutRate: callsOutRate,
-                        smsInRate: smsInRate,
-                        smsOutRate: smsOutRate,
-                        mmsInRate: mmsInRate,
-                        mmsOutRate: mmsOutRate,
-                        storageRate: storageRate,
-                        supportLineRate: supportLineRate,
-                        emailRate: emailRate,
-                        supportLinesIncluded: supportLinesIncluded,
-                        emailIncluded: emailIncluded,
+                        callsIncluded: _callsIncluded,
+                        smsIncluded: _smsIncluded,
+                        mmsIncluded: _mmsIncluded,
+                        callsInRate: _callsInRate,
+                        callsOutRate: _callsOutRate,
+                        smsInRate: _smsInRate,
+                        smsOutRate: _smsOutRate,
+                        mmsInRate: _mmsInRate,
+                        mmsOutRate: _mmsOutRate,
+                        storageRate: _storageRate,
+                        supportLineRate: _supportLineRate,
+                        emailRate: _emailRate,
+                        supportLinesIncluded: _supportLinesIncluded,
+                        emailIncluded: _emailIncluded,
                       ),
                       const SizedBox(height: 12),
 
@@ -166,30 +434,66 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
 
                       // Add-ons Section
                       _buildAddonsSection(
-                        supportLineCost,
-                        storageCost,
-                        emailCost,
-                        supportLineRate: supportLineWeeklyPrice,
-                        storageRate: storageWeeklyPrice,
-                        emailRate: emailWeeklyPrice,
+                        _supportLineCost,
+                        _storageCost,
+                        _emailCost,
+                        supportLineRate: _supportLineWeeklyPrice,
+                        storageRate: _storageWeeklyPrice,
+                        emailRate: _emailWeeklyPrice,
                       ),
                       const SizedBox(height: 16),
 
                       // Bottom Info warning banner
                       _buildInfoBanner(),
                       const SizedBox(height: 16),
-
-                      // Save button
-                      _buildSaveRow(),
-                      const SizedBox(height: 16),
                     ] else if (_activeTab == 1) ...[
-                      const DiscountsCreditsTablet(),
+                      if (_isWeekLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFFFACC15),
+                            ),
+                          ),
+                        )
+                      else
+                        const DiscountsCreditsTablet(),
                     ] else if (_activeTab == 2) ...[
-                      const ReferralsTablet(),
+                      if (_isWeekLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFFFACC15),
+                            ),
+                          ),
+                        )
+                      else
+                        const ReferralsTablet(),
                     ] else if (_activeTab == 3) ...[
-                      _buildWeeklyVolumeTab(),
+                      if (_isWeekLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFFFACC15),
+                            ),
+                          ),
+                        )
+                      else
+                        _buildWeeklyVolumeTab(clientPro),
                     ] else if (_activeTab == 4) ...[
-                      _buildBillingTab(),
+                      if (_isWeekLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFFFACC15),
+                            ),
+                          ),
+                        )
+                      else
+                        _buildBillingTab(clientPro),
                     ] else ...[
                       // Placeholder if other tabs are clicked
                       _buildPlaceholderTab(),
@@ -198,6 +502,27 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                 ),
               ),
             ),
+            if (_activeTab == 0)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: const Border(
+                    top: BorderSide(color: Color(0xFFE5E7EB), width: 1.5),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, -3),
+                    ),
+                  ],
+                ),
+                child: _buildSaveRow(),
+              ),
           ],
         ),
       ),
@@ -427,36 +752,6 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  "\$${weeklyCharge.toStringAsFixed(2)}/wk",
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF16A34A),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  "THIS WEEK'S CHARGE",
-                  style: GoogleFonts.poppins(
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF16A34A),
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -522,7 +817,10 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
   }
 
   // PH Portal Banner component
-  Widget _buildPHPortalBanner(double overages, {double phPortalWeekly = 345.40}) {
+  Widget _buildPHPortalBanner(
+    double overages, {
+    double phPortalWeekly = 345.40,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -545,44 +843,81 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
               ),
               const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade900,
                   borderRadius: BorderRadius.circular(6),
                 ),
+                padding: const EdgeInsets.all(2),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.tablet_mac,
-                      color: Colors.white70,
-                      size: 12,
+                    GestureDetector(
+                      onTap: () => _updatePricingMode("free"),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _pricingMode == "free"
+                              ? const Color(0xFF10B981)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.card_giftcard,
+                              color: _pricingMode == "free"
+                                  ? Colors.white
+                                  : Colors.white70,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              "Free w/ Pod",
+                              style: GoogleFonts.poppins(
+                                fontSize: 9.5,
+                                fontWeight: _pricingMode == "free"
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                                color: _pricingMode == "free"
+                                    ? Colors.white
+                                    : Colors.white70,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      "Free w/ Pod",
-                      style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white70,
+                    GestureDetector(
+                      onTap: () => _updatePricingMode("paid"),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _pricingMode != "free"
+                              ? const Color(0xFFFEF08A)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          "\$${phPortalWeekly.toStringAsFixed(2)}/wk",
+                          style: GoogleFonts.poppins(
+                            fontSize: 9.5,
+                            fontWeight: _pricingMode != "free"
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                            color: _pricingMode != "free"
+                                ? Colors.black
+                                : Colors.white70,
+                          ),
+                        ),
                       ),
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF08A),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  "\$${phPortalWeekly.toStringAsFixed(2)}/wk",
-                  style: GoogleFonts.poppins(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
                 ),
               ),
             ],
@@ -590,7 +925,15 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
           Row(
             children: [
               Text(
-                "Last synced today 8:14 AM",
+                _clientPro
+                            .currentClientBillingTabs
+                            ?.billing
+                            .twilioUsageSummary
+                            .syncedDisplay
+                            .isNotEmpty ==
+                        true
+                    ? "Last synced ${_clientPro.currentClientBillingTabs!.billing.twilioUsageSummary.syncedDisplay}"
+                    : "Not synced yet",
                 style: GoogleFonts.poppins(
                   fontSize: 10,
                   color: Colors.grey.shade400,
@@ -610,14 +953,36 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                 ),
                 onPressed: () async {
                   setState(() => _isSyncing = true);
-                  await Future.delayed(const Duration(seconds: 1));
+                  try {
+                    final week = context
+                        .read<ClientPro>()
+                        .currentClientBillingTabs
+                        ?.week;
+                    final String startStr = week?.start ?? _selectedWeek;
+                    final String endStr;
+                    if (week != null && week.end.isNotEmpty) {
+                      endStr = week.end;
+                    } else {
+                      final startDt = DateTime.parse(_selectedWeek);
+                      final endDt = startDt.add(const Duration(days: 6));
+                      endStr =
+                          '${endDt.year}-${endDt.month.toString().padLeft(2, '0')}-${endDt.day.toString().padLeft(2, '0')}';
+                    }
+                    final success = await context.read<ClientPro>().syncUsage(
+                      clientId: widget.clientId,
+                      weekStart: startStr,
+                      weekEnd: endStr,
+                    );
+                    if (success) {
+                      await context.read<ClientPro>().getClientBillingTabs(
+                        widget.clientId,
+                        _selectedWeek,
+                        showLoading: false,
+                      );
+                    }
+                  } catch (_) {}
                   if (mounted) {
-                    setState(() {
-                      _isSyncing = false;
-                      _smsOut = 6; // Reset/sync mockup
-                      _callsOut = 3;
-                    });
-                    showToast(message: "Usage synced successfully");
+                    setState(() => _isSyncing = false);
                   }
                 },
                 icon: _isSyncing
@@ -664,7 +1029,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
               Text(
                 "add-ons + overages",
                 style: GoogleFonts.poppins(
-                  fontSize: 8,
+                  fontSize: 8.5,
                   color: Colors.grey.shade400,
                 ),
               ),
@@ -707,7 +1072,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
             ),
             const SizedBox(width: 8),
             Text(
-              "May 25-31, 2026 - Admin only",
+              "${_clientPro.currentClientBillingTabs?.week.label ?? 'May 25-31, 2026'} - Admin only",
               style: GoogleFonts.poppins(
                 fontSize: 10,
                 color: Colors.grey.shade500,
@@ -755,11 +1120,11 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _buildCallsCard(included: callsIncluded, callsInRate: callsInRate, callsOutRate: callsOutRate)),
+              Expanded(child: _buildCallsCard()),
               const SizedBox(width: 12),
-              Expanded(child: _buildSMSCard(included: smsIncluded, smsInRate: smsInRate, smsOutRate: smsOutRate)),
+              Expanded(child: _buildSMSCard()),
               const SizedBox(width: 12),
-              Expanded(child: _buildMMSCard(included: mmsIncluded, mmsInRate: mmsInRate, mmsOutRate: mmsOutRate)),
+              Expanded(child: _buildMMSCard()),
             ],
           ),
         ),
@@ -770,9 +1135,19 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
             children: [
               Expanded(child: _buildStorageCard(storageRate: storageRate)),
               const SizedBox(width: 12),
-              Expanded(child: _buildSupportLinesCard(supportLineRate: supportLineRate, supportLinesIncluded: supportLinesIncluded)),
+              Expanded(
+                child: _buildSupportLinesCard(
+                  supportLineRate: supportLineRate,
+                  supportLinesIncluded: supportLinesIncluded,
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _buildEmailConnectionsCard(emailRate: emailRate, emailIncluded: emailIncluded)),
+              Expanded(
+                child: _buildEmailConnectionsCard(
+                  emailRate: emailRate,
+                  emailIncluded: emailIncluded,
+                ),
+              ),
             ],
           ),
         ),
@@ -781,47 +1156,91 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
   }
 
   // Card 1: Calls
-  Widget _buildCallsCard({int included = 5, double callsInRate = 0.05, double callsOutRate = 0.07}) {
-    double progress = (_callsOut / included).clamp(0.0, 1.0);
+  Widget _buildCallsCard() {
+    final int inLimit = _callsInIncluded;
+    final int outLimit = _callsOutIncluded;
+    final bool inOverLimit = _callsIn > inLimit;
+    final bool outOverLimit = _callsOut > outLimit;
+    final bool isOver = inOverLimit || outOverLimit;
+
+    final double inOverage = inOverLimit ? (_callsIn - inLimit) : 0.0;
+    final double outOverage = outOverLimit ? (_callsOut - outLimit) : 0.0;
+    final double overageCost =
+        (inOverage * _callsInRate) + (outOverage * _callsOutRate);
+
+    final double inProgress = (_callsIn / inLimit).clamp(0.0, 1.0);
+    final double outProgress = (_callsOut / outLimit).clamp(0.0, 1.0);
+
+    final String inLabel =
+        "${_formatDouble(_callsIn)} / $inLimit min${inOverLimit ? ' +${_formatDouble(inOverage)}' : ''}";
+    final String outLabel =
+        "${_formatDouble(_callsOut)} / $outLimit min${outOverLimit ? ' +${_formatDouble(outOverage)}' : ''}";
+
     return _buildUsageCardWrapper(
       title: "Calls",
       icon: Icons.call,
-      iconColor: const Color(0xFF2563EB),
-      badgeText: "On track",
-      badgeColor: const Color(0xFFDCFCE7),
-      badgeTextColor: const Color(0xFF15803D),
+      iconColor: isOver ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
+      badgeText: isOver ? "Over" : "On track",
+      badgeColor: isOver ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7),
+      badgeTextColor: isOver
+          ? const Color(0xFFB91C1C)
+          : const Color(0xFF15803D),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildDirectionalRow(
             incoming: true,
-            label: "$_callsIn / $included min",
+            label: inLabel,
+            progress: inProgress,
+            isOverLimit: inOverLimit,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 10),
           _buildDirectionalRow(
             incoming: false,
-            label: "$_callsOut / $included min",
+            label: outLabel,
+            progress: outProgress,
+            isOverLimit: outOverLimit,
           ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.grey.shade200,
-              valueColor: const AlwaysStoppedAnimation(Color(0xFF2563EB)),
-              minHeight: 4,
+          if (isOver) ...[
+            const SizedBox(height: 8),
+            Text(
+              "Over - est. \$${overageCost.toStringAsFixed(2)}",
+              style: GoogleFonts.poppins(
+                fontSize: 9.5,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFEF4444),
+              ),
             ),
-          ),
+          ],
         ],
       ),
       overageLabel: "In rate\nOut rate",
-      overageValue: "\$${callsInRate.toStringAsFixed(4)}/min\n\$${callsOutRate.toStringAsFixed(4)}/min",
+      overageValue:
+          "\$${_callsInRate.toStringAsFixed(4)}/min\n\$${_callsOutRate.toStringAsFixed(4)}/min",
     );
   }
 
   // Card 2: SMS
-  Widget _buildSMSCard({int included = 5, double smsInRate = 0.01, double smsOutRate = 0.02}) {
-    double progress = (_smsOut / included).clamp(0.0, 1.0);
-    bool isOver = _smsOut > included;
+  Widget _buildSMSCard() {
+    final int inLimit = _smsInIncluded;
+    final int outLimit = _smsOutIncluded;
+    final bool inOverLimit = _smsIn > inLimit;
+    final bool outOverLimit = _smsOut > outLimit;
+    final bool isOver = inOverLimit || outOverLimit;
+
+    final double inOverage = inOverLimit ? (_smsIn - inLimit) : 0.0;
+    final double outOverage = outOverLimit ? (_smsOut - outLimit) : 0.0;
+    final double overageCost =
+        (inOverage * _smsInRate) + (outOverage * _smsOutRate);
+
+    final double inProgress = (_smsIn / inLimit).clamp(0.0, 1.0);
+    final double outProgress = (_smsOut / outLimit).clamp(0.0, 1.0);
+
+    final String inLabel =
+        "${_formatDouble(_smsIn)} / $inLimit${inOverLimit ? ' +${_formatDouble(inOverage)}' : ''}";
+    final String outLabel =
+        "${_formatDouble(_smsOut)} / $outLimit${outOverLimit ? ' +${_formatDouble(outOverage)}' : ''}";
+
     return _buildUsageCardWrapper(
       title: "SMS",
       icon: Icons.sms,
@@ -834,31 +1253,26 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildDirectionalRow(incoming: true, label: "$_smsIn / $included"),
-          const SizedBox(height: 4),
+          _buildDirectionalRow(
+            incoming: true,
+            label: inLabel,
+            progress: inProgress,
+            isOverLimit: inOverLimit,
+          ),
+          const SizedBox(height: 10),
           _buildDirectionalRow(
             incoming: false,
-            label: "$_smsOut / $included +${_smsOut - included}",
-          ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.grey.shade200,
-              valueColor: AlwaysStoppedAnimation(
-                isOver ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
-              ),
-              minHeight: 4,
-            ),
+            label: outLabel,
+            progress: outProgress,
+            isOverLimit: outOverLimit,
           ),
           if (isOver) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             Text(
-              "Over - est. \$0.02",
+              "Over - est. \$${overageCost.toStringAsFixed(2)}",
               style: GoogleFonts.poppins(
                 fontSize: 9.5,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.bold,
                 color: const Color(0xFFEF4444),
               ),
             ),
@@ -866,105 +1280,102 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
         ],
       ),
       overageLabel: "In rate\nOut rate",
-      overageValue: "\$${smsInRate.toStringAsFixed(4)}/msg\n\$${smsOutRate.toStringAsFixed(4)}/msg",
+      overageValue:
+          "\$${_smsInRate.toStringAsFixed(4)}/msg\n\$${_smsOutRate.toStringAsFixed(4)}/msg",
     );
   }
 
   // Card 3: MMS
-  Widget _buildMMSCard({int included = 5, double mmsInRate = 0.05, double mmsOutRate = 0.10}) {
-    double progress = (_mmsOut / included).clamp(0.0, 1.0);
+  Widget _buildMMSCard() {
+    final int inLimit = _mmsInIncluded;
+    final int outLimit = _mmsOutIncluded;
+    final bool inOverLimit = _mmsIn > inLimit;
+    final bool outOverLimit = _mmsOut > outLimit;
+    final bool isOver = inOverLimit || outOverLimit;
+
+    final double inOverage = inOverLimit ? (_mmsIn - inLimit) : 0.0;
+    final double outOverage = outOverLimit ? (_mmsOut - outLimit) : 0.0;
+    final double overageCost =
+        (inOverage * _mmsInRate) + (outOverage * _mmsOutRate);
+
+    final double inProgress = (_mmsIn / inLimit).clamp(0.0, 1.0);
+    final double outProgress = (_mmsOut / outLimit).clamp(0.0, 1.0);
+
+    final String inLabel =
+        "${_formatDouble(_mmsIn)} / $inLimit msg${inOverLimit ? ' +${_formatDouble(inOverage)}' : ''}";
+    final String outLabel =
+        "${_formatDouble(_mmsOut)} / $outLimit msg${outOverLimit ? ' +${_formatDouble(outOverage)}' : ''}";
+
     return _buildUsageCardWrapper(
       title: "MMS",
       icon: Icons.photo_library,
       iconColor: const Color(0xFFF59E0B),
-      badgeText: "On track",
-      badgeColor: const Color(0xFFDCFCE7),
-      badgeTextColor: const Color(0xFF15803D),
+      badgeText: isOver ? "Over" : "On track",
+      badgeColor: isOver ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7),
+      badgeTextColor: isOver
+          ? const Color(0xFFB91C1C)
+          : const Color(0xFF15803D),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildDirectionalRow(incoming: true, label: "$_mmsIn / $included msg"),
-          const SizedBox(height: 4),
+          _buildDirectionalRow(
+            incoming: true,
+            label: inLabel,
+            progress: inProgress,
+            isOverLimit: inOverLimit,
+          ),
+          const SizedBox(height: 10),
           _buildDirectionalRow(
             incoming: false,
-            label: "$_mmsOut / $included msg",
+            label: outLabel,
+            progress: outProgress,
+            isOverLimit: outOverLimit,
           ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.grey.shade200,
-              valueColor: const AlwaysStoppedAnimation(Color(0xFF2563EB)),
-              minHeight: 4,
+          if (isOver) ...[
+            const SizedBox(height: 8),
+            Text(
+              "Over - est. \$${overageCost.toStringAsFixed(2)}",
+              style: GoogleFonts.poppins(
+                fontSize: 9.5,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFEF4444),
+              ),
             ),
-          ),
+          ],
         ],
       ),
       overageLabel: "In rate\nOut rate",
-      overageValue: "\$${mmsInRate.toStringAsFixed(4)}/msg\n\$${mmsOutRate.toStringAsFixed(4)}/msg",
+      overageValue:
+          "\$${_mmsInRate.toStringAsFixed(4)}/msg\n\$${_mmsOutRate.toStringAsFixed(4)}/msg",
     );
   }
 
   // Card 4: Storage
   Widget _buildStorageCard({double storageRate = 0.69}) {
+    final storageAddon = _getAddon('file-storage', 'storage');
+    final storageData = storageAddon?.storage ?? {};
+    final usedDisplay = (storageData['used_display'] ?? '0 KB').toString();
+    final includedDisplay = (storageData['included_display'] ?? '0 GB')
+        .toString();
+    final remainingDisplay = (storageData['remaining_display'] ?? '0 GB')
+        .toString();
+    final usagePercent = (storageData['usage_percent'] is num)
+        ? (storageData['usage_percent'] as num).toDouble()
+        : 0.0;
+    final overage = storageData['overage'] as Map<String, dynamic>? ?? {};
+    final overageEnabled = overage['enabled'] == true;
+    final overageRate = (overage['rate_per_block'] is num)
+        ? (overage['rate_per_block'] as num).toDouble()
+        : storageRate;
+    final blockSizeGb = (storageData['block_size_gb'] is num)
+        ? (storageData['block_size_gb'] as num).toInt()
+        : 500;
+
     return _buildUsageCardWrapper(
       title: "Storage",
       icon: Icons.folder,
       iconColor: const Color(0xFF8B5CF6),
-      badgeText: "0% used",
-      badgeColor: const Color(0xFFDCFCE7),
-      badgeTextColor: const Color(0xFF15803D),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                "0.08 MB",
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                "–",
-                style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: 0.0,
-              backgroundColor: Colors.grey.shade200,
-              minHeight: 4,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "No included storage configured in Settings",
-            style: GoogleFonts.poppins(
-              fontSize: 9.5,
-              color: Colors.grey.shade500,
-            ),
-          ),
-        ],
-      ),
-      overageLabel: "Rate",
-      overageValue: "\$${storageRate.toStringAsFixed(2)}/block (per 500 GB)",
-    );
-  }
-
-  // Card 5: Support Lines
-  Widget _buildSupportLinesCard({double supportLineRate = 0.69, int supportLinesIncluded = 1}) {
-    return _buildUsageCardWrapper(
-      title: "Support Lines",
-      icon: Icons.headset_mic,
-      iconColor: const Color(0xFF10B981),
-      badgeText: "1 active",
+      badgeText: "${usagePercent.toStringAsFixed(0)}% used",
       badgeColor: const Color(0xFFDCFCE7),
       badgeTextColor: const Color(0xFF15803D),
       body: Column(
@@ -974,7 +1385,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                "1",
+                usedDisplay,
                 style: GoogleFonts.poppins(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -985,7 +1396,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
                 child: Text(
-                  "lines in use",
+                  "of $includedDisplay included",
                   style: GoogleFonts.poppins(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w500,
@@ -996,63 +1407,164 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.grey.shade200),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (usagePercent / 100).clamp(0.0, 1.0),
+              backgroundColor: Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation(
+                usagePercent > 90
+                    ? const Color(0xFFEF4444)
+                    : const Color(0xFF2563EB),
+              ),
+              minHeight: 4,
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 5,
-                  height: 5,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFF10B981),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  "+1 (323) 402-6244",
-                  style: GoogleFonts.poppins(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 1.5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF08A),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    "MAIN",
-                    style: GoogleFonts.poppins(
-                      fontSize: 7.5,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
-                  ),
-                ),
-              ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "$remainingDisplay remaining",
+            style: GoogleFonts.poppins(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey.shade500,
             ),
           ),
         ],
       ),
-      bottomLabel: "Plan includes $supportLinesIncluded line${supportLinesIncluded == 1 ? '' : 's'} - \$${supportLineRate.toStringAsFixed(2)}/wk per extra line",
+      overageLabel: "Overage",
+      overageValue: overageEnabled ? "" : "",
+      bottomLabel:
+          "Rate: \$${overageRate.toStringAsFixed(2)}/block (per $blockSizeGb GB)",
     );
   }
 
+  // Card 5: Support Lines
+  Widget _buildSupportLinesCard({
+    double supportLineRate = 0.69,
+    int supportLinesIncluded = 1,
+  }) {
+    final details =
+        _clientPro.currentClientBillingTabs?.billing.supportLinesDetails;
+    final inUseCount = details?.inUseCount ?? 0;
+    final numbers = details?.numbers ?? [];
+
+    return _buildUsageCardWrapper(
+      title: "Support Lines",
+      icon: Icons.headset_mic,
+      iconColor: const Color(0xFF10B981),
+      badgeText: "$inUseCount active",
+      badgeColor: const Color(0xFFDCFCE7),
+      badgeTextColor: const Color(0xFF15803D),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                "$inUseCount",
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  inUseCount == 1 ? "line in use" : "lines in use",
+                  style: GoogleFonts.poppins(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...numbers.map<Widget>((num) {
+            final phone = (num['phone_number'] ?? '').toString();
+            final isMain = num['is_main'] == true;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 5,
+                      height: 5,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(0xFF10B981),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _formatPhoneNumber(phone),
+                      style: GoogleFonts.poppins(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black,
+                      ),
+                    ),
+                    if (isMain) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF08A),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          "MAIN",
+                          style: GoogleFonts.poppins(
+                            fontSize: 7.5,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+      bottomLabel:
+          "Plan includes $supportLinesIncluded line${supportLinesIncluded == 1 ? '' : 's'} · \$${supportLineRate.toStringAsFixed(2)}/wk per extra line",
+    );
+  }
+
+  /// Formats a raw phone number like "18182808831" into "+1 (818) 280-8831".
+  String _formatPhoneNumber(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 11 && digits.startsWith('1')) {
+      return '+1 (${digits.substring(1, 4)}) ${digits.substring(4, 7)}-${digits.substring(7)}';
+    } else if (digits.length == 10) {
+      return '+1 (${digits.substring(0, 3)}) ${digits.substring(3, 6)}-${digits.substring(6)}';
+    }
+    return raw; // fallback: return as-is
+  }
+
   // Card 6: Email Connections
-  Widget _buildEmailConnectionsCard({double emailRate = 4.62, int emailIncluded = 0}) {
+  Widget _buildEmailConnectionsCard({
+    double emailRate = 4.62,
+    int emailIncluded = 0,
+  }) {
     return _buildUsageCardWrapper(
       title: "Email Connections",
       icon: Icons.email,
@@ -1123,7 +1635,8 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
           ),
         ],
       ),
-      bottomLabel: "Base plan includes $emailIncluded email slot${emailIncluded == 1 ? '' : 's'} - \$${emailRate.toStringAsFixed(2)}/wk per extra slot",
+      bottomLabel:
+          "Base plan includes $emailIncluded email slot${emailIncluded == 1 ? '' : 's'} · \$${emailRate.toStringAsFixed(2)}/wk per extra slot",
     );
   }
 
@@ -1140,12 +1653,16 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
     String? overageValue,
     String? bottomLabel,
   }) {
+    final bool isOver = badgeText == "Over";
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isOver ? const Color(0xFFFEF2F2) : Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(
+          color: isOver ? const Color(0xFFFCA5A5) : const Color(0xFFE5E7EB),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1267,10 +1784,13 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                     ),
                   ],
                 ),
-              ] else if (bottomLabel != null) ...[
+              ],
+              if (bottomLabel != null) ...[
                 const SizedBox(height: 8),
-                const Divider(height: 1, thickness: 0.5),
-                const SizedBox(height: 8),
+                if (overageLabel == null) ...[
+                  const Divider(height: 1, thickness: 0.5),
+                  const SizedBox(height: 8),
+                ],
                 Text(
                   bottomLabel,
                   style: GoogleFonts.poppins(
@@ -1288,29 +1808,53 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
   }
 
   // Helper row inside usage card
-  Widget _buildDirectionalRow({required bool incoming, required String label}) {
-    return Row(
+  Widget _buildDirectionalRow({
+    required bool incoming,
+    required String label,
+    required double progress,
+    required bool isOverLimit,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          incoming ? Icons.arrow_downward : Icons.arrow_upward,
-          size: 12,
-          color: incoming ? const Color(0xFF22C55E) : const Color(0xFF3B82F6),
+        Row(
+          children: [
+            Icon(
+              incoming ? Icons.arrow_downward : Icons.arrow_upward,
+              size: 12,
+              color: incoming
+                  ? const Color(0xFF22C55E)
+                  : const Color(0xFF3B82F6),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              incoming ? "in" : "out",
+              style: GoogleFonts.poppins(
+                fontSize: 10.5,
+                color: Colors.grey.shade500,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: isOverLimit ? const Color(0xFFEF4444) : Colors.black,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 4),
-        Text(
-          incoming ? "in" : "out",
-          style: GoogleFonts.poppins(
-            fontSize: 10.5,
-            color: Colors.grey.shade500,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w600,
-            color: Colors.black,
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation(
+              isOverLimit ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
+            ),
+            minHeight: 4,
           ),
         ),
       ],
@@ -1479,10 +2023,17 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                   ),
                 ),
                 children: [
-                  _buildTableHeaderCell("ADD-ON", alignment: Alignment.centerLeft),
+                  _buildTableHeaderCell(
+                    "ADD-ON",
+                    alignment: Alignment.centerLeft,
+                  ),
                   _buildTableHeaderCell("ACTIVE", alignment: Alignment.center),
                   _buildTableHeaderCell("QTY", alignment: Alignment.center),
-                  _buildTableHeaderCell("COST/WK", alignment: Alignment.centerRight, rightPadding: 14),
+                  _buildTableHeaderCell(
+                    "COST/WK",
+                    alignment: Alignment.centerRight,
+                    rightPadding: 14,
+                  ),
                 ],
               ),
               // Row 1: Support Lines
@@ -1492,7 +2043,8 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                     icon: Icons.headset_mic,
                     iconColor: const Color(0xFFF59E0B),
                     title: "Support Lines",
-                    subtitle: "\$${supportLineRate.toStringAsFixed(2)}/wk per extra phone number",
+                    subtitle:
+                        "\$${supportLineRate.toStringAsFixed(2)}/wk per extra phone number",
                   ),
                   TableCell(
                     child: Center(
@@ -1531,7 +2083,8 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                     icon: Icons.folder,
                     iconColor: const Color(0xFF3B82F6),
                     title: "File Storage",
-                    subtitle: "\$${storageRate.toStringAsFixed(2)}/wk per 500GB/wk",
+                    subtitle:
+                        "\$${storageRate.toStringAsFixed(2)}/wk per 500GB/wk",
                   ),
                   TableCell(
                     child: Center(
@@ -1570,7 +2123,8 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                     icon: Icons.email,
                     iconColor: const Color(0xFF10B981),
                     title: "Email Connections",
-                    subtitle: "\$${emailRate.toStringAsFixed(2)}/wk per extra email slot",
+                    subtitle:
+                        "\$${emailRate.toStringAsFixed(2)}/wk per extra email slot",
                   ),
                   TableCell(
                     child: Center(
@@ -1817,14 +2371,142 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
 
   Future<void> _handleSaveConfiguration() async {
     setState(() => _isSaving = true);
-    await Future.delayed(const Duration(seconds: 1));
+    final clientPro = context.read<ClientPro>();
+    final billing = clientPro.currentClientBillingTabs?.billing;
+
+    final List<Map<String, dynamic>> addonsPayload = [];
+    if (billing != null) {
+      for (var row in billing.addons) {
+        bool isActive = row.isActive;
+        int qty = row.quantity;
+        if (row.key == 'support_lines') {
+          isActive = _supportLinesActive;
+          qty = _supportLinesQty;
+        } else if (row.key == 'extra_storage') {
+          isActive = _fileStorageActive;
+          qty = _fileStorageQty;
+        } else if (row.key == 'extra_emails') {
+          isActive = _emailConnectionsActive;
+          qty = _emailConnectionsQty;
+        }
+        addonsPayload.add({
+          "addon_key": row.key,
+          "is_active": isActive,
+          "quantity": qty,
+          "service_addon_id": row.addonId,
+        });
+      }
+    } else {
+      addonsPayload.addAll([
+        {
+          "addon_key": "support_lines",
+          "is_active": _supportLinesActive,
+          "quantity": _supportLinesQty,
+          "service_addon_id": 1,
+        },
+        {
+          "addon_key": "extra_storage",
+          "is_active": _fileStorageActive,
+          "quantity": _fileStorageQty,
+          "service_addon_id": 2,
+        },
+        {
+          "addon_key": "extra_emails",
+          "is_active": _emailConnectionsActive,
+          "quantity": _emailConnectionsQty,
+          "service_addon_id": 3,
+        },
+        {
+          "addon_key": "incoming_call_minutes",
+          "is_active": false,
+          "quantity": 0,
+          "service_addon_id": 4,
+        },
+        {
+          "addon_key": "outgoing_call_minutes",
+          "is_active": false,
+          "quantity": 0,
+          "service_addon_id": 5,
+        },
+        {
+          "addon_key": "incoming_sms",
+          "is_active": false,
+          "quantity": 0,
+          "service_addon_id": 6,
+        },
+        {
+          "addon_key": "outgoing_sms",
+          "is_active": false,
+          "quantity": 0,
+          "service_addon_id": 7,
+        },
+        {
+          "addon_key": "incoming_mms",
+          "is_active": false,
+          "quantity": 0,
+          "service_addon_id": 8,
+        },
+        {
+          "addon_key": "outgoing_mms",
+          "is_active": false,
+          "quantity": 0,
+          "service_addon_id": 9,
+        },
+      ]);
+    }
+
+    final List<Map<String, dynamic>> specialistsPayload = [];
+    if (billing != null) {
+      for (var row in billing.specialistRows) {
+        bool isEnabled = row.isEnabled;
+        if (row.accountTypeId == 2 ||
+            row.name.toLowerCase().contains('staff')) {
+          isEnabled = _staffAccess;
+        } else if (row.accountTypeId == 3 ||
+            row.name.toLowerCase().contains('graphic')) {
+          isEnabled = _graphicDesignerAccess;
+        }
+        final int accountTypeId = row.accountTypeId;
+        final String serviceKey = "acct_$accountTypeId";
+        specialistsPayload.add({
+          "service_key": serviceKey,
+          "is_enabled": isEnabled,
+          "account_type_id": accountTypeId,
+        });
+      }
+    } else {
+      specialistsPayload.addAll([
+        {
+          "service_key": "acct_2",
+          "is_enabled": _staffAccess,
+          "account_type_id": 2,
+        },
+        {
+          "service_key": "acct_3",
+          "is_enabled": _graphicDesignerAccess,
+          "account_type_id": 3,
+        },
+      ]);
+    }
+
+    final String mode = billing?.pricingMode.toLowerCase() ?? 'free';
+
+    final success = await clientPro.updateBillingConfiguration(
+      clientId: widget.clientId,
+      mode: mode,
+      addons: addonsPayload,
+      specialists: specialistsPayload,
+    );
     if (mounted) {
       setState(() => _isSaving = false);
-      showToast(message: "Configuration saved successfully");
+      if (success) {
+        await _fetchBillingTabs(isWeekChange: false);
+      }
     }
   }
 
-  Widget _buildWeeklyVolumeTab() {
+  Widget _buildWeeklyVolumeTab(ClientPro clientPro) {
+    final bool isAnySpecialistEnabled = _staffAccess || _graphicDesignerAccess;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1849,7 +2531,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                       size: 14,
                       color: Colors.grey.shade600,
                     ),
-                    onPressed: () {},
+                    onPressed: _goToPreviousWeek,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1857,7 +2539,8 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "May 25-31, 2026",
+                      clientPro.currentClientBillingTabs?.week.label ??
+                          "May 25-31, 2026",
                       style: GoogleFonts.poppins(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -1865,7 +2548,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                       ),
                     ),
                     Text(
-                      "Current week  Orders & Jobs from Printobi",
+                      "${clientPro.currentClientBillingTabs?.week.isCurrent == true ? 'Current week' : 'Previous week'}  Wholesale & Retail from Printobi",
                       style: GoogleFonts.poppins(
                         fontSize: 9.5,
                         color: Colors.grey.shade500,
@@ -1889,7 +2572,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                       size: 14,
                       color: Colors.grey.shade600,
                     ),
-                    onPressed: () {},
+                    onPressed: _goToNextWeek,
                   ),
                 ),
               ],
@@ -1897,6 +2580,9 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF10B981),
+                disabledBackgroundColor: const Color(
+                  0xFF10B981,
+                ).withValues(alpha: 0.5),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 8,
@@ -1905,20 +2591,63 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              onPressed: () {},
-              icon: const Icon(Icons.add, size: 14, color: Colors.white),
+              onPressed: (isAnySpecialistEnabled && !_isWeekClosed)
+                  ? () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => DialogAddEntry(
+                          onSave: (entryData) async {
+                            final success = await context
+                                .read<ClientPro>()
+                                .addWeeklyVolumeEntry(
+                                  clientId: widget.clientId,
+                                  date: entryData['date'],
+                                  pricingMode: entryData['pricing_mode'],
+                                  orderNo: entryData['orderNo'],
+                                  jobNos: entryData['jobNos'],
+                                );
+                            if (success && mounted) {
+                              await _fetchBillingTabs(isWeekChange: true);
+                            }
+                          },
+                        ),
+                      );
+                    }
+                  : null,
+              icon: Icon(
+                Icons.add,
+                size: 14,
+                color: (isAnySpecialistEnabled && !_isWeekClosed)
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.5),
+              ),
               label: Text(
                 "Add Entry",
                 style: GoogleFonts.poppins(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: (isAnySpecialistEnabled && !_isWeekClosed)
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.5),
                 ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
+        if (!isAnySpecialistEnabled) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              "Enable at least one Specialist Services Access toggle before adding entries.",
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFFEF4444),
+              ),
+            ),
+          ),
+        ],
 
         // 2. Summary Cards Grid
         IntrinsicHeight(
@@ -1927,8 +2656,15 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
             children: [
               Expanded(
                 child: _buildVolumeSummaryCard(
-                  title: "WHOLESALE THIS WEEK",
-                  value: "102",
+                  title: "ORDERS THIS WEEK",
+                  value:
+                      clientPro
+                          .currentClientBillingTabs
+                          ?.weeklyVolume
+                          .summary
+                          .ordersThisWeek
+                          .toString() ??
+                      "0",
                   subtitle: "Logged by admin",
                   topBorderColor: const Color(0xFF3B82F6),
                 ),
@@ -1936,8 +2672,15 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: _buildVolumeSummaryCard(
-                  title: "RETAIL THIS WEEK",
-                  value: "1",
+                  title: "JOBS THIS WEEK",
+                  value:
+                      clientPro
+                          .currentClientBillingTabs
+                          ?.weeklyVolume
+                          .summary
+                          .jobsThisWeek
+                          .toString() ??
+                      "0",
                   subtitle: "Logged by admin",
                   topBorderColor: const Color(0xFFFBBF24),
                 ),
@@ -1946,7 +2689,14 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
               Expanded(
                 child: _buildVolumeSummaryCard(
                   title: "SPECIALISTS INVOLVED",
-                  value: "0",
+                  value:
+                      clientPro
+                          .currentClientBillingTabs
+                          ?.weeklyVolume
+                          .summary
+                          .specialistsInvolved
+                          .toString() ??
+                      "0",
                   subtitle: "Marked involvement",
                   topBorderColor: const Color(0xFF10B981),
                 ),
@@ -1957,11 +2707,11 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
         const SizedBox(height: 10),
 
         // 3. Order & Job Log
-        _buildOrderJobLog(),
+        _buildOrderJobLog(clientPro),
         const SizedBox(height: 10),
 
         // 4. Week Charge Breakdown
-        _buildWeekChargeBreakdown(),
+        _buildWeekChargeBreakdown(clientPro),
       ],
     );
   }
@@ -2021,7 +2771,15 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
     );
   }
 
-  Widget _buildOrderJobLog() {
+  Widget _buildOrderJobLog(ClientPro clientPro) {
+    final weeklyVolume = clientPro.currentClientBillingTabs?.weeklyVolume;
+    final pagination = weeklyVolume?.pagination ?? {};
+    final totalPages = int.tryParse((pagination['last_page'] ?? pagination['lastPage'] ?? 1).toString()) ?? 1;
+    final totalEntries = int.tryParse((pagination['total'] ?? 0).toString()) ?? 0;
+    final from = int.tryParse((pagination['from'] ?? 0).toString()) ?? 0;
+    final to = int.tryParse((pagination['to'] ?? 0).toString()) ?? 0;
+    final currentEntries = weeklyVolume?.entries ?? [];
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -2036,7 +2794,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Order & Job Log",
+                "Wholesale & Retail Log",
                 style: GoogleFonts.poppins(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -2045,27 +2803,92 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
               ),
               Row(
                 children: [
-                  _buildDropdown("All types"),
+                  _buildFilterDropdown(
+                    value: _orderLogTypeFilter,
+                    items: const ['All types', 'Wholesale', 'Retail'],
+                    onChanged: (val) {
+                      setState(() {
+                        _orderLogTypeFilter = val;
+                      });
+                      final clientId = clientPro.currentClientBillingTabs?.client.id ?? 0;
+                      final currentWeek = clientPro.currentClientBillingTabs?.week.start ?? '';
+                      if (clientId != 0) {
+                        clientPro.getClientBillingTabs(
+                          clientId,
+                          currentWeek,
+                          volumePage: 1,
+                          volumeType: val,
+                          volumeDay: _orderLogDayFilter,
+                        );
+                      }
+                    },
+                  ),
                   const SizedBox(width: 6),
-                  _buildDropdown("All days"),
+                  _buildFilterDropdown(
+                    value: _orderLogDayFilter,
+                    items: const [
+                      'All days',
+                      'Monday',
+                      'Tuesday',
+                      'Wednesday',
+                      'Thursday',
+                      'Friday',
+                      'Saturday',
+                      'Sunday',
+                    ],
+                    onChanged: (val) {
+                      setState(() {
+                        _orderLogDayFilter = val;
+                      });
+                      final clientId = clientPro.currentClientBillingTabs?.client.id ?? 0;
+                      final currentWeek = clientPro.currentClientBillingTabs?.week.start ?? '';
+                      if (clientId != 0) {
+                        clientPro.getClientBillingTabs(
+                          clientId,
+                          currentWeek,
+                          volumePage: 1,
+                          volumeType: _orderLogTypeFilter,
+                          volumeDay: val,
+                        );
+                      }
+                    },
+                  ),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 10),
-          _buildOrderLogTable(),
+          _buildOrderLogTable(currentEntries),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Showing 1-10 of 103 filtered entries (103 this week)",
+                totalEntries == 0
+                    ? "No entries match this view"
+                    : "Showing $from-$to of $totalEntries entries",
                 style: GoogleFonts.poppins(
                   fontSize: 9.5,
                   color: Colors.grey.shade500,
                 ),
               ),
-              _buildPagination(),
+              _buildPagination(
+                currentPage: int.tryParse((pagination['current_page'] ?? pagination['currentPage'] ?? 1).toString()) ?? 1,
+                totalPages: totalPages,
+                onPageChanged: (page) {
+                  final clientId = clientPro.currentClientBillingTabs?.client.id ?? 0;
+                  final currentWeek = clientPro.currentClientBillingTabs?.week.start ?? '';
+                  if (clientId != 0) {
+                    clientPro.getClientBillingTabs(
+                      clientId,
+                      currentWeek,
+                      volumePage: page,
+                      volumeType: _orderLogTypeFilter,
+                      volumeDay: _orderLogDayFilter,
+                    );
+                  }
+                },
+              ),
             ],
           ),
         ],
@@ -2073,93 +2896,179 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
     );
   }
 
-  Widget _buildDropdown(String hint) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Row(
-        children: [
-          Text(
-            hint,
-            style: GoogleFonts.poppins(fontSize: 10.5, color: Colors.black87),
+  Widget _buildFilterDropdown({
+    required String value,
+    required List<String> items,
+    required ValueChanged<String> onChanged,
+  }) {
+    return PopupMenuButton<String>(
+      onSelected: onChanged,
+      offset: const Offset(0, 36),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      color: Colors.white,
+      elevation: 4,
+      itemBuilder: (context) => items.map((item) {
+        final isSelected = item == value;
+        return PopupMenuItem<String>(
+          value: item,
+          height: 36,
+          child: Text(
+            item,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected ? Colors.black : Colors.black87,
+            ),
           ),
-          const SizedBox(width: 6),
-          Icon(
-            Icons.keyboard_arrow_down,
-            size: 14,
-            color: Colors.grey.shade600,
-          ),
-        ],
+        );
+      }).toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.keyboard_arrow_down,
+              size: 14,
+              color: Colors.grey.shade600,
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildPagination() {
+  Widget _buildPagination({
+    required int currentPage,
+    required int totalPages,
+    required ValueChanged<int> onPageChanged,
+  }) {
+    if (totalPages <= 1) return const SizedBox();
+
+    List<int> pages = [];
+    if (totalPages <= 7) {
+      pages = List.generate(totalPages, (i) => i + 1);
+    } else {
+      pages.add(1);
+      if (currentPage > 3) pages.add(-1); // ellipsis
+      int start = (currentPage - 1).clamp(2, totalPages - 2);
+      int end = (currentPage + 1).clamp(2, totalPages - 1);
+      for (int i = start; i <= end; i++) {
+        pages.add(i);
+      }
+      if (currentPage < totalPages - 2) pages.add(-1); // ellipsis
+      pages.add(totalPages);
+    }
+
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        _buildPaginationButton(Icons.chevron_left, false),
-        _buildPaginationNumber("1", true),
-        _buildPaginationNumber("2", false),
-        _buildPaginationNumber("3", false),
-        _buildPaginationNumber("4", false),
-        _buildPaginationNumber("5", false),
-        _buildPaginationButton(Icons.chevron_right, false),
+        _pageCircle(
+          icon: Icons.keyboard_double_arrow_left,
+          enabled: currentPage > 1,
+          onTap: () => onPageChanged(1),
+        ),
+        _pageCircle(
+          icon: Icons.chevron_left,
+          enabled: currentPage > 1,
+          onTap: () => onPageChanged(currentPage - 1),
+        ),
+        const SizedBox(width: 8),
+        ...pages.map((p) {
+          if (p == -1) {
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text(
+                "...",
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  color: Colors.grey,
+                ),
+              ),
+            );
+          }
+          final bool isActive = p == currentPage;
+          return GestureDetector(
+            onTap: () => onPageChanged(p),
+            child: Container(
+              width: 32,
+              height: 32,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: isActive ? const Color(0xFFFACC15) : Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: Center(
+                child: Text(
+                  "$p",
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: isActive ? Colors.black : Colors.black87,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+        const SizedBox(width: 8),
+        _pageCircle(
+          icon: Icons.chevron_right,
+          enabled: currentPage < totalPages,
+          onTap: () => onPageChanged(currentPage + 1),
+        ),
+        _pageCircle(
+          icon: Icons.keyboard_double_arrow_right,
+          enabled: currentPage < totalPages,
+          onTap: () => onPageChanged(totalPages),
+        ),
       ],
     );
   }
 
-  Widget _buildPaginationButton(IconData icon, bool isActive) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      width: 20,
-      height: 20,
-      decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFBBF24) : Colors.white,
-        border: Border.all(
-          color: isActive ? Colors.transparent : Colors.grey.shade200,
+  Widget _pageCircle({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 32,
+        height: 32,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: enabled ? Colors.white : Colors.grey.shade100,
+          border: Border.all(color: const Color(0xFFE5E7EB)),
         ),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Center(
-        child: Icon(
-          icon,
-          size: 12,
-          color: isActive ? Colors.white : Colors.grey.shade600,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPaginationNumber(String number, bool isActive) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      width: 20,
-      height: 20,
-      decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFBBF24) : Colors.white,
-        border: Border.all(
-          color: isActive ? Colors.transparent : Colors.grey.shade200,
-        ),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Center(
-        child: Text(
-          number,
-          style: GoogleFonts.poppins(
-            fontSize: 9.5,
-            fontWeight: FontWeight.bold,
-            color: isActive ? Colors.white : Colors.black87,
+        child: Center(
+          child: Icon(
+            icon,
+            size: 16,
+            color: enabled ? Colors.black87 : Colors.grey,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildOrderLogTable() {
+  Widget _buildOrderLogTable(List<dynamic> entries) {
     return Column(
       children: [
         Row(
@@ -2180,16 +3089,23 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
         ),
         const SizedBox(height: 8),
         const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
-        _buildOrderLogRow("05/25/2026", "Wholesale", "#234", "1"),
-        _buildOrderLogRow("05/25/2026", "Retail", "#235", "1"),
-        _buildOrderLogRow("05/25/2026", "Wholesale", "#234", "1"),
-        _buildOrderLogRow("05/25/2026", "Wholesale", "#23478", "1"),
-        _buildOrderLogRow("05/25/2026", "Wholesale", "#23478", "2"),
-        _buildOrderLogRow("05/25/2026", "Wholesale", "#23478", "3"),
-        _buildOrderLogRow("05/25/2026", "Wholesale", "#23478", "4"),
-        _buildOrderLogRow("05/25/2026", "Wholesale", "#23478", "5"),
-        _buildOrderLogRow("05/25/2026", "Wholesale", "#23478", "6"),
-        _buildOrderLogRow("05/25/2026", "Wholesale", "#23478", "7"),
+        if (entries.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Text(
+              "No entries for this week",
+              style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+            ),
+          )
+        else
+          ...entries.map(
+            (entry) => _buildOrderLogRow(
+              entry.date,
+              entry.pricingMode,
+              entry.orderNo,
+              entry.jobNo,
+            ),
+          ),
       ],
     );
   }
@@ -2207,11 +3123,15 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
 
   Widget _buildOrderLogRow(
     String date,
-    String type,
+    String pricingMode,
     String orderNo,
     String jobNo,
   ) {
-    bool isWholesale = type == "Wholesale";
+    bool isWholesale = pricingMode.toLowerCase() == "wholesale";
+    String displayType = pricingMode.isNotEmpty
+        ? (pricingMode[0].toUpperCase() +
+              pricingMode.substring(1).toLowerCase())
+        : pricingMode;
     return Container(
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1)),
@@ -2243,7 +3163,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  type,
+                  displayType,
                   style: GoogleFonts.poppins(
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
@@ -2292,19 +3212,21 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
             flex: 1,
             child: Align(
               alignment: Alignment.centerRight,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEE2E2),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const ImageWidget(
-                  image: Paths.delete,
-                  color: Color(0xFFEF4444),
-                  width: 12,
-                  height: 12,
-                ),
-              ),
+              child: _isWeekClosed
+                  ? const SizedBox.shrink()
+                  : Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const ImageWidget(
+                        image: Paths.delete,
+                        color: Color(0xFFEF4444),
+                        width: 12,
+                        height: 12,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -2312,7 +3234,24 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
     );
   }
 
-  Widget _buildWeekChargeBreakdown() {
+  Widget _buildWeekChargeBreakdown(ClientPro clientPro) {
+    final weekChargeBreakdown = clientPro.currentClientBillingTabs?.weeklyVolume.weekChargeBreakdown;
+    final double extraChargesSum = _extraCharges.fold<double>(
+      0.0,
+      (sum, e) => sum + (double.tryParse(e.amountController.text) ?? 0.0),
+    );
+
+    final double totalChargeWithExtras;
+    if (weekChargeBreakdown != null) {
+      if (_hasEditedExtraCharges || _extraCharges.isNotEmpty) {
+        totalChargeWithExtras = weekChargeBreakdown.weekSubtotal - weekChargeBreakdown.creditsApplied + extraChargesSum;
+      } else {
+        totalChargeWithExtras = weekChargeBreakdown.weekTotal;
+      }
+    } else {
+      totalChargeWithExtras = (clientPro.currentClientBillingTabs?.weeklyVolume.summary.thisWeekCharge ?? 0.0) + extraChargesSum;
+    }
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -2361,41 +3300,77 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
           const SizedBox(height: 6),
           const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
           const SizedBox(height: 6),
-          _buildChargeRow("The Pod - Orders", "102", "\$40.00", "\$4080.00"),
-          _buildChargeRow("The Pod - Jobs", "1", "\$40.00", "\$40.00"),
-          _buildChargeRow(
-            "PH Portal",
-            "—",
-            "\$345.40/wk",
-            "\$345.40",
-            amountColor: const Color(0xFF10B981),
-          ),
-          _buildChargeRow(
-            "Support Lines",
-            "0",
-            "\$0.69/per extra phone number",
-            "\$0.00",
-          ),
-          _buildChargeRow("File Storage", "0", "\$0.69/per 500GB/wk", "\$0.00"),
-          _buildChargeRow(
-            "Email Connections",
-            "0",
-            "\$4.62/per extra email slot",
-            "\$0.00",
-          ),
-          _buildChargeRow(
-            "SMS Overage",
-            "1",
-            "\$0.02",
-            "\$0.02",
-            amountColor: const Color(0xFFEF4444),
-          ),
+
+          if (weekChargeBreakdown != null)
+            ...weekChargeBreakdown.rows.where((row) => !row.key.startsWith('extra-charge')).map((row) {
+              Color? amountColor;
+              if (row.tone == 'success') {
+                amountColor = const Color(0xFF10B981);
+              } else if (row.tone == 'danger' || row.tone == 'error') {
+                amountColor = const Color(0xFFEF4444);
+              }
+              return _buildChargeRow(
+                row.label,
+                row.qty?.toString() ?? "—",
+                row.unitPriceLabel,
+                "\$${row.amount.toStringAsFixed(2)}",
+                amountColor: amountColor,
+              );
+            })
+          else ...[
+            _buildChargeRow(
+              "The Pod - Orders",
+              "${clientPro.currentClientBillingTabs?.weeklyVolume.summary.ordersThisWeek ?? 0}",
+              "\$40.00",
+              "\$${((clientPro.currentClientBillingTabs?.weeklyVolume.summary.ordersThisWeek ?? 0) * 40.0).toStringAsFixed(2)}",
+            ),
+            _buildChargeRow(
+              "The Pod - Jobs",
+              "${clientPro.currentClientBillingTabs?.weeklyVolume.summary.jobsThisWeek ?? 0}",
+              "\$40.00",
+              "\$${((clientPro.currentClientBillingTabs?.weeklyVolume.summary.jobsThisWeek ?? 0) * 40.0).toStringAsFixed(2)}",
+            ),
+            _buildChargeRow(
+              "PH Portal",
+              "—",
+              "\$${_phPortalWeekly.toStringAsFixed(2)}/wk",
+              "\$${_phPortalWeekly.toStringAsFixed(2)}",
+              amountColor: const Color(0xFF10B981),
+            ),
+            _buildChargeRow(
+              "Support Lines",
+              "$_supportLinesQty",
+              "\$${_supportLineWeeklyPrice.toStringAsFixed(2)}/per extra phone number",
+              "\$${_supportLineCost.toStringAsFixed(2)}",
+            ),
+            _buildChargeRow(
+              "File Storage",
+              "$_fileStorageQty",
+              "\$${_storageWeeklyPrice.toStringAsFixed(2)}/per 500GB/wk",
+              "\$${_storageCost.toStringAsFixed(2)}",
+            ),
+            _buildChargeRow(
+              "Email Connections",
+              "$_emailConnectionsQty",
+              "\$${_emailWeeklyPrice.toStringAsFixed(2)}/per extra email slot",
+              "\$${_emailCost.toStringAsFixed(2)}",
+            ),
+            _buildChargeRow(
+              "SMS Overage",
+              _smsOut > _smsIncluded ? "${_smsOut - _smsIncluded}" : "0",
+              "\$${_smsOutRate.toStringAsFixed(2)}",
+              "\$${_smsOverage.toStringAsFixed(2)}",
+              amountColor: const Color(0xFFEF4444),
+            ),
+          ],
 
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: Colors.grey.shade300),
+                side: BorderSide(
+                  color: _isWeekClosed ? Colors.grey.shade200 : Colors.grey.shade300,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(6),
                 ),
@@ -2404,24 +3379,159 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                   vertical: 6,
                 ),
               ),
-              onPressed: () {},
-              icon: Icon(Icons.add, size: 12, color: Colors.grey.shade600),
+              onPressed: _isWeekClosed
+                  ? null
+                  : () {
+                      setState(() {
+                        _hasEditedExtraCharges = true;
+                        _extraCharges.add(
+                          ExtraChargeItem(description: '', amount: 0.0),
+                        );
+                      });
+                    },
+              icon: Icon(
+                Icons.add,
+                size: 12,
+                color: _isWeekClosed ? Colors.grey.shade400 : Colors.grey.shade600,
+              ),
               label: Text(
                 "Add Extra Charge",
                 style: GoogleFonts.poppins(
                   fontSize: 9.5,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade600,
+                  color: _isWeekClosed ? Colors.grey.shade400 : Colors.grey.shade600,
                 ),
               ),
             ),
           ),
 
+          ..._extraCharges.asMap().entries.map((entry) {
+            final index = entry.key;
+            final item = entry.value;
+            return Padding(
+              key: ObjectKey(item),
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: SizedBox(
+                      height: 38,
+                      child: TextField(
+                        controller: item.descController,
+                        readOnly: _isWeekClosed,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: _isWeekClosed ? Colors.grey.shade600 : Colors.black87,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: "Description",
+                          hintStyle: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade400,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade200),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade400),
+                          ),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            _hasEditedExtraCharges = true;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 30),
+                  SizedBox(
+                    width: 110,
+                    height: 38,
+                    child: TextField(
+                      controller: item.amountController,
+                      readOnly: _isWeekClosed,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: _isWeekClosed ? Colors.grey.shade600 : Colors.black87,
+                      ),
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                      ),
+                      onChanged: (val) {
+                        setState(() {
+                          _hasEditedExtraCharges = true;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 30),
+                  GestureDetector(
+                    onTap: _isWeekClosed
+                        ? null
+                        : () {
+                            setState(() {
+                              _hasEditedExtraCharges = true;
+                              item.descController.dispose();
+                              item.amountController.dispose();
+                              _extraCharges.removeAt(index);
+                            });
+                          },
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: _isWeekClosed ? Colors.grey.shade100 : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: ImageWidget(
+                          image: Paths.delete,
+                          color: _isWeekClosed ? Colors.grey.shade400 : const Color(0xFFEF4444),
+                          width: 18,
+                          height: 18,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
           _buildChargeRow(
             "Credits Applied",
             "",
             "",
-            "\$0.00",
+            "\$${(weekChargeBreakdown?.creditsApplied ?? 0.0).toStringAsFixed(2)}",
             amountColor: const Color(0xFF10B981),
           ),
 
@@ -2441,7 +3551,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                 ),
               ),
               Text(
-                "\$4465.42",
+                "\$${totalChargeWithExtras.toStringAsFixed(2)}",
                 style: GoogleFonts.poppins(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -2465,18 +3575,66 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                     vertical: 8,
                   ),
                 ),
-                onPressed: () {},
-                icon: Icon(
-                  Icons.lock_outline,
-                  size: 14,
-                  color: Colors.grey.shade700,
-                ),
+                onPressed: (_isSaving || _isWeekClosed)
+                    ? null
+                    : () async {
+                        FocusScope.of(context).unfocus();
+                        setState(() => _isSaving = true);
+                        final clientPro = context.read<ClientPro>();
+                        final weekStart = clientPro.currentClientBillingTabs?.week.start ?? _selectedWeek;
+                        String weekEndVal = clientPro.currentClientBillingTabs?.week.end ?? "";
+                        if (weekEndVal.isEmpty) {
+                          try {
+                            final parsed = DateTime.parse(weekStart);
+                            final end = parsed.add(const Duration(days: 6));
+                            weekEndVal = "${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}";
+                          } catch (_) {}
+                        }
+
+                        final items = _extraCharges.map((e) => {
+                          "description": e.descController.text.trim(),
+                          "amount": double.tryParse(e.amountController.text.trim()) ?? 0.0,
+                        }).toList();
+
+                        final success = await clientPro.saveExtraCharges(
+                          clientId: widget.clientId,
+                          weekStart: weekStart,
+                          weekEnd: weekEndVal,
+                          items: items,
+                        );
+
+                        if (mounted) {
+                          setState(() {
+                            _isSaving = false;
+                            if (success) {
+                              _hasEditedExtraCharges = false;
+                            }
+                          });
+                          if (success) {
+                            await _fetchBillingTabs(isWeekChange: false);
+                          }
+                        }
+                      },
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.grey,
+                        ),
+                      )
+                    : Icon(
+                        Icons.lock_outline,
+                        size: 14,
+                        color: _isWeekClosed ? Colors.grey.shade400 : Colors.grey.shade700,
+                      ),
                 label: Text(
-                  "Save Changes",
+                  _isSaving ? "Saving..." : "Save Changes",
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: _isWeekClosed ? Colors.grey.shade400 : Colors.black87,
                   ),
                 ),
               ),
@@ -2484,6 +3642,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFBBF24),
+                  disabledBackgroundColor: const Color(0xFFFBBF24).withValues(alpha: 0.5),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -2492,14 +3651,69 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                     vertical: 8,
                   ),
                 ),
-                onPressed: () {},
-                icon: const Icon(Icons.lock, size: 14, color: Colors.black),
+                onPressed: (weekChargeBreakdown == null || _isWeekClosed)
+                    ? null
+                    : () async {
+                        FocusScope.of(context).unfocus();
+                        final weekStart = clientPro.currentClientBillingTabs?.week.start ?? _selectedWeek;
+                        String weekEndVal = clientPro.currentClientBillingTabs?.week.end ?? "";
+                        if (weekEndVal.isEmpty) {
+                          try {
+                            final parsed = DateTime.parse(weekStart);
+                            final end = parsed.add(const Duration(days: 6));
+                            weekEndVal = "${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}";
+                          } catch (_) {}
+                        }
+
+                        int ordersQty = 0;
+                        int jobsQty = 0;
+                        int podQty = 0;
+                        double addonsSum = 0.0;
+
+                        for (var row in weekChargeBreakdown.rows) {
+                          if (row.key == 'pod-orders') {
+                            ordersQty = row.qty ?? 0;
+                          } else if (row.key == 'pod-jobs') {
+                            jobsQty = row.qty ?? 0;
+                          } else if (row.key == 'ph-portal') {
+                            podQty = row.qty ?? (row.amount > 0 ? 1 : 0);
+                          } else if (row.key.startsWith('addon-')) {
+                            addonsSum += row.amount;
+                          }
+                        }
+
+                        final extrasAmount = weekChargeBreakdown.extraChargesTotal;
+                        final creditAmount = weekChargeBreakdown.creditsApplied;
+                        final totalAmount = weekChargeBreakdown.weekTotal;
+
+                        final success = await clientPro.closeWeek(
+                          clientId: widget.clientId,
+                          weekStart: weekStart,
+                          weekEnd: weekEndVal,
+                          orders: ordersQty,
+                          jobs: jobsQty,
+                          pod: podQty,
+                          addons: addonsSum,
+                          extras: extrasAmount,
+                          credit: creditAmount,
+                          total: totalAmount,
+                        );
+
+                        if (success && mounted) {
+                          await _fetchBillingTabs(isWeekChange: false);
+                        }
+                      },
+                icon: Icon(
+                  _isWeekClosed ? Icons.lock : Icons.lock_open,
+                  size: 14,
+                  color: _isWeekClosed ? Colors.black38 : Colors.black,
+                ),
                 label: Text(
-                  "Close Week & Record Charge",
+                  _isWeekClosed ? "Week Closed" : "Close Week & Record Charge",
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black,
+                    color: _isWeekClosed ? Colors.black38 : Colors.black,
                   ),
                 ),
               ),
@@ -2508,6 +3722,28 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
         ],
       ),
     );
+  }
+
+  String _getUnitSuffix(String key) {
+    switch (key) {
+      case 'support_lines':
+        return '/per extra phone number';
+      case 'extra_storage':
+        return '/per 500GB/wk';
+      case 'extra_emails':
+        return '/per extra email slot';
+      case 'incoming_call_minutes':
+      case 'outgoing_call_minutes':
+        return '/per extra minute';
+      case 'incoming_sms':
+      case 'outgoing_sms':
+        return '/per extra SMS';
+      case 'incoming_mms':
+      case 'outgoing_mms':
+        return '/per extra MMS';
+      default:
+        return '';
+    }
   }
 
   Widget _buildChargeRow(
@@ -2593,7 +3829,9 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
     );
   }
 
-  Widget _buildBillingTab() {
+  Widget _buildBillingTab(ClientPro clientPro) {
+    final invoiceHistory = clientPro.currentClientBillingTabs?.billing.invoiceHistory ?? [];
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -2626,15 +3864,13 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
-              width: 900,
+              width: 960,
               child: Column(
                 children: [
+                  // Header
                   Container(
                     color: const Color(0xFFF9FAFB),
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 8,
-                      horizontal: 12,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                     child: Row(
                       children: [
                         Expanded(flex: 3, child: _buildTableHeader("WEEK")),
@@ -2647,7 +3883,7 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                         Expanded(flex: 2, child: _buildTableHeader("TOTAL")),
                         Expanded(flex: 2, child: _buildTableHeader("STATUS")),
                         Expanded(
-                          flex: 2,
+                          flex: 3,
                           child: Align(
                             alignment: Alignment.centerRight,
                             child: _buildTableHeader("ACTIONS"),
@@ -2656,161 +3892,19 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 10,
-                      horizontal: 12,
-                    ),
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1),
+                  // Dynamic rows
+                  if (invoiceHistory.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text(
+                          "No invoice history yet",
+                          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                        ),
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "May 25–31",
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                "Current",
-                                style: GoogleFonts.poppins(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.normal,
-                                  color: Colors.grey.shade500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            "102",
-                            style: GoogleFonts.poppins(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.normal,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            "1",
-                            style: GoogleFonts.poppins(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.normal,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            "\$345.40",
-                            style: GoogleFonts.poppins(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.normal,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            "\$21.69",
-                            style: GoogleFonts.poppins(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF2563EB),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            "—",
-                            style: GoogleFonts.poppins(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.normal,
-                              color: Colors.grey.shade400,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            "—",
-                            style: GoogleFonts.poppins(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.normal,
-                              color: Colors.grey.shade400,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            "\$4487.09",
-                            style: GoogleFonts.poppins(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFEF9C3),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                "Open",
-                                style: GoogleFonts.poppins(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF854D0E),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              "—",
-                              style: GoogleFonts.poppins(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.normal,
-                                color: Colors.grey.shade400,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                    )
+                  else
+                    ...invoiceHistory.map((inv) => _buildInvoiceHistoryRow(inv)),
                 ],
               ),
             ),
@@ -2843,6 +3937,231 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
       ),
     );
   }
+
+  Widget _buildInvoiceHistoryRow(InvoiceHistoryItemModel inv) {
+    final isClosed = inv.status.toLowerCase() == 'closed';
+    final isPaid = inv.status.toLowerCase() == 'paid';
+
+    final rowBg = (isClosed && !isPaid) ? const Color(0xFFFFFBEB) : Colors.white;
+
+    Color badgeBg;
+    Color badgeText;
+    String badgeLabel;
+    if (isPaid) {
+      badgeBg = const Color(0xFFDCFCE7);
+      badgeText = const Color(0xFF166534);
+      badgeLabel = "Paid";
+    } else if (isClosed) {
+      badgeBg = const Color(0xFFE5E7EB);
+      badgeText = const Color(0xFF374151);
+      badgeLabel = "Closed";
+    } else {
+      badgeBg = const Color(0xFFFEF9C3);
+      badgeText = const Color(0xFF854D0E);
+      badgeLabel = "Open";
+    }
+
+    String fmt(double v) => v == 0 ? "\$0.00" : "\$${v.toStringAsFixed(2)}";
+    String fmtCredit(double v) => v == 0 ? "-" : "-\$${v.toStringAsFixed(2)}";
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      decoration: BoxDecoration(
+        color: rowBg,
+        border: const Border(
+          bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Week
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  inv.weekLabel,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                if (inv.isCurrent) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    "Current",
+                    style: GoogleFonts.poppins(
+                      fontSize: 9.5,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // Orders
+          Expanded(
+            flex: 2,
+            child: Text(
+              inv.orders.toString(),
+              style: GoogleFonts.poppins(fontSize: 11.5, color: Colors.black87),
+            ),
+          ),
+          // Jobs
+          Expanded(
+            flex: 2,
+            child: Text(
+              inv.jobs.toString(),
+              style: GoogleFonts.poppins(fontSize: 11.5, color: Colors.black87),
+            ),
+          ),
+          // POD
+          Expanded(
+            flex: 2,
+            child: Text(
+              fmt(inv.pod),
+              style: GoogleFonts.poppins(fontSize: 11.5, color: Colors.black87),
+            ),
+          ),
+          // Add-ons (blue)
+          Expanded(
+            flex: 2,
+            child: Text(
+              inv.addons > 0 ? "\$${inv.addons.toStringAsFixed(2)}" : "-",
+              style: GoogleFonts.poppins(
+                fontSize: 11.5,
+                fontWeight: FontWeight.bold,
+                color: inv.addons > 0 ? const Color(0xFF2563EB) : Colors.grey.shade400,
+              ),
+            ),
+          ),
+          // Extras
+          Expanded(
+            flex: 2,
+            child: Text(
+              inv.extras > 0 ? fmt(inv.extras) : "-",
+              style: GoogleFonts.poppins(
+                fontSize: 11.5,
+                color: inv.extras > 0 ? Colors.black87 : Colors.grey.shade400,
+              ),
+            ),
+          ),
+          // Credit (red)
+          Expanded(
+            flex: 2,
+            child: Text(
+              inv.credit > 0 ? fmtCredit(inv.credit) : "-",
+              style: GoogleFonts.poppins(
+                fontSize: 11.5,
+                fontWeight: FontWeight.bold,
+                color: inv.credit > 0 ? const Color(0xFFEF4444) : Colors.grey.shade400,
+              ),
+            ),
+          ),
+          // Total
+          Expanded(
+            flex: 2,
+            child: Text(
+              fmt(inv.total),
+              style: GoogleFonts.poppins(
+                fontSize: 11.5,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+          ),
+          // Status badge
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  badgeLabel,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: badgeText,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Actions
+          Expanded(
+            flex: 3,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Invoice button
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey.shade300),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () {},
+                    icon: Icon(Icons.receipt_long_outlined, size: 11, color: Colors.grey.shade600),
+                    label: Text(
+                      "Invoice",
+                      style: GoogleFonts.poppins(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                  // Mark Paid (only for closed-not-paid)
+                  if (isClosed && !isPaid) ...[
+                    const SizedBox(width: 6),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () {},
+                      child: Text(
+                        "Mark Paid",
+                        style: GoogleFonts.poppins(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),         // Row
+              ),         // FittedBox
+            ),           // Align
+          ),             // Expanded
+        ],
+      ),
+    );
+  }
+
+
 
   void _showToggleStatusDialog(
     BuildContext context,
@@ -2898,4 +4217,17 @@ class _TabClientBillingScreenState extends State<TabClientBillingScreen> {
       ),
     );
   }
+}
+
+class ExtraChargeItem {
+  final TextEditingController descController;
+  final TextEditingController amountController;
+
+  ExtraChargeItem({required String description, required double amount})
+    : descController = TextEditingController(text: description),
+      amountController = TextEditingController(
+        text: amount == 0.0
+            ? ''
+            : (amount % 1 == 0 ? amount.toInt().toString() : amount.toString()),
+      );
 }

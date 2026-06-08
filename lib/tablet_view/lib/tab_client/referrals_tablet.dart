@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:print_helper/tablet_view/lib/tab_client/add_referral_dialog.dart';
 import 'package:print_helper/constants/paths.dart';
+import 'package:provider/provider.dart';
+import 'package:print_helper/providers/client_pro.dart';
 import '../tab_widgets/tab_image_widget.dart';
 
 class Referral {
@@ -59,132 +61,146 @@ class ReferralsTablet extends StatefulWidget {
 }
 
 class _ReferralsTabletState extends State<ReferralsTablet> {
-  final List<Referral> _referrals = [
-    Referral(
-      id: "1",
-      date: "Apr 27, 2026",
-      fullName: "sss",
-      company: "—",
-      amount: 0.00,
-      status: "Converted",
-      commission: "Paid",
-      invoice: "—",
-      notes: "—",
-    ),
-    Referral(
-      id: "2",
-      date: "Apr 14, 2026",
-      fullName: "Luis Renteria",
-      company: "FastPrint LA",
-      amount: 200.00,
-      status: "Converted",
-      commission: "Paid",
-      invoice: "INV-20260428",
-      notes: "Long-time friend of Sheen",
-    ),
-    Referral(
-      id: "3",
-      date: "Mar 28, 2026",
-      fullName: "Pedro Gómez",
-      company: "Cali Signs Co.",
-      amount: 250.00,
-      status: "Pending",
-      commission: "Not Yet",
-      invoice: "—",
-      notes: "In talks, demo scheduled",
-    ),
-    Referral(
-      id: "4",
-      date: "Feb 10, 2026",
-      fullName: "Ana Torres",
-      company: "PrintQuick Inc.",
-      amount: 300.00,
-      status: "Converted",
-      commission: "Waiting for Payment",
-      invoice: "INV-20260321",
-      notes: "—",
-    ),
-    Referral(
-      id: "5",
-      date: "Jan 22, 2026",
-      fullName: "Carlos Mendez",
-      company: "SignWorks Miami",
-      amount: 350.00,
-      status: "Converted",
-      commission: "Not Yet",
-      invoice: "—",
-      notes: "Referred by Sheen",
-    ),
-    Referral(
-      id: "6",
-      date: "Dec 15, 2025",
-      fullName: "Maria Rodriguez",
-      company: "Design Studio TX",
-      amount: 150.00,
-      status: "Lost",
-      commission: "Not Yet",
-      invoice: "—",
-      notes: "Chose competitor",
-    ),
-  ];
+  final List<Referral> _localReferrals = [];
+
+  List<Referral> get _referrals {
+    final apiItems =
+        context
+            .watch<ClientPro>()
+            .currentClientBillingTabs
+            ?.myReferrals
+            .items ??
+        [];
+    final parsedApi = apiItems
+        .map((e) {
+          if (e is Map) {
+            String dateStr = (e['referred_date'] ?? e['date'] ?? '').toString();
+            if (dateStr.contains('T')) {
+              dateStr = dateStr.split('T')[0];
+            }
+            String comp = e['company']?.toString() ?? '';
+            if (comp.isEmpty || comp.toLowerCase() == 'null') comp = '—';
+            String comm = (e['commission_status'] ?? e['commission'])?.toString() ?? '';
+            if (comm.isEmpty || comm.toLowerCase() == 'null') comm = 'Not Yet';
+            String inv = (e['invoice_number'] ?? e['invoice'])?.toString() ?? '';
+            if (inv.isEmpty || inv.toLowerCase() == 'null') inv = '-';
+            String nts = e['notes']?.toString() ?? '';
+            if (nts.isEmpty || nts.toLowerCase() == 'null') nts = '—';
+
+            return Referral(
+              id: e['id']?.toString() ?? '',
+              date: dateStr,
+              fullName: (e['full_name'] ?? e['fullName'])?.toString() ?? '',
+              company: comp,
+              amount: double.tryParse(e['amount']?.toString() ?? '0') ?? 0.0,
+              status: e['status']?.toString() ?? 'Pending',
+              commission: comm,
+              invoice: inv,
+              notes: nts,
+            );
+          }
+          return null;
+        })
+        .whereType<Referral>()
+        .toList();
+
+    // Clean up local items that have been synchronized
+    _localReferrals.removeWhere(
+      (local) => parsedApi.any(
+        (api) =>
+            (api.id == local.id) ||
+            (api.fullName == local.fullName &&
+                api.company == local.company &&
+                api.amount == local.amount &&
+                api.status == local.status),
+      ),
+    );
+
+    return [..._localReferrals, ...parsedApi];
+  }
 
   int get _totalReferralsCount {
+    final summary = context
+        .watch<ClientPro>()
+        .currentClientBillingTabs
+        ?.myReferrals
+        .summary;
+    if (summary != null) {
+      final count = summary['total_count'] ?? summary['totalCount'];
+      if (count != null) {
+        return int.tryParse(count.toString()) ?? 0;
+      }
+    }
     return _referrals
-        .where((e) => e.status == 'Converted' && e.amount > 0)
+        .where(
+          (e) => e.status.toLowerCase().contains('converted') && e.amount > 0,
+        )
         .length;
   }
 
   double get _totalValue {
+    final summary = context
+        .watch<ClientPro>()
+        .currentClientBillingTabs
+        ?.myReferrals
+        .summary;
+    if (summary != null) {
+      final val = summary['total_value'] ?? summary['totalValue'];
+      if (val != null) {
+        return double.tryParse(val.toString()) ?? 0.0;
+      }
+    }
     return _referrals
         .where(
           (e) =>
-              e.status == 'Converted' &&
-              (e.commission == 'Paid' || e.commission == 'Waiting for Payment'),
+              e.status.toLowerCase().contains('converted') &&
+              (e.commission.toLowerCase() == 'paid' ||
+                  e.commission.toLowerCase() == 'waiting for payment'),
         )
         .fold(0.0, (sum, item) => sum + item.amount);
   }
 
   double get _pendingCredits {
+    final summary = context
+        .watch<ClientPro>()
+        .currentClientBillingTabs
+        ?.myReferrals
+        .summary;
+    if (summary != null) {
+      final creds = summary['pending_credits'] ?? summary['pendingCredits'];
+      if (creds != null) {
+        return double.tryParse(creds.toString()) ?? 0.0;
+      }
+    }
     return _referrals
-        .where((e) => e.status == 'Pending')
+        .where((e) => e.status.toLowerCase().contains('pending'))
         .fold(0.0, (sum, item) => sum + item.amount);
   }
 
   void _showAddEditReferralDialog([Referral? referral]) {
+    final clientPro = context.read<ClientPro>();
+    final clientId = clientPro.currentClientBillingTabs?.client.id ?? 0;
     showDialog(
       context: context,
       builder: (context) => AddReferralDialog(
+        clientId: clientId,
         referral: referral,
         onSave: (savedReferral) {
           setState(() {
             if (referral != null) {
-              final idx = _referrals.indexWhere((e) => e.id == referral.id);
+              final idx = _localReferrals.indexWhere(
+                (e) => e.id == referral.id,
+              );
               if (idx != -1) {
-                _referrals[idx] = savedReferral;
+                _localReferrals[idx] = savedReferral;
+              } else {
+                _localReferrals.add(savedReferral);
               }
             } else {
-              _referrals.insert(0, savedReferral);
+              _localReferrals.insert(0, savedReferral);
             }
           });
         },
-      ),
-    );
-  }
-
-  void _handleApproveCommission(Referral referral) {
-    setState(() {
-      final idx = _referrals.indexWhere((e) => e.id == referral.id);
-      if (idx != -1) {
-        _referrals[idx] = referral.copyWith(commission: "Paid");
-      }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          "Commission approved for ${referral.fullName}",
-          style: GoogleFonts.poppins(color: Colors.white, fontSize: 13),
-        ),
-        backgroundColor: Colors.green,
       ),
     );
   }
@@ -217,10 +233,28 @@ class _ReferralsTabletState extends State<ReferralsTablet> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
+              // Remove locally immediately
               setState(() {
-                _referrals.removeWhere((e) => e.id == referral.id);
+                _localReferrals.removeWhere((e) => e.id == referral.id);
               });
               Navigator.pop(ctx);
+              // Fire DELETE API in background
+              final clientPro = context.read<ClientPro>();
+              final clientId =
+                  clientPro.currentClientBillingTabs?.client.id ?? 0;
+              clientPro
+                  .deleteReferral(clientId: clientId, referralId: referral.id)
+                  .then((success) {
+                    if (success) {
+                      final currentWeek =
+                          clientPro.currentClientBillingTabs?.week.start ?? '';
+                      clientPro.getClientBillingTabs(
+                        clientId,
+                        currentWeek,
+                        showLoading: false,
+                      );
+                    }
+                  });
             },
             child: Text(
               "Delete",
@@ -238,6 +272,7 @@ class _ReferralsTabletState extends State<ReferralsTablet> {
 
   @override
   Widget build(BuildContext context) {
+    final isLoading = context.watch<ClientPro>().clientBillingTabsLoad;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -285,29 +320,68 @@ class _ReferralsTabletState extends State<ReferralsTablet> {
                 color: Colors.black,
               ),
             ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFACC15),
-                foregroundColor: Colors.black,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    final clientPro = context.read<ClientPro>();
+                    final clientId =
+                        clientPro.currentClientBillingTabs?.client.id ?? 0;
+                    final currentWeek =
+                        clientPro.currentClientBillingTabs?.week.start ?? '';
+                    if (clientId != 0 && currentWeek.isNotEmpty) {
+                      clientPro.getClientBillingTabs(clientId, currentWeek);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: isLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: Colors.black,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.refresh,
+                            size: 16,
+                            color: Colors.black,
+                          ),
+                  ),
                 ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFACC15),
+                    foregroundColor: Colors.black,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  onPressed: () => _showAddEditReferralDialog(),
+                  icon: const Icon(Icons.add, size: 14, color: Colors.black),
+                  label: Text(
+                    "Add New Referral",
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
                 ),
-              ),
-              onPressed: () => _showAddEditReferralDialog(),
-              icon: const Icon(Icons.add, size: 14, color: Colors.black),
-              label: Text(
-                "Add New Referral",
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
+              ],
             ),
           ],
         ),
@@ -459,193 +533,186 @@ class _ReferralsTabletState extends State<ReferralsTablet> {
                     ],
                   ),
                   // Data Rows
-                  ..._referrals.map((ref) {
-                    // Amount colors
-                    Color amtColor = const Color(
-                      0xFF10B981,
-                    ); // Converted -> Green
-                    if (ref.status == 'Pending') {
-                      amtColor = const Color(
-                        0xFFF59E0B,
-                      ); // Pending -> Orange/Gold
-                    } else if (ref.status == 'Lost') {
-                      amtColor = const Color(0xFFEF4444); // Lost -> Red
-                    }
+                  ...(() {
+                    final allItems = _referrals;
+                    return allItems.map((ref) {
+                      // Amount colors
+                      Color amtColor = const Color(
+                        0xFF10B981,
+                      ); // Converted -> Green
+                      if (ref.status.toLowerCase().contains('pending')) {
+                        amtColor = const Color(
+                          0xFFF59E0B,
+                        ); // Pending -> Orange/Gold
+                      } else if (ref.status.toLowerCase().contains('lost')) {
+                        amtColor = const Color(0xFFEF4444); // Lost -> Red
+                      }
 
-                    return TableRow(
-                      decoration: const BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: Color(0xFFF3F4F6),
-                            width: 1,
+                      return TableRow(
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: Color(0xFFF3F4F6),
+                              width: 1,
+                            ),
                           ),
                         ),
-                      ),
-                      children: [
-                        // Date
-                        _buildTableCell(ref.date, color: Colors.grey.shade600),
-                        // Full Name
-                        _buildTableCell(ref.fullName, isBold: true),
-                        // Company
-                        _buildTableCell(
-                          ref.company,
-                          color: ref.company == '—'
-                              ? Colors.grey.shade400
-                              : Colors.black87,
-                        ),
-                        // Amount
-                        TableCell(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
-                            ),
-                            child: Text(
-                              "\$${ref.amount.toStringAsFixed(2)}",
-                              style: GoogleFonts.poppins(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.bold,
-                                color: amtColor,
+                        children: [
+                          // Date
+                          _buildTableCell(
+                            ref.date,
+                            color: Colors.grey.shade600,
+                          ),
+                          // Full Name
+                          _buildTableCell(ref.fullName, isBold: true),
+                          // Company
+                          _buildTableCell(
+                            ref.company,
+                            color: ref.company == '—'
+                                ? Colors.grey.shade400
+                                : Colors.black87,
+                          ),
+                          // Amount
+                          TableCell(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 10,
+                              ),
+                              child: Text(
+                                "\$${ref.amount.toStringAsFixed(2)}",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: amtColor,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        // Status Badge
-                        TableCell(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
-                            ),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: _buildStatusBadge(ref.status),
+                          // Status Badge
+                          TableCell(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 10,
+                              ),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: _buildStatusBadge(ref.status),
+                              ),
                             ),
                           ),
-                        ),
-                        // Commission Badge & Approve
-                        TableCell(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
+                          // Commission Badge
+                          TableCell(
+                            verticalAlignment:
+                                TableCellVerticalAlignment.middle,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 10,
+                              ),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                widthFactor: 1.0,
+                                child: _buildCommissionBadge(ref.commission),
+                              ),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildCommissionBadge(ref.commission),
-                                if (ref.status == 'Converted' &&
-                                    ref.commission == 'Not Yet') ...[
-                                  const SizedBox(width: 6),
+                          ),
+                          // Invoice
+                          _buildTableCell(
+                            ref.invoice,
+                            color: ref.invoice == '—' || ref.invoice == '-'
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade700,
+                          ),
+                          // Notes
+                          _buildTableCell(
+                            ref.notes,
+                            color: ref.notes == '—'
+                                ? Colors.grey.shade400
+                                : Colors.black87,
+                          ),
+                          // Actions
+                          TableCell(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 10,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
                                   InkWell(
-                                    onTap: () => _handleApproveCommission(ref),
+                                    onTap: () =>
+                                        _showAddEditReferralDialog(ref),
                                     borderRadius: BorderRadius.circular(4),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 3,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4),
+                                      child: ImageWidget(
+                                        image: Paths.edit,
+                                        width: 16,
+                                        height: 16,
+                                        color: Colors.grey.shade600,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF2563EB),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.check,
-                                            size: 10,
-                                            color: Colors.white,
-                                          ),
-                                          const SizedBox(width: 3),
-                                          Text(
-                                            "Approve",
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  InkWell(
+                                    onTap: () => _handleDeleteReferral(ref),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4),
+                                      child: ImageWidget(
+                                        image: Paths.delete,
+                                        width: 16,
+                                        height: 16,
+                                        color: Colors.red.shade400,
                                       ),
                                     ),
                                   ),
                                 ],
-                              ],
+                              ),
                             ),
                           ),
-                        ),
-                        // Invoice
-                        _buildTableCell(
-                          ref.invoice,
-                          color: ref.invoice == '—'
-                              ? Colors.grey.shade400
-                              : Colors.grey.shade700,
-                        ),
-                        // Notes
-                        _buildTableCell(
-                          ref.notes,
-                          color: ref.notes == '—'
-                              ? Colors.grey.shade400
-                              : Colors.black87,
-                        ),
-                        // Actions
-                        TableCell(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                InkWell(
-                                  onTap: () => _showAddEditReferralDialog(ref),
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(4),
-                                    child: ImageWidget(
-                                      image: Paths.edit,
-                                      width: 16,
-                                      height: 16,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                InkWell(
-                                  onTap: () => _handleDeleteReferral(ref),
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(4),
-                                    child: ImageWidget(
-                                      image: Paths.delete,
-                                      width: 16,
-                                      height: 16,
-                                      color: Colors.red.shade400,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }),
+                        ],
+                      );
+                    });
+                  })(),
                 ],
               ),
             ),
           ),
-          // Footer
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: Text(
-                "End of referrals list",
-                style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
-              ),
-            ),
-          ),
+
+          // Pagination
+          ...(() {
+            final myReferrals = context.watch<ClientPro>().currentClientBillingTabs?.myReferrals;
+            final pagination = myReferrals?.pagination ?? {};
+            final totalPages = pagination['last_page'] ?? 1;
+            final activePage = pagination['current_page'] ?? 1;
+
+            if (totalPages > 1) {
+              return [
+                _buildPagination(
+                  currentPage: activePage,
+                  totalPages: totalPages,
+                  onPageChanged: (page) {
+                    final clientPro = context.read<ClientPro>();
+                    final clientId = clientPro.currentClientBillingTabs?.client.id ?? 0;
+                    final currentWeek = clientPro.currentClientBillingTabs?.week.start ?? '';
+                    if (clientId != 0) {
+                      clientPro.getClientBillingTabs(
+                        clientId,
+                        currentWeek,
+                        referralsPage: page,
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+              ];
+            }
+            return const <Widget>[];
+          })(),
         ],
       ),
     );
@@ -683,13 +750,13 @@ class _ReferralsTabletState extends State<ReferralsTablet> {
     Color bg = const Color(0xFFF3F4F6);
     Color fg = Colors.grey.shade600;
 
-    if (status == 'Converted') {
+    if (status.toLowerCase().contains('converted')) {
       bg = const Color(0xFFDCFCE7);
       fg = const Color(0xFF15803D);
-    } else if (status == 'Pending') {
+    } else if (status.toLowerCase().contains('pending')) {
       bg = const Color(0xFFFEF9C3);
       fg = const Color(0xFF854D0E);
-    } else if (status == 'Lost') {
+    } else if (status.toLowerCase().contains('lost')) {
       bg = const Color(0xFFF3F4F6);
       fg = Colors.grey.shade500;
     }
@@ -714,30 +781,155 @@ class _ReferralsTabletState extends State<ReferralsTablet> {
   Widget _buildCommissionBadge(String commission) {
     Color bg = const Color(0xFFF3F4F6);
     Color fg = Colors.grey.shade600;
+    String label = commission;
 
-    if (commission == 'Paid') {
+    if (commission.toLowerCase().contains('paid')) {
       bg = const Color(0xFFDCFCE7);
       fg = const Color(0xFF15803D);
-    } else if (commission == 'Waiting for Payment') {
+      label = 'Paid';
+    } else if (commission.toLowerCase().contains('waiting')) {
       bg = const Color(0xFFFEF3C7);
       fg = const Color(0xFFD97706);
-    } else if (commission == 'Not Yet') {
+      label = 'Waiting for Payment';
+    } else {
       bg = const Color(0xFFF3F4F6);
       fg = Colors.grey.shade500;
+      label = 'Not Yet';
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        commission,
+        label,
+        softWrap: true,
         style: GoogleFonts.poppins(
           fontSize: 9.5,
           fontWeight: FontWeight.bold,
           color: fg,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPagination({
+    required int currentPage,
+    required int totalPages,
+    required ValueChanged<int> onPageChanged,
+  }) {
+    List<int> pages = [];
+    if (totalPages <= 7) {
+      pages = List.generate(totalPages, (i) => i + 1);
+    } else {
+      pages.add(1);
+      if (currentPage > 3) pages.add(-1); // ellipsis
+      int start = (currentPage - 1).clamp(2, totalPages - 2);
+      int end = (currentPage + 1).clamp(2, totalPages - 1);
+      for (int i = start; i <= end; i++) {
+        pages.add(i);
+      }
+      if (currentPage < totalPages - 2) pages.add(-1); // ellipsis
+      pages.add(totalPages);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pageCircle(
+              icon: Icons.keyboard_double_arrow_left,
+              enabled: currentPage > 1,
+              onTap: () => onPageChanged(1),
+            ),
+            _pageCircle(
+              icon: Icons.chevron_left,
+              enabled: currentPage > 1,
+              onTap: () => onPageChanged(currentPage - 1),
+            ),
+            const SizedBox(width: 8),
+            ...pages.map((p) {
+              if (p == -1) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    "...",
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      color: Colors.grey,
+                    ),
+                  ),
+                );
+              }
+              final bool isActive = p == currentPage;
+              return GestureDetector(
+                onTap: () => onPageChanged(p),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: isActive ? const Color(0xFFFACC15) : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      "$p",
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: isActive ? Colors.black : Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(width: 8),
+            _pageCircle(
+              icon: Icons.chevron_right,
+              enabled: currentPage < totalPages,
+              onTap: () => onPageChanged(currentPage + 1),
+            ),
+            _pageCircle(
+              icon: Icons.keyboard_double_arrow_right,
+              enabled: currentPage < totalPages,
+              onTap: () => onPageChanged(totalPages),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pageCircle({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 32,
+        height: 32,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: enabled ? Colors.white : Colors.grey.shade100,
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: Center(
+          child: Icon(
+            icon,
+            size: 16,
+            color: enabled ? Colors.black87 : Colors.grey,
+          ),
         ),
       ),
     );

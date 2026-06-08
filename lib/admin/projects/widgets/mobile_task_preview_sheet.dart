@@ -48,6 +48,7 @@ class MobileTaskPreviewSheet {
 
     bool isRefreshing = true;
     bool refreshStarted = false;
+    bool isSaving = false;
     _TaskPreviewTab selectedTab = _TaskPreviewTab.details;
     DateTime? selectedDueDate = _parseDueDate(task.dueDate);
     int? selectedSectionId = task.projectSectionId == 0
@@ -312,13 +313,13 @@ class MobileTaskPreviewSheet {
                                             SizedBox(width: 8.w),
                                             GestureDetector(
                                               onTapDown: (details) {
-                                                final project = projectInfo;
+                                                final project = projectInfo ??
+                                                    context.read<ProjectPro>().activeProjectDetail?.project;
                                                 if (project == null) return;
                                                 _showProjectInfoPopup(
-                                                  dialogContext,
+                                                  context,
                                                   project,
-                                                  anchor:
-                                                      details.globalPosition,
+                                                  anchor: details.globalPosition,
                                                 );
                                               },
                                               child: _buildTaskPreviewSheetIcon(
@@ -327,16 +328,71 @@ class MobileTaskPreviewSheet {
                                               ),
                                             ),
                                             SizedBox(width: 8.w),
+                                            // Save Button
                                             GestureDetector(
-                                              onTap: () {
-                                                debounceTimer?.cancel();
-                                                Navigator.of(
-                                                  dialogContext,
-                                                ).pop();
+                                              onTap: isSaving ? null : () async {
+                                                final title = titleController.text.trim();
+                                                if (title.isEmpty) {
+                                                  showToast(message: 'Please enter a task name');
+                                                  return;
+                                                }
+                                                final payload = <String, dynamic>{
+                                                  'title': title,
+                                                  'description': descriptionController.text.trim(),
+                                                  'project_section_id': selectedSectionId,
+                                                  'assigned_members': selectedMemberIds.toList(),
+                                                };
+                                                setSheetState(() => isSaving = true);
+                                                try {
+                                                  final pro = dialogContext.read<ProjectPro>();
+                                                  final isCreate = task.id == 0;
+                                                  bool success = false;
+                                                  if (isCreate) {
+                                                    success = await pro.createProjectTask(
+                                                      projectId: task.projectId,
+                                                      payload: payload,
+                                                    );
+                                                  } else {
+                                                    success = await pro.updateProjectTask(
+                                                      projectId: task.projectId,
+                                                      taskId: task.id,
+                                                      payload: payload,
+                                                    );
+                                                  }
+                                                  if (success) {
+                                                    debounceTimer?.cancel();
+                                                    showToast(message: 'Task saved successfully');
+                                                    if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                                  }
+                                                } finally {
+                                                  if (dialogContext.mounted) setSheetState(() => isSaving = false);
+                                                }
                                               },
-                                              child: _buildTaskPreviewSheetIcon(
-                                                CupertinoIcons.xmark,
-                                                const Color(0xFF111111),
+                                              child: Container(
+                                                padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+                                                decoration: BoxDecoration(
+                                                  color: isSaving
+                                                      ? const Color(0xFF2563EB).withValues(alpha: 0.7)
+                                                      : const Color(0xFF2563EB),
+                                                  borderRadius: BorderRadius.circular(7.w),
+                                                ),
+                                                child: isSaving
+                                                    ? SizedBox(
+                                                        width: 12.w,
+                                                        height: 12.h,
+                                                        child: const CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                          color: Colors.white,
+                                                        ),
+                                                      )
+                                                    : Text(
+                                                        'Save',
+                                                        style: TextStyle(
+                                                          fontSize: 12.sp,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
                                               ),
                                             ),
                                           ],
@@ -450,49 +506,10 @@ class MobileTaskPreviewSheet {
                                                 ),
                                               ),
                                             ),
-                                            const Spacer(),
-                                            Container(
-                                              padding: EdgeInsets.symmetric(
-                                                horizontal: 8.w,
-                                                vertical: 4.h,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius:
-                                                    BorderRadius.circular(6.w),
-                                                border: Border.all(
-                                                  color: const Color(
-                                                    0xFFE0E2E8,
-                                                  ),
-                                                ),
-                                              ),
-                                              child: Row(
-                                                children: [
-                                                  Icon(
-                                                    Icons.save_outlined,
-                                                    size: 10.sp,
-                                                    color: const Color(
-                                                      0xFF6D727C,
-                                                    ),
-                                                  ),
-                                                  SizedBox(width: 4.w),
-                                                  Text(
-                                                    'Template',
-                                                    style: TextStyle(
-                                                      fontSize: 12.sp,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color: const Color(
-                                                        0xFF3B3F46,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
                                           ],
                                         ),
                                       ),
+
                                       SizedBox(height: 6.h),
                                       Expanded(
                                         child:

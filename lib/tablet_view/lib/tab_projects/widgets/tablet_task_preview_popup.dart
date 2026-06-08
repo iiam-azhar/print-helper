@@ -45,6 +45,7 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
   Timer? _debounceTimer;
   bool _isRefreshing = false;
   bool _isSaving = false;
+  ProjectModel? _projectInfo;
 
   bool get _isCreate => _task.id == 0;
 
@@ -112,6 +113,19 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
       taskLabels: _task.labels,
     );
     _selectedLabelIds = _task.labels.map((l) => l.id).toSet();
+
+    // Populate project info for the info popup
+    final activeProject = pro.activeProjectDetail?.project;
+    if (activeProject != null && activeProject.numericId == _task.projectId) {
+      _projectInfo = activeProject;
+    } else {
+      for (final p in pro.projects) {
+        if (p.numericId == _task.projectId) {
+          _projectInfo = p;
+          break;
+        }
+      }
+    }
   }
 
   Future<void> _refreshTaskDetail() async {
@@ -123,6 +137,7 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
         forceRefresh: true,
       );
       if (detail != null) {
+        _projectInfo = detail.project;
         for (final item in detail.tasks) {
           if (item.id == _task.id) {
             _task = item;
@@ -274,7 +289,6 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
     if (_isSaving) return false;
     final title = _titleController.text.trim();
     if (title.isEmpty) {
-      if (!pop) return false;
       showToast(message: 'Please enter a task name');
       return false;
     }
@@ -340,14 +354,271 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
   }
 
   Future<void> _onClose() async {
-    Loaders.show();
-    final success = await _handleSave(pop: false);
-    Loaders.hide();
-    if (success) {
-      showToast(message: 'Task saved successfully');
-    }
     if (mounted) Navigator.of(context).pop();
   }
+
+  Future<void> _showProjectInfoPopup(
+    BuildContext ctx,
+    ProjectModel project, {
+    required Offset anchor,
+  }) async {
+    final overlay = Overlay.of(ctx).context.findRenderObject() as RenderBox;
+    const popupWidth = 310.0;
+    final left = (anchor.dx - popupWidth + 22)
+        .clamp(12.0, overlay.size.width - popupWidth - 12);
+    final top = (anchor.dy + 8).clamp(12.0, overlay.size.height - 260);
+
+    final progressPercent = project.displayProgressPercent;
+    final progressValue = (progressPercent.clamp(0, 100)) / 100.0;
+    final progressState = project.displayStatus.toUpperCase();
+
+    await showGeneralDialog<void>(
+      context: ctx,
+      barrierLabel: 'Project info',
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.10),
+      transitionDuration: const Duration(milliseconds: 160),
+      pageBuilder: (dialogContext, _, __) {
+        return Material(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(dialogContext).pop(),
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
+              Positioned(
+                left: left,
+                top: top,
+                child: SizedBox(
+                  width: popupWidth,
+                  child: _buildProjectInfoCard(
+                    dialogContext,
+                    project,
+                    progressPercent: progressPercent,
+                    progressValue: progressValue,
+                    progressState: progressState,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildProjectInfoCard(
+    BuildContext dialogContext,
+    ProjectModel project, {
+    required int progressPercent,
+    required double progressValue,
+    required String progressState,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 14, 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        project.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF202226),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        project.popupMetaText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF8A8D95),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                InkWell(
+                  onTap: () => Navigator.of(dialogContext).pop(),
+                  borderRadius: BorderRadius.circular(999),
+                  child: const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: Icon(Icons.close, size: 20, color: Color(0xFF2C2D30)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFE7E7EB)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+            child: Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _infoChip(
+                            'Customer: ${project.customerDisplayName}',
+                            background: const Color(0xFFFFF3CC),
+                            foreground: const Color(0xFFC28A00),
+                          ),
+                          const SizedBox(height: 10),
+                          _infoChip(
+                            'Client: ${project.clientDisplayName}',
+                            background: const Color(0xFFE9F1FF),
+                            foreground: const Color(0xFF0C58D6),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    _buildAvatarRow(project.avatars),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: progressValue,
+                    minHeight: 5,
+                    backgroundColor: const Color(0xFFE9E9ED),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFF28A2E)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            '$progressPercent% $progressState',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFF28A2E),
+                            ),
+                          ),
+                          const Text('|', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFD2D3D8))),
+                          Text(
+                            'Late tasks ${project.lateTasksCount}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFE45843),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    _metricBadge(Icons.checklist_rounded, project.tasksCount),
+                    const SizedBox(width: 12),
+                    _metricBadge(Icons.chat_bubble_outline, project.commentsCount),
+                    const SizedBox(width: 12),
+                    _metricBadge(Icons.attach_file, project.attachmentsCount),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoChip(String label, {required Color background, required Color foreground}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(999)),
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: foreground)),
+    );
+  }
+
+  Widget _buildAvatarRow(List<String> avatars) {
+    const size = 28.0;
+    const overlap = 12.0;
+    const maxVisible = 5;
+    final visible = avatars.take(maxVisible).toList();
+    final extra = avatars.length - maxVisible;
+    final totalWidth = size + (visible.length - 1) * (size - overlap) + (extra > 0 ? (size - overlap) : 0);
+    return SizedBox(
+      height: size,
+      width: totalWidth,
+      child: Stack(
+        children: [
+          ...List.generate(visible.length, (i) {
+            final url = visible[i];
+            return Positioned(
+              left: i * (size - overlap),
+              child: CircleAvatar(
+                radius: size / 2,
+                backgroundImage: url.isNotEmpty ? NetworkImage(url) : null,
+                backgroundColor: const Color(0xFFE0E2E8),
+                child: url.isEmpty ? const Icon(Icons.person, size: 14, color: Colors.grey) : null,
+              ),
+            );
+          }),
+          if (extra > 0)
+            Positioned(
+              left: visible.length * (size - overlap),
+              child: CircleAvatar(
+                radius: size / 2,
+                backgroundColor: const Color(0xFFE0E2E8),
+                child: Text('+$extra', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF555B6E))),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricBadge(IconData icon, int count) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: const Color(0xFF8F9199)),
+        const SizedBox(width: 4),
+        Text('$count', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF555B6E))),
+      ],
+    );
+  }
+
 
   Future<void> _showTemplatePicker(Offset globalPosition) async {
     final pro = context.read<ProjectPro>();
@@ -487,11 +758,8 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
     final dialogHeight = (size.height * 0.78).clamp(480.0, 620.0);
 
     return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        await _onClose();
-      },
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) async {},
       child: SafeArea(
         child: Center(
           child: Material(
@@ -608,13 +876,15 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
             ),
           ),
           const Spacer(),
-          if (!isAlreadyTemplate && !_isCreate) ...[
+          if (_isCreate) ...[
             _buildTemplateButton(
               icon: Icons.assignment_outlined,
               label: 'Template',
               onTap: (pos) => _showTemplatePicker(pos),
             ),
             const SizedBox(width: 10),
+          ],
+          if (!isAlreadyTemplate && !_isCreate) ...[
             _buildTemplateButton(
               icon: Icons.save_outlined,
               label: 'Save as Template',
@@ -623,6 +893,7 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
             ),
             const SizedBox(width: 10),
           ],
+
           if (!_isCreate) ...[
             InkWell(
               onTap: _onDeleteTask,
@@ -635,11 +906,48 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
             ),
             const SizedBox(width: 10),
           ],
-          const Icon(Icons.info_outline, size: 18, color: Color(0xFF1F2733)),
+          GestureDetector(
+            onTapDown: (details) {
+              final project = _projectInfo;
+              if (project == null) return;
+              _showProjectInfoPopup(context, project, anchor: details.globalPosition);
+            },
+            child: const Icon(Icons.info_outline, size: 18, color: Color(0xFF1F2733)),
+          ),
           const SizedBox(width: 10),
           InkWell(
-            onTap: _onClose,
-            child: const Icon(Icons.close, size: 20, color: Color(0xFF1F2733)),
+            onTap: _isSaving ? null : () async {
+              final success = await _handleSave(pop: false);
+              if (success && mounted) {
+                showToast(message: 'Task saved successfully');
+                Navigator.of(context).pop();
+              }
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: _isSaving ? const Color(0xFF2563EB).withValues(alpha: 0.7) : const Color(0xFF2563EB),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: _isSaving
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Save',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+            ),
           ),
         ],
       ),

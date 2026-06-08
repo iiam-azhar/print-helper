@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:print_helper/providers/client_pro.dart';
 import 'package:print_helper/models/billing_models.dart';
 
+import '../../../constants/paths.dart';
 import '../tab_constants/colors.dart';
+import '../tab_widgets/tab_image_widget.dart';
 import '../tab_widgets/tab_text_widget.dart';
 import '../tab_widgets/tab_toasts.dart';
 
@@ -26,8 +29,9 @@ class _ServicesPricingSettingsTabletState
   late List<SpecialistConfig> _specialists;
 
   // --- PH Portal State ---
-  final TextEditingController _weeklyPriceController =
-      TextEditingController(text: '345.4');
+  final TextEditingController _weeklyPriceController = TextEditingController(
+    text: '345.4',
+  );
 
   // --- Add-on Services State ---
   late List<AddonServiceConfig> _addons;
@@ -43,15 +47,17 @@ class _ServicesPricingSettingsTabletState
     super.initState();
     _initializeFallback(); // populate with defaults first
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshData().then((_) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
-      }).catchError((_) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
-      });
+      _refreshData()
+          .then((_) {
+            if (mounted) {
+              setState(() => _isLoading = false);
+            }
+          })
+          .catchError((_) {
+            if (mounted) {
+              setState(() => _isLoading = false);
+            }
+          });
     });
   }
 
@@ -79,14 +85,16 @@ class _ServicesPricingSettingsTabletState
           name: group.accountTypeName,
           wholesaleBase: ws.basePrice,
           wholesaleDiscount: ws.volumeDiscount,
-          wholesalePercentages: ws.levelPercentages
-              .map((k, v) => MapEntry(_capitalise(k), v)),
-          wholesaleIconSvg: ws.iconSvg,
+          wholesalePercentages: ws.levelPercentages.map(
+            (k, v) => MapEntry(_capitalise(k), v),
+          ),
+          wholesaleIconSvg: ws.iconSvgUrl,
           retailBase: rt.basePrice,
           retailDiscount: rt.volumeDiscount,
-          retailPercentages: rt.levelPercentages
-              .map((k, v) => MapEntry(_capitalise(k), v)),
-          retailIconSvg: rt.iconSvg,
+          retailPercentages: rt.levelPercentages.map(
+            (k, v) => MapEntry(_capitalise(k), v),
+          ),
+          retailIconSvg: rt.iconSvgUrl,
         ),
       );
     }
@@ -94,18 +102,22 @@ class _ServicesPricingSettingsTabletState
     // Add-ons
     _addons.clear();
     for (final a in pricing.addons) {
-      _addons.add(AddonServiceConfig(
-        name: a.name,
-        unit: a.billingUnit,
-        included: a.included,
-        price: a.weeklyPrice,
-      ));
+      _addons.add(
+        AddonServiceConfig(
+          name: a.name,
+          unit: a.billingUnit,
+          included: a.included,
+          price: a.weeklyPrice,
+        ),
+      );
     }
 
     // DPC launch packages
     _launchPackages.clear();
     for (final d in pricing.dpcTerms) {
-      _launchPackages.add(LaunchPackageConfig(months: d.months, total: d.totalPrice));
+      _launchPackages.add(
+        LaunchPackageConfig(id: d.id, months: d.months, total: d.totalPrice),
+      );
     }
 
     // Earnings floors
@@ -178,15 +190,60 @@ class _ServicesPricingSettingsTabletState
 
     // 2. Prepopulate Add-ons
     _addons = [
-      AddonServiceConfig(name: 'File Storage', unit: 'per 500GB/wk', included: 0, price: 0.69),
-      AddonServiceConfig(name: 'Email Connections', unit: 'per extra email slot', included: 0, price: 4.62),
-      AddonServiceConfig(name: 'Support Lines', unit: 'per extra phone number', included: 1, price: 0.69),
-      AddonServiceConfig(name: 'Incoming Call Minutes', unit: 'per extra minute', included: 5, price: 0.05),
-      AddonServiceConfig(name: 'Outgoing Call Minutes', unit: 'per extra minute', included: 5, price: 0.07),
-      AddonServiceConfig(name: 'Incoming SMS', unit: 'per extra SMS', included: 5, price: 0.01),
-      AddonServiceConfig(name: 'Outgoing SMS', unit: 'per extra SMS', included: 5, price: 0.02),
-      AddonServiceConfig(name: 'Incoming MMS', unit: 'per extra MMS', included: 5, price: 0.05),
-      AddonServiceConfig(name: 'Outgoing MMS', unit: 'per extra MMS', included: 5, price: 0.1),
+      AddonServiceConfig(
+        name: 'File Storage',
+        unit: 'per 500GB/wk',
+        included: 0,
+        price: 0.69,
+      ),
+      AddonServiceConfig(
+        name: 'Email Connections',
+        unit: 'per extra email slot',
+        included: 0,
+        price: 4.62,
+      ),
+      AddonServiceConfig(
+        name: 'Support Lines',
+        unit: 'per extra phone number',
+        included: 1,
+        price: 0.69,
+      ),
+      AddonServiceConfig(
+        name: 'Incoming Call Minutes',
+        unit: 'per extra minute',
+        included: 5,
+        price: 0.05,
+      ),
+      AddonServiceConfig(
+        name: 'Outgoing Call Minutes',
+        unit: 'per extra minute',
+        included: 5,
+        price: 0.07,
+      ),
+      AddonServiceConfig(
+        name: 'Incoming SMS',
+        unit: 'per extra SMS',
+        included: 5,
+        price: 0.01,
+      ),
+      AddonServiceConfig(
+        name: 'Outgoing SMS',
+        unit: 'per extra SMS',
+        included: 5,
+        price: 0.02,
+      ),
+      AddonServiceConfig(
+        name: 'Incoming MMS',
+        unit: 'per extra MMS',
+        included: 5,
+        price: 0.05,
+      ),
+      AddonServiceConfig(
+        name: 'Outgoing MMS',
+        unit: 'per extra MMS',
+        included: 5,
+        price: 0.1,
+      ),
     ];
 
     // 3. Prepopulate DPC Launch packages
@@ -218,7 +275,8 @@ class _ServicesPricingSettingsTabletState
     if (pricing == null) return {};
 
     // 1. Ph Portal Weekly
-    final phPortalWeekly = double.tryParse(_weeklyPriceController.text) ?? pricing.phPortalWeekly;
+    final phPortalWeekly =
+        double.tryParse(_weeklyPriceController.text) ?? pricing.phPortalWeekly;
 
     // 2. Rate Card Groups
     final List<Map<String, dynamic>> rateCardGroupsJson = [];
@@ -235,16 +293,20 @@ class _ServicesPricingSettingsTabletState
 
       // Wholesale card
       final double wsBase = spec != null
-          ? (double.tryParse(spec.wholesaleBaseCtrl.text) ?? group.wholesale.basePrice)
+          ? (double.tryParse(spec.wholesaleBaseCtrl.text) ??
+                group.wholesale.basePrice)
           : group.wholesale.basePrice;
       final double wsDiscount = spec != null
-          ? (double.tryParse(spec.wholesaleDiscountCtrl.text) ?? group.wholesale.volumeDiscount)
+          ? (double.tryParse(spec.wholesaleDiscountCtrl.text) ??
+                group.wholesale.volumeDiscount)
           : group.wholesale.volumeDiscount;
       final Map<String, dynamic> wsPercentages = {};
       group.wholesale.levelPercentages.forEach((key, val) {
         final uiKey = _capitalise(key);
         final pctCtrl = spec?.wholesalePercentagesCtrls[uiKey];
-        wsPercentages[key] = pctCtrl != null ? (double.tryParse(pctCtrl.text) ?? val) : val;
+        wsPercentages[key] = pctCtrl != null
+            ? (double.tryParse(pctCtrl.text) ?? val)
+            : val;
       });
 
       final List<Map<String, dynamic>> wsVolumes = [];
@@ -259,16 +321,20 @@ class _ServicesPricingSettingsTabletState
 
       // Retail card
       final double rtBase = spec != null
-          ? (double.tryParse(spec.retailBaseCtrl.text) ?? group.retail.basePrice)
+          ? (double.tryParse(spec.retailBaseCtrl.text) ??
+                group.retail.basePrice)
           : group.retail.basePrice;
       final double rtDiscount = spec != null
-          ? (double.tryParse(spec.retailDiscountCtrl.text) ?? group.retail.volumeDiscount)
+          ? (double.tryParse(spec.retailDiscountCtrl.text) ??
+                group.retail.volumeDiscount)
           : group.retail.volumeDiscount;
       final Map<String, dynamic> rtPercentages = {};
       group.retail.levelPercentages.forEach((key, val) {
         final uiKey = _capitalise(key);
         final pctCtrl = spec?.retailPercentagesCtrls[uiKey];
-        rtPercentages[key] = pctCtrl != null ? (double.tryParse(pctCtrl.text) ?? val) : val;
+        rtPercentages[key] = pctCtrl != null
+            ? (double.tryParse(pctCtrl.text) ?? val)
+            : val;
       });
 
       final List<Map<String, dynamic>> rtVolumes = [];
@@ -297,7 +363,7 @@ class _ServicesPricingSettingsTabletState
           "volume_discount": rtDiscount,
           "level_percentages": rtPercentages,
           "volumes": rtVolumes,
-        }
+        },
       });
     }
 
@@ -309,7 +375,9 @@ class _ServicesPricingSettingsTabletState
       if (i < _addons.length) {
         uiAddon = _addons[i];
       }
-      final String includedVal = uiAddon != null ? uiAddon.includedCtrl.text : addon.included.toString();
+      final String includedVal = uiAddon != null
+          ? uiAddon.includedCtrl.text
+          : addon.included.toString();
       final double priceVal = uiAddon != null
           ? (double.tryParse(uiAddon.priceCtrl.text) ?? addon.weeklyPrice)
           : addon.weeklyPrice;
@@ -341,34 +409,31 @@ class _ServicesPricingSettingsTabletState
     }
 
     // 5. Weekly Bonuses
-    final List<Map<String, dynamic>> weeklyBonusesJson = pricing.weeklyBonuses.map((b) => {
-      "id": b.id,
-      "amounts": b.amounts,
-    }).toList();
+    final List<Map<String, dynamic>> weeklyBonusesJson = pricing.weeklyBonuses
+        .map((b) => {"id": b.id, "amounts": b.amounts})
+        .toList();
 
     // 6. One-time Bonuses
-    final List<Map<String, dynamic>> onetimeBonusesJson = pricing.onetimeBonuses.map((b) => {
-      "id": b.id,
-      "amounts": b.amounts,
-    }).toList();
+    final List<Map<String, dynamic>> onetimeBonusesJson = pricing.onetimeBonuses
+        .map((b) => {"id": b.id, "amounts": b.amounts})
+        .toList();
 
     // 7. Supervisor Bonuses
-    final List<Map<String, dynamic>> supervisorBonusesJson = pricing.supervisorBonuses.map((b) => {
-      "id": b.id,
-      "amount_per_point": b.amountPerPoint,
-    }).toList();
+    final List<Map<String, dynamic>> supervisorBonusesJson = pricing
+        .supervisorBonuses
+        .map((b) => {"id": b.id, "amount_per_point": b.amountPerPoint})
+        .toList();
 
     // 8. Level Floors
     final List<Map<String, dynamic>> levelFloorsJson = [];
     for (final floor in pricing.levelFloors) {
       final uiKey = _capitalise(floor.level);
       final floorCtrl = _floorControllers[uiKey];
-      final double minVal = floorCtrl != null ? (double.tryParse(floorCtrl.text) ?? floor.weeklyMinimum) : floor.weeklyMinimum;
+      final double minVal = floorCtrl != null
+          ? (double.tryParse(floorCtrl.text) ?? floor.weeklyMinimum)
+          : floor.weeklyMinimum;
 
-      levelFloorsJson.add({
-        "id": floor.id,
-        "weekly_minimum": minVal,
-      });
+      levelFloorsJson.add({"id": floor.id, "weekly_minimum": minVal});
     }
 
     return {
@@ -381,7 +446,7 @@ class _ServicesPricingSettingsTabletState
         "supervisorBonuses": supervisorBonusesJson,
         "levelFloors": levelFloorsJson,
         "phPortalWeekly": phPortalWeekly,
-      }
+      },
     };
   }
 
@@ -399,7 +464,9 @@ class _ServicesPricingSettingsTabletState
 
     final elapsed = DateTime.now().difference(startTime);
     if (elapsed.inMilliseconds < 800) {
-      await Future.delayed(Duration(milliseconds: 800 - elapsed.inMilliseconds));
+      await Future.delayed(
+        Duration(milliseconds: 800 - elapsed.inMilliseconds),
+      );
     }
     setState(() => _isSaving = false);
 
@@ -432,7 +499,8 @@ class _ServicesPricingSettingsTabletState
                   ),
                   const SizedBox(height: 4),
                   const TextWidget(
-                    text: 'Configure all rates, bonuses and add-on pricing in one place.',
+                    text:
+                        'Configure all rates, bonuses and add-on pricing in one place.',
                     fontSize: 13,
                     fontWeight: FontWeight.normal,
                     color: Color(0xFF4B5563),
@@ -463,7 +531,8 @@ class _ServicesPricingSettingsTabletState
                   _buildSectionHeader('Recurring Add-on Services'),
                   const SizedBox(height: 4),
                   const TextWidget(
-                    text: 'These are charged weekly to clients who activate them.',
+                    text:
+                        'These are charged weekly to clients who activate them.',
                     fontSize: 12,
                     fontWeight: FontWeight.normal,
                     color: Color(0xFF6B7280),
@@ -476,7 +545,8 @@ class _ServicesPricingSettingsTabletState
                   _buildSectionHeader('DPC Launch Service'),
                   const SizedBox(height: 4),
                   const TextWidget(
-                    text: 'Service packages finalized for 12, 24, or 36 month contracts.',
+                    text:
+                        'Service packages finalized for 12, 24, or 36 month contracts.',
                     fontSize: 12,
                     fontWeight: FontWeight.normal,
                     color: Color(0xFF6B7280),
@@ -489,7 +559,8 @@ class _ServicesPricingSettingsTabletState
                   _buildSectionHeader('Specialist Earnings Floor (Per Level)'),
                   const SizedBox(height: 4),
                   const TextWidget(
-                    text: 'If a specialist\'s weekly earnings fall below their level\'s minimum, Print Helpers covers the difference automatically.',
+                    text:
+                        'If a specialist\'s weekly earnings fall below their level\'s minimum, Print Helpers covers the difference automatically.',
                     fontSize: 12,
                     fontWeight: FontWeight.normal,
                     color: Color(0xFF6B7280),
@@ -498,7 +569,8 @@ class _ServicesPricingSettingsTabletState
                   _buildFloorGrid(),
                   const SizedBox(height: 8),
                   const TextWidget(
-                    text: 'Example: If a Gold specialist earns only \$110 this week (below \$120 minimum), Print Helpers adds \$10 to bring them to \$120.',
+                    text:
+                        'Example: If a Gold specialist earns only \$110 this week (below \$120 minimum), Print Helpers adds \$10 to bring them to \$120.',
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                     color: Color(0xFF6B7280),
@@ -626,7 +698,11 @@ class _ServicesPricingSettingsTabletState
       ),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 20),
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFFD97706),
+            size: 20,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: RichText(
@@ -635,7 +711,8 @@ class _ServicesPricingSettingsTabletState
                 children: [
                   TextSpan(text: 'Changing any rate here updates '),
                   TextSpan(
-                    text: 'all specialist compensation, client pricing, and the audit tool ',
+                    text:
+                        'all specialist compensation, client pricing, and the audit tool ',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   TextSpan(text: 'instantly after saving.'),
@@ -773,12 +850,25 @@ class _ServicesPricingSettingsTabletState
                   ),
                 ),
                 if (iconSvg.isNotEmpty)
-                  SvgPicture.string(
-                    iconSvg,
-                    colorFilter: ColorFilter.mode(Colors.grey.shade400, BlendMode.srcIn),
-                    width: 20,
-                    height: 20,
-                  )
+                  iconSvg.startsWith('http')
+                      ? SvgPicture.network(
+                          iconSvg,
+                          colorFilter: ColorFilter.mode(
+                            Colors.grey.shade400,
+                            BlendMode.srcIn,
+                          ),
+                          width: 20,
+                          height: 20,
+                        )
+                      : SvgPicture.string(
+                          iconSvg,
+                          colorFilter: ColorFilter.mode(
+                            Colors.grey.shade400,
+                            BlendMode.srcIn,
+                          ),
+                          width: 20,
+                          height: 20,
+                        )
                 else
                   Icon(icon, color: Colors.grey.shade400, size: 20),
               ],
@@ -864,7 +954,9 @@ class _ServicesPricingSettingsTabletState
                       // Header Row
                       TableRow(
                         decoration: const BoxDecoration(
-                          border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+                          border: Border(
+                            bottom: BorderSide(color: Color(0xFFE5E7EB)),
+                          ),
                         ),
                         children: [
                           _buildTableHeaderCell('Volume'),
@@ -923,15 +1015,17 @@ class _ServicesPricingSettingsTabletState
     final String volumeLabel = isWholesale
         ? '${(index + 1) * 50}/wk'
         : index == 0
-            ? '10/wk'
-            : index == 1
-                ? '20/wk'
-                : index == 2
-                    ? '50/wk'
-                    : '100/wk';
+        ? '10/wk'
+        : index == 1
+        ? '20/wk'
+        : index == 2
+        ? '50/wk'
+        : '100/wk';
 
     // Client Price = Base Price - (index * Discount)
-    final double clientPrice = double.parse((basePrice - (index * discount)).toStringAsFixed(3));
+    final double clientPrice = double.parse(
+      (basePrice - (index * discount)).toStringAsFixed(3),
+    );
     final double displayClientPrice = clientPrice < 0 ? 0.0 : clientPrice;
 
     return TableRow(
@@ -963,16 +1057,19 @@ class _ServicesPricingSettingsTabletState
         for (final rank in percentageCtrls.keys) ...[
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-            child: Builder(builder: (context) {
-              final double pct = double.tryParse(percentageCtrls[rank]!.text) ?? 0.0;
-              final double share = displayClientPrice * (pct / 100.0);
-              return TextWidget(
-                text: '\$${share.toStringAsFixed(3)}',
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF4B5563),
-              );
-            }),
+            child: Builder(
+              builder: (context) {
+                final double pct =
+                    double.tryParse(percentageCtrls[rank]!.text) ?? 0.0;
+                final double share = displayClientPrice * (pct / 100.0);
+                return TextWidget(
+                  text: '\$${share.toStringAsFixed(3)}',
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF4B5563),
+                );
+              },
+            ),
           ),
         ],
       ],
@@ -1046,7 +1143,10 @@ class _ServicesPricingSettingsTabletState
               ),
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: TextWidget(
@@ -1058,7 +1158,10 @@ class _ServicesPricingSettingsTabletState
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: TextWidget(
@@ -1071,7 +1174,10 @@ class _ServicesPricingSettingsTabletState
                 ),
                 // Included Input
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
                   child: SizedBox(
                     height: 36,
                     child: TextField(
@@ -1079,18 +1185,30 @@ class _ServicesPricingSettingsTabletState
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       textAlign: TextAlign.start,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                       decoration: InputDecoration(
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFD1D5DB),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.primary),
+                          borderSide: const BorderSide(
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                     ),
@@ -1098,27 +1216,47 @@ class _ServicesPricingSettingsTabletState
                 ),
                 // Price Input
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
                   child: SizedBox(
                     height: 36,
                     child: TextField(
                       controller: addon.priceCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       textAlign: TextAlign.start,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                       decoration: InputDecoration(
                         isDense: true,
                         prefixText: '\$ ',
-                        prefixStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        prefixStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFD1D5DB),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.primary),
+                          borderSide: const BorderSide(
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                     ),
@@ -1168,7 +1306,10 @@ class _ServicesPricingSettingsTabletState
                 GestureDetector(
                   onTap: _showAddTermDialog,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF10B981),
                       borderRadius: BorderRadius.circular(6),
@@ -1220,12 +1361,17 @@ class _ServicesPricingSettingsTabletState
               for (final pkg in _launchPackages)
                 TableRow(
                   decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+                    border: Border(
+                      bottom: BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
                   ),
                   children: [
                     // Term name
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: TextWidget(
@@ -1238,27 +1384,47 @@ class _ServicesPricingSettingsTabletState
                     ),
                     // Total Price Input
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
                       child: SizedBox(
                         height: 36,
                         child: TextField(
                           controller: pkg.totalCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                           onChanged: (_) => setState(() {}),
                           decoration: InputDecoration(
                             isDense: true,
                             prefixText: '\$ ',
-                            prefixStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            prefixStyle: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFD1D5DB),
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(color: AppColors.primary),
+                              borderSide: const BorderSide(
+                                color: AppColors.primary,
+                              ),
                             ),
                           ),
                         ),
@@ -1266,49 +1432,61 @@ class _ServicesPricingSettingsTabletState
                     ),
                     // Monthly Price Label
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: Builder(builder: (context) {
-                          final double total = double.tryParse(pkg.totalCtrl.text) ?? 0.0;
-                          final double monthly = total / pkg.months;
-                          return TextWidget(
-                            text: '\$${monthly.toStringAsFixed(2)}',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF111827),
-                          );
-                        }),
+                        child: Builder(
+                          builder: (context) {
+                            final double total =
+                                double.tryParse(pkg.totalCtrl.text) ?? 0.0;
+                            final double monthly = total / pkg.months;
+                            return TextWidget(
+                              text: '\$${monthly.toStringAsFixed(2)}',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF111827),
+                            );
+                          },
+                        ),
                       ),
                     ),
                     // Weekly Price Label
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: Builder(builder: (context) {
-                          final double total = double.tryParse(pkg.totalCtrl.text) ?? 0.0;
-                          final double monthly = total / pkg.months;
-                          final double weekly = monthly / 4.33;
-                          return TextWidget(
-                            text: '\$${weekly.toStringAsFixed(2)}',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF111827),
-                          );
-                        }),
+                        child: Builder(
+                          builder: (context) {
+                            final double total =
+                                double.tryParse(pkg.totalCtrl.text) ?? 0.0;
+                            final double monthly = total / pkg.months;
+                            final double weekly = monthly / 4.33;
+                            return TextWidget(
+                              text: '\$${weekly.toStringAsFixed(2)}',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF111827),
+                            );
+                          },
+                        ),
                       ),
                     ),
                     // Delete Button
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
-                        onPressed: () {
-                          setState(() {
-                            _launchPackages.remove(pkg);
-                          });
-                        },
+                        icon: ImageWidget(
+                          image: Paths.delete,
+                          height: 18,
+                          width: 18,
+                        ),
+                        onPressed: () => _confirmDeleteTerm(context, pkg),
                       ),
                     ),
                   ],
@@ -1323,65 +1501,358 @@ class _ServicesPricingSettingsTabletState
   Future<void> _showAddTermDialog() async {
     final termCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
+    bool isSavingTerm = false;
 
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        title: const TextWidget(
-          text: 'Add Contract Term',
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: termCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                labelText: 'Contract Term (Months)',
-                hintText: 'e.g. 24',
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setStateDialog) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
+            contentPadding: const EdgeInsets.fromLTRB(12, 20, 12, 0),
+            actionsPadding: const EdgeInsets.fromLTRB(12, 20, 12, 24),
+            title: Text(
+              'Add Contract Term',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF0F172A),
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: priceCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Total Price (\$)',
-                hintText: 'e.g. 999',
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'MONTHS',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF64748B),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: termCtrl,
+                    enabled: !isSavingTerm,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF0F172A),
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '18',
+                      hintStyle: GoogleFonts.poppins(
+                        color: const Color(0xFF94A3B8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF10B981),
+                          width: 1.5,
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'TOTAL PRICE',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF64748B),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: priceCtrl,
+                    enabled: !isSavingTerm,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF0F172A),
+                    ),
+                    decoration: InputDecoration(
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(left: 16, right: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '\$',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 0,
+                        minHeight: 0,
+                      ),
+                      hintText: '6600',
+                      hintStyle: GoogleFonts.poppins(
+                        color: const Color(0xFF94A3B8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF10B981),
+                          width: 1.5,
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final int months = int.tryParse(termCtrl.text) ?? 0;
-              final double total = double.tryParse(priceCtrl.text) ?? 0.0;
-              if (months <= 0 || total <= 0) {
-                showToast(message: 'Invalid values entered');
-                return;
-              }
-              setState(() {
-                _launchPackages.add(LaunchPackageConfig(months: months, total: total));
-              });
-              Navigator.pop(ctx);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.black,
-            ),
-            child: const Text('Add'),
-          ),
-        ],
+            actions: [
+              OutlinedButton(
+                onPressed: isSavingTerm ? null : () => Navigator.pop(ctx),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  backgroundColor: const Color(0xFFF8FAFC),
+                ),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF475569),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: isSavingTerm
+                    ? null
+                    : () async {
+                        final int months = int.tryParse(termCtrl.text) ?? 0;
+                        final double total =
+                            double.tryParse(priceCtrl.text) ?? 0.0;
+                        if (months <= 0 || total <= 0) {
+                          showToast(message: 'Invalid values entered');
+                          return;
+                        }
+
+                        final clientPro = context.read<ClientPro>();
+                        final navigator = Navigator.of(dialogCtx);
+
+                        setStateDialog(() {
+                          isSavingTerm = true;
+                        });
+
+                        final success = await clientPro.createContractTerm(
+                          months: months,
+                          totalPrice: total,
+                        );
+
+                        if (success) {
+                          final updatedPricing = clientPro.servicesPricing;
+                          if (updatedPricing != null && mounted) {
+                            setState(() {
+                              _loadFromApi(updatedPricing);
+                            });
+                          }
+                          navigator.pop();
+                        } else {
+                          setStateDialog(() {
+                            isSavingTerm = false;
+                          });
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  elevation: 0,
+                ),
+                child: isSavingTerm
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.add, size: 14, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Add Term',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          );
+        },
       ),
+    );
+  }
+
+  void _confirmDeleteTerm(BuildContext context, LaunchPackageConfig pkg) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        bool isDeleting = false;
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text(
+                'Delete Contract Term',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+              content: Text(
+                'Are you sure you want to delete the ${pkg.months} months contract term?',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: const Color(0xFF475569),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(dialogCtx),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.poppins(
+                      color: const Color(0xFF64748B),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isDeleting
+                      ? null
+                      : () async {
+                          setStateDialog(() {
+                            isDeleting = true;
+                          });
+
+                          final clientPro = context.read<ClientPro>();
+                          final navigator = Navigator.of(dialogCtx);
+
+                          bool success = false;
+                          if (pkg.id != null) {
+                            success = await clientPro.deleteContractTerm(
+                              pkg.id!,
+                            );
+                          } else {
+                            success = true;
+                          }
+
+                          if (success) {
+                            final updatedPricing = clientPro.servicesPricing;
+                            if (updatedPricing != null && mounted) {
+                              setState(() {
+                                _loadFromApi(updatedPricing);
+                              });
+                            }
+                            navigator.pop();
+                          } else {
+                            setStateDialog(() {
+                              isDeleting = false;
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: isDeleting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          'Delete',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1448,9 +1919,17 @@ class _ServicesPricingSettingsTabletState
             decoration: InputDecoration(
               isDense: true,
               prefixText: prefixText,
-              prefixStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              prefixStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
@@ -1500,18 +1979,28 @@ class SpecialistConfig {
     this.wholesaleIconSvg = '',
     this.retailIconSvg = '',
   }) {
-    wholesaleBaseCtrl = TextEditingController(text: wholesaleBase.toStringAsFixed(0));
-    wholesaleDiscountCtrl = TextEditingController(text: wholesaleDiscount.toStringAsFixed(1));
+    wholesaleBaseCtrl = TextEditingController(
+      text: wholesaleBase.toStringAsFixed(0),
+    );
+    wholesaleDiscountCtrl = TextEditingController(
+      text: wholesaleDiscount.toStringAsFixed(1),
+    );
     for (final rank in wholesalePercentages.keys) {
-      final ctrl = TextEditingController(text: wholesalePercentages[rank]!.toStringAsFixed(0));
+      final ctrl = TextEditingController(
+        text: wholesalePercentages[rank]!.toStringAsFixed(0),
+      );
       _addPercentageClampListener(ctrl);
       wholesalePercentagesCtrls[rank] = ctrl;
     }
 
     retailBaseCtrl = TextEditingController(text: retailBase.toStringAsFixed(0));
-    retailDiscountCtrl = TextEditingController(text: retailDiscount.toStringAsFixed(1));
+    retailDiscountCtrl = TextEditingController(
+      text: retailDiscount.toStringAsFixed(1),
+    );
     for (final rank in retailPercentages.keys) {
-      final ctrl = TextEditingController(text: retailPercentages[rank]!.toStringAsFixed(0));
+      final ctrl = TextEditingController(
+        text: retailPercentages[rank]!.toStringAsFixed(0),
+      );
       _addPercentageClampListener(ctrl);
       retailPercentagesCtrls[rank] = ctrl;
     }
@@ -1553,15 +2042,13 @@ class AddonServiceConfig {
 }
 
 class LaunchPackageConfig {
+  final int? id;
   final int months;
   final double total;
 
   late final TextEditingController totalCtrl;
 
-  LaunchPackageConfig({
-    required this.months,
-    required this.total,
-  }) {
+  LaunchPackageConfig({this.id, required this.months, required this.total}) {
     totalCtrl = TextEditingController(text: total.toStringAsFixed(0));
   }
 }

@@ -3,13 +3,19 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:print_helper/widgets/text_widget.dart';
 import 'package:print_helper/admin/client/referrals_mobile.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:print_helper/services/api_service.dart';
+import 'package:provider/provider.dart';
+import 'package:print_helper/providers/client_pro.dart';
 
 class AddReferralBottomSheet extends StatefulWidget {
+  final int clientId;
   final Referral? referral;
   final Function(Referral) onSave;
 
   const AddReferralBottomSheet({
     super.key,
+    required this.clientId,
     this.referral,
     required this.onSave,
   });
@@ -31,17 +37,66 @@ class _AddReferralBottomSheetState extends State<AddReferralBottomSheet> {
   late String _selectedCommission;
   late DateTime _selectedDate;
 
+  bool _fetchingInvoice = false;
+
+  Future<void> _fetchNextInvoiceNumber() async {
+    if (widget.clientId == 0) return;
+    setState(() {
+      _fetchingInvoice = true;
+      _invoiceCtrl.text = "Loading...";
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+      final response = await ApiService().getDataFromApi(
+        api: "clients/${widget.clientId}/referrals/next-invoice-number",
+        headers: {"Authorization": "Bearer $token"},
+      );
+      if (response != null && response['success'] == true) {
+        final nextInvoice = (response['invoice_number'] ?? response['invoice'] ?? response['data'] ?? '').toString();
+        setState(() {
+          _invoiceCtrl.text = nextInvoice;
+        });
+      } else {
+        setState(() {
+          _invoiceCtrl.text = "";
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching next invoice: $e");
+      setState(() {
+        _invoiceCtrl.text = "";
+      });
+    } finally {
+      setState(() {
+        _fetchingInvoice = false;
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     final ref = widget.referral;
     _nameCtrl = TextEditingController(text: ref?.fullName ?? '');
-    _compCtrl = TextEditingController(text: ref?.company == '—' ? '' : (ref?.company ?? ''));
+    _compCtrl = TextEditingController(text: ref?.company == '—' || ref?.company == '-' ? '' : (ref?.company ?? ''));
     _amtCtrl = TextEditingController(text: ref != null ? ref.amount.toStringAsFixed(2) : '');
-    _invoiceCtrl = TextEditingController(text: ref?.invoice == '—' ? '' : (ref?.invoice ?? ''));
-    _notesCtrl = TextEditingController(text: ref?.notes == '—' ? '' : (ref?.notes ?? ''));
+    _invoiceCtrl = TextEditingController(text: ref?.invoice == '—' || ref?.invoice == '-' ? '' : (ref?.invoice ?? ''));
+    _notesCtrl = TextEditingController(text: ref?.notes == '—' || ref?.notes == '-' ? '' : (ref?.notes ?? ''));
     
-    _selectedStatus = ref?.status ?? 'Pending';
+    final refStatus = ref?.status ?? 'Pending';
+    final validStatuses = ['Pending', 'Converted (Active Client)', 'Lost / Didn\'t Convert'];
+    if (validStatuses.contains(refStatus)) {
+      _selectedStatus = refStatus;
+    } else {
+      if (refStatus == 'Converted') {
+        _selectedStatus = 'Converted (Active Client)';
+      } else if (refStatus == 'Lost') {
+        _selectedStatus = 'Lost / Didn\'t Convert';
+      } else {
+        _selectedStatus = 'Pending';
+      }
+    }
     _selectedCommission = ref?.commission ?? 'Not Yet';
     
     // Parse date if edit
@@ -53,18 +108,28 @@ class _AddReferralBottomSheetState extends State<AddReferralBottomSheet> {
   }
 
   DateTime _parseDateString(String dateStr) {
-    // Expected formats: "Apr 27, 2026" or "27-04-2026"
+    // Handles: YYYY-MM-DD (from API), DD-MM-YYYY (local format), "Apr 27, 2026"
     try {
       if (dateStr.contains('-')) {
         final parts = dateStr.split('-');
         if (parts.length == 3) {
-          final day = int.parse(parts[0]);
-          final month = int.parse(parts[1]);
-          final year = int.parse(parts[2]);
-          return DateTime(year, month, day);
+          // Detect YYYY-MM-DD vs DD-MM-YYYY by checking first segment length
+          if (parts[0].length == 4) {
+            // YYYY-MM-DD
+            final year = int.parse(parts[0]);
+            final month = int.parse(parts[1]);
+            final day = int.parse(parts[2]);
+            return DateTime(year, month, day);
+          } else {
+            // DD-MM-YYYY
+            final day = int.parse(parts[0]);
+            final month = int.parse(parts[1]);
+            final year = int.parse(parts[2]);
+            return DateTime(year, month, day);
+          }
         }
       } else {
-        // Month name format e.g. "Apr 27, 2026"
+        // Month name format: "Apr 27, 2026"
         final clean = dateStr.replaceAll(',', '');
         final parts = clean.split(' ');
         if (parts.length == 3) {
@@ -138,11 +203,26 @@ class _AddReferralBottomSheetState extends State<AddReferralBottomSheet> {
     );
   }
 
-  InputDecoration _buildInputDecoration(String hintText) {
+  InputDecoration _buildInputDecoration(String hintText, {bool readOnly = false, bool isLoading = false}) {
     return InputDecoration(
       hintText: hintText,
       hintStyle: GoogleFonts.poppins(fontSize: 12.5.sp, color: Colors.grey.shade400),
       contentPadding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+      filled: readOnly,
+      fillColor: readOnly ? const Color(0xFFF3F4F6) : null,
+      suffixIcon: isLoading
+          ? SizedBox(
+              width: 20.w,
+              height: 20.h,
+              child: Padding(
+                padding: EdgeInsets.all(10.0.w),
+                child: const CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFFFACC15),
+                ),
+              ),
+            )
+          : null,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8.r),
         borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
@@ -284,7 +364,7 @@ class _AddReferralBottomSheetState extends State<AddReferralBottomSheet> {
                       initialValue: _selectedStatus,
                       style: GoogleFonts.poppins(fontSize: 13.sp, color: Colors.black),
                       decoration: _buildInputDecoration("Select status"),
-                      items: ['Converted', 'Pending', 'Lost'].map((s) {
+                      items: ['Pending', 'Converted (Active Client)', 'Lost / Didn\'t Convert'].map((s) {
                         return DropdownMenuItem(
                           value: s,
                           child: Text(s, style: GoogleFonts.poppins(fontSize: 13.sp)),
@@ -313,7 +393,14 @@ class _AddReferralBottomSheetState extends State<AddReferralBottomSheet> {
                                   );
                                 }).toList(),
                                 onChanged: (val) {
-                                  if (val != null) setState(() => _selectedCommission = val);
+                                  if (val != null) {
+                                    setState(() {
+                                      _selectedCommission = val;
+                                    });
+                                    if (val == 'Paid') {
+                                      _fetchNextInvoiceNumber();
+                                    }
+                                  }
                                 },
                               ),
                             ],
@@ -327,8 +414,13 @@ class _AddReferralBottomSheetState extends State<AddReferralBottomSheet> {
                               _buildFieldLabel("INVOICE NUMBER"),
                               TextFormField(
                                 controller: _invoiceCtrl,
+                                readOnly: _selectedCommission == 'Paid',
                                 style: GoogleFonts.poppins(fontSize: 13.sp),
-                                decoration: _buildInputDecoration("e.g. INV-20260428"),
+                                decoration: _buildInputDecoration(
+                                  "e.g. INV-20260428",
+                                  readOnly: _selectedCommission == 'Paid',
+                                  isLoading: _fetchingInvoice,
+                                ),
                               ),
                             ],
                           ),
@@ -361,24 +453,72 @@ class _AddReferralBottomSheetState extends State<AddReferralBottomSheet> {
                             onPressed: () {
                               if (_formKey.currentState!.validate()) {
                                 final name = _nameCtrl.text.trim();
-                                final company = _compCtrl.text.trim().isEmpty ? '—' : _compCtrl.text.trim();
+                                final company = _compCtrl.text.trim().isEmpty ? '' : _compCtrl.text.trim();
                                 final amt = double.tryParse(_amtCtrl.text.trim()) ?? 0.0;
-                                final invoice = _invoiceCtrl.text.trim().isEmpty ? '—' : _invoiceCtrl.text.trim();
-                                final notes = _notesCtrl.text.trim().isEmpty ? '—' : _notesCtrl.text.trim();
+                                final invoice = _invoiceCtrl.text.trim().isEmpty ? '' : _invoiceCtrl.text.trim();
+                                final notes = _notesCtrl.text.trim().isEmpty ? '' : _notesCtrl.text.trim();
+
+                                final clientPro = context.read<ClientPro>();
+                                final year = _selectedDate.year;
+                                final month = _selectedDate.month.toString().padLeft(2, '0');
+                                final day = _selectedDate.day.toString().padLeft(2, '0');
+                                final apiDate = "$year-$month-$day";
 
                                 final savedReferral = Referral(
                                   id: widget.referral?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                                   date: _getFormattedMonthNameDate(_selectedDate),
                                   fullName: name,
-                                  company: company,
+                                  company: company.isEmpty ? '—' : company,
                                   amount: amt,
                                   status: _selectedStatus,
                                   commission: _selectedCommission,
-                                  invoice: invoice,
-                                  notes: notes,
+                                  invoice: invoice.isEmpty ? '-' : invoice,
+                                  notes: notes.isEmpty ? '—' : notes,
                                 );
+
+                                // Close immediately & notify parent
                                 widget.onSave(savedReferral);
-                                Navigator.pop(context);
+                                Navigator.of(context).pop();
+
+                                // Fire API in background
+                                if (widget.referral == null) {
+                                  // CREATE
+                                  clientPro.createReferral(
+                                    clientId: widget.clientId,
+                                    fullName: name,
+                                    company: company,
+                                    amount: amt,
+                                    referredDate: apiDate,
+                                    status: _selectedStatus,
+                                    commissionStatus: _selectedCommission,
+                                    invoiceNumber: invoice,
+                                    notes: notes,
+                                  ).then((success) {
+                                    if (success) {
+                                      final currentWeek = clientPro.currentClientBillingTabs?.week.start ?? '';
+                                      clientPro.getClientBillingTabs(widget.clientId, currentWeek, showLoading: false);
+                                    }
+                                  });
+                                } else {
+                                  // UPDATE
+                                  clientPro.updateReferral(
+                                    clientId: widget.clientId,
+                                    referralId: widget.referral!.id,
+                                    fullName: name,
+                                    company: company,
+                                    amount: amt,
+                                    referredDate: apiDate,
+                                    status: _selectedStatus,
+                                    commissionStatus: _selectedCommission,
+                                    invoiceNumber: invoice,
+                                    notes: notes,
+                                  ).then((success) {
+                                    if (success) {
+                                      final currentWeek = clientPro.currentClientBillingTabs?.week.start ?? '';
+                                      clientPro.getClientBillingTabs(widget.clientId, currentWeek, showLoading: false);
+                                    }
+                                  });
+                                }
                               }
                             },
                             child: Row(

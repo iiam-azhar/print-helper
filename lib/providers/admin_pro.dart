@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/accounts_models.dart';
+import '../models/staff_payments/staff_payments_tabs_model.dart';
 import '../models/states_models.dart';
 import '../models/account_contract_rules_model.dart';
 import '../models/contract_template_model.dart';
@@ -279,6 +280,61 @@ class AdminPro extends ChangeNotifier {
       currentAccountContractRules = null;
     }
     accountContractRulesLoad = false;
+    notifyListeners();
+  }
+
+  StaffPaymentResponseModel? currentPaymentResponse;
+  bool paymentCompensationLoad = false;
+
+  Future<void> getStaffPaymentCompensation(
+    int accountId, {
+    String? day,
+    int? wholesaleRetailPage,
+    int? paymentPage,
+    String? type,
+    String? dayFilter,
+    String? status,
+    String? search,
+  }) async {
+    paymentCompensationLoad = true;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token") ?? "";
+
+      final Map<String, String> queryParams = {};
+      if (day != null) queryParams['day'] = day;
+      if (wholesaleRetailPage != null) {
+        queryParams['page'] = wholesaleRetailPage.toString();
+        queryParams['wholesale_retail_page'] = wholesaleRetailPage.toString();
+      }
+      if (paymentPage != null) queryParams['payment_page'] = paymentPage.toString();
+      if (type != null) queryParams['type'] = type;
+      if (dayFilter != null) queryParams['day_filter'] = dayFilter;
+      if (status != null) queryParams['status'] = status;
+      if (search != null) queryParams['search'] = search;
+
+      final uri = Uri.parse(ApiRoutes.accountPaymentsCompensation(accountId));
+      final finalUri = uri.replace(queryParameters: {
+        ...uri.queryParameters,
+        ...queryParams,
+      });
+
+      final response = await ApiService().getDataFromApi(
+        api: finalUri.toString(),
+        headers: {"Authorization": "Bearer $token"},
+      );
+
+      if (response["success"] == true) {
+        currentPaymentResponse = StaffPaymentResponseModel.fromJson(response);
+      } else {
+        currentPaymentResponse = null;
+      }
+    } catch (e) {
+      printData(title: "Compensation Error:", data: e, e: true);
+      currentPaymentResponse = null;
+    }
+    paymentCompensationLoad = false;
     notifyListeners();
   }
 
@@ -1089,6 +1145,232 @@ class AdminPro extends ChangeNotifier {
       showToast(message: 'Failed to download PDF');
     } finally {
       Loaders.hide();
+    }
+  }
+
+  Future<bool> savePerformanceMetric(
+    int accountId, {
+    required String day,
+    required String metric,
+    // missed_interactions
+    int? hours,
+    int? minutes,
+    // average_reply_time_minutes
+    String? fromTime,
+    String? toTime,
+  }) async {
+    try {
+      Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final Map<String, dynamic> body = {'day': day, 'metric': metric};
+      if (metric == 'missed_interactions') {
+        body['hours'] = hours ?? 0;
+        body['minutes'] = minutes ?? 0;
+      } else if (metric == 'average_reply_time_minutes') {
+        body['from_time'] = fromTime ?? '';
+        body['to_time'] = toTime ?? '';
+      }
+
+      final response = await ApiService().postDataToApi(
+        api: 'accounts/$accountId/payments/performance-metric',
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        payload: body,
+      );
+
+      if (response != null && response['success'] == true) {
+        showToast(message: response['message'] ?? 'Saved successfully');
+        // Refresh compensation data with the same day
+        await getStaffPaymentCompensation(accountId, day: day);
+        return true;
+      } else {
+        showToast(message: response?['message'] ?? 'Failed to save');
+        return false;
+      }
+    } catch (e) {
+      printData(title: 'Save Performance Metric Error:', data: e, e: true);
+      showToast(message: 'An error occurred');
+      return false;
+    } finally {
+      Loaders.hide();
+    }
+  }
+
+  Future<bool> closeDay(int accountId, String day) async {
+    try {
+      Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final response = await ApiService().postDataToApi(
+        api: 'accounts/$accountId/payments/close-day',
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        payload: {'day': day},
+      );
+
+      Loaders.hide();
+
+      if (response != null && response['success'] == true) {
+        showToast(message: response['message'] ?? 'Day closed successfully');
+        await getStaffPaymentCompensation(accountId, day: day);
+        return true;
+      } else {
+        showToast(message: response?['message'] ?? 'Failed to close day');
+        return false;
+      }
+    } catch (e) {
+      Loaders.hide();
+      printData(title: 'Close Day Error:', data: e, e: true);
+      showToast(message: 'An error occurred while closing the day');
+      return false;
+    }
+  }
+
+  Future<bool> openDay(int accountId, String day) async {
+    try {
+      Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final response = await ApiService().postDataToApi(
+        api: 'accounts/$accountId/payments/open-day',
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        payload: {'day': day},
+      );
+
+      Loaders.hide();
+
+      if (response != null && response['success'] == true) {
+        showToast(message: response['message'] ?? 'Day opened successfully');
+        await getStaffPaymentCompensation(accountId, day: day);
+        return true;
+      } else {
+        showToast(message: response?['message'] ?? 'Failed to open day');
+        return false;
+      }
+    } catch (e) {
+      Loaders.hide();
+      printData(title: 'Open Day Error:', data: e, e: true);
+      showToast(message: 'An error occurred while opening the day');
+      return false;
+    }
+  }
+
+  Future<bool> claimEntry(int accountId, int entryId, String day) async {
+    try {
+      Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final response = await ApiService().postDataToApi(
+        api: 'accounts/$accountId/payments/claims/$entryId',
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      Loaders.hide();
+
+      if (response != null && response['success'] == true) {
+        showToast(message: response['message'] ?? 'Claimed successfully');
+        await getStaffPaymentCompensation(accountId, day: day);
+        return true;
+      } else {
+        showToast(message: response?['message'] ?? 'Failed to claim');
+        return false;
+      }
+    } catch (e) {
+      Loaders.hide();
+      printData(title: 'Claim Error:', data: e, e: true);
+      showToast(message: 'An error occurred while claiming');
+      return false;
+    }
+  }
+
+  Future<bool> unclaimEntry(int accountId, int entryId, String day) async {
+    try {
+      Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final response = await ApiService().postDataToApi(
+        api: 'accounts/$accountId/payments/claims/$entryId',
+        isDelete: true,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      Loaders.hide();
+      printData(title: 'Undo Claim Response:', data: response);
+
+
+      if (response != null && response['success'] == true) {
+        showToast(message: response['message'] ?? 'Claim undone successfully');
+        await getStaffPaymentCompensation(accountId, day: day);
+        return true;
+      } else {
+        showToast(message: response?['message'] ?? 'Failed to undo claim');
+        return false;
+      }
+    } catch (e) {
+      Loaders.hide();
+      printData(title: 'Undo Claim Error:', data: e, e: true);
+      showToast(message: 'An error occurred while undoing claim');
+      return false;
+    }
+  }
+
+  Future<bool> claimEntriesBulk(int accountId, List<int> entryIds, String day) async {
+    try {
+      Loaders.show();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final response = await ApiService().postDataToApi(
+        api: 'accounts/$accountId/payments/claims/bulk',
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        payload: {
+          'entry_ids': entryIds,
+        },
+      );
+
+      Loaders.hide();
+
+      if (response != null && response['success'] == true) {
+        showToast(message: response['message'] ?? 'Bulk claims registered successfully');
+        await getStaffPaymentCompensation(accountId, day: day);
+        return true;
+      } else {
+        showToast(message: response?['message'] ?? 'Failed to register bulk claims');
+        return false;
+      }
+    } catch (e) {
+      Loaders.hide();
+      printData(title: 'Bulk Claim Error:', data: e, e: true);
+      showToast(message: 'An error occurred while bulk claiming');
+      return false;
     }
   }
 }

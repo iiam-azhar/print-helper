@@ -450,6 +450,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                 page: TabAccountInfoTabletScreen(account: item),
                               );
                             }
+                          } else if (value == 'payments') {
+                            if (widget.onMenuTap != null) {
+                              widget.onMenuTap!('staff_payments', item);
+                            } else {
+                              // If there's no wrapper, we might need a direct navigation, but for dashboard it works.
+                              showToast(message: 'No navigation wrapper provided.');
+                            }
                           } else if (value == 'login') {
                             final authPro = Provider.of<AuthPro>(
                               context,
@@ -489,6 +496,27 @@ class _AccountsScreenState extends State<AccountsScreen> {
                               ],
                             ),
                           ),
+                          if (item.roleName.toLowerCase() != 'admin')
+                            PopupMenuItem<String>(
+                              value: 'payments',
+                              height: 40,
+                              child: Row(
+                                children: [
+                                  ImageWidget(
+                                    image: Paths.billingIcon,
+                                    width: 18,
+                                    color: Colors.black87,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  const TextWidget(
+                                    text: 'Payments',
+                                    fontSize: 14,
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ],
+                              ),
+                            ),
                           PopupMenuItem<String>(
                             value: 'login',
                             height: 40,

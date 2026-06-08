@@ -17,6 +17,7 @@ class ApiRoutes {
     int itemIndex,
   ) => 'accounts/$accountId/checklist/$checklistId/$itemIndex/toggle';
   static String accountContractRules(int id) => 'accounts/$id/contract-rules';
+  static String accountPaymentsCompensation(int id) => 'accounts/$id/payments/compensation';
   static String signAccountAgreement(int id) => 'accounts/$id/sign-agreement';
   static String signClientAgreement(int id) => 'clients/$id/sign-agreement';
   static const String language = 'languages';
@@ -32,6 +33,7 @@ class ApiRoutes {
   static const String addAccount = 'accounts';
   static const String clients = 'clients';
   static String clientInfoTabs(int id) => 'clients/$id/info-tabs';
+  static String clientBillingTabs(int id, String week) => 'clients/$id/billing-tabs?week=$week';
   static String clientMyNetworkTabs(int id) => 'clients/$id/my-network-tabs';
   static String clientAssignedStaff(int id) => 'clients/$id/assigned-staff';
   static String deleteAssignedStaff(int clientId, int staffId) =>
@@ -46,6 +48,7 @@ class ApiRoutes {
   static const String contacts = 'contacts';
   static const String resetContactPassword = 'reset-contact-password';
   static const String servicesPricing = 'services/pricing';
+  static const String addContractTerm = 'services/pricing/dpc-terms';
   static const String contracts = 'contracts';
   static const String contractsSendReminder = 'contracts/send-reminder';
   static const String templates = 'templates';

@@ -98,29 +98,28 @@ class _TabLoginScreenState extends State<TabLoginScreen> {
         navTo(
           context: context,
           page: DashboardWrapper(role: "ADMIN"),
+          removeUntil: true,
         );
-        // Navigator.pushReplacement(
-        //   context,
-        //   MaterialPageRoute(builder: (_) => AdminBottomBar(pageNum: 0)),
-        // );
         break;
       case "CONTACT":
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => DashboardWrapper(role: "CONTACT")),
+        navTo(
+          context: context,
+          page: DashboardWrapper(role: "CONTACT"),
+          removeUntil: true,
         );
         break;
       case "STAFF":
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => DashboardWrapper(role: "STAFF")),
+        navTo(
+          context: context,
+          page: DashboardWrapper(role: "STAFF"),
+          removeUntil: true,
         );
         break;
       case "CUSTOMER":
-        // showToast(message: "Updation currently going on");
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => DashboardWrapper(role: "CUSTOMER")),
+        navTo(
+          context: context,
+          page: DashboardWrapper(role: "CUSTOMER"),
+          removeUntil: true,
         );
         break;
       default:

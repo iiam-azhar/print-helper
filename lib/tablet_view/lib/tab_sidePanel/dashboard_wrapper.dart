@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:print_helper/providers/navigation_pro.dart';
 import '../tab_admin/tab_accounts/tab_accounts_list.dart';
 import '../tab_admin/tab_accounts/tab_account_info_screen_tablet.dart';
+import '../tab_admin/tab_accounts/tab_staff_payments_screen.dart';
 import '../tab_admin/tab_customerView/tab_my_network_screen.dart';
 import '../tab_admin/tab_customerView/tab_single_customer.dart';
 import '../tab_client/tab_clients_list.dart';
@@ -89,7 +90,7 @@ class _DashboardWrapperState extends State<DashboardWrapper> {
       }
 
       // Load conversations to populate unread count badge
-      await chatPro.loadConversations();
+      await chatPro.loadConversations(showLoading: false);
       if (mounted) {
         chatPro.initChatListSocket(
           userId: auth.user!.id.toString(),
@@ -341,6 +342,18 @@ class _DashboardWrapperState extends State<DashboardWrapper> {
           return Center(child: showLoader());
         }
         return TabAccountInfoTabletScreen(
+          account: selectedAccount!,
+          onBack: () {
+            setState(() {
+              currentPage = "accounts";
+            });
+          },
+        );
+      case "staff_payments":
+        if (selectedAccount == null) {
+          return Center(child: showLoader());
+        }
+        return TabStaffPaymentsScreen(
           account: selectedAccount!,
           onBack: () {
             setState(() {

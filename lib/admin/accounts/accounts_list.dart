@@ -5,6 +5,7 @@ import 'package:print_helper/admin/accounts/add_account.dart';
 import 'package:print_helper/admin/accounts/edit_account.dart';
 import 'package:print_helper/admin/filter/filter_screen.dart';
 import 'package:print_helper/models/accounts_models.dart';
+import 'package:print_helper/admin/accounts/staff_payments_screen.dart';
 import 'package:print_helper/providers/admin_pro.dart';
 import 'package:print_helper/widgets/image_widget.dart';
 import 'package:print_helper/widgets/toasts.dart';
@@ -512,7 +513,22 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                         );
                                       },
                                     ),
-
+                                    if (item.roleName.toLowerCase() != 'admin') ...[
+                                      _popupDivider(),
+                                      _popupIcon(
+                                        icon: Paths.billingIcon,
+                                        label: "Payments",
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          navTo(
+                                            context: context,
+                                            page: StaffPaymentsScreen(
+                                              account: item,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
                                     _popupDivider(),
                                     _popupIcon(
                                       icon: Paths.login,

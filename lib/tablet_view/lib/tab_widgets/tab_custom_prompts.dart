@@ -119,46 +119,49 @@ class CustomAlert extends StatelessWidget {
     return Dialog(
       backgroundColor: AppColors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(Icons.close, color: AppColors.white, size: 20),
-                  style: IconButton.styleFrom(
-                    shape: const CircleBorder(),
-                    backgroundColor: AppColors.formHint,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 450),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.close, color: AppColors.white, size: 20),
+                    style: IconButton.styleFrom(
+                      shape: const CircleBorder(),
+                      backgroundColor: AppColors.formHint,
+                    ),
                   ),
                 ),
               ),
-            ),
-            TextWidget(
-              text: message,
-              textAlign: TextAlign.center,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.black,
-            ),
-            Spacers.sb30(),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 15),
-              child: Row(
-                children: [
-                  buttons(AppStrings.yes, 0, context, isPositive: isPositive),
-                  Spacers.sbw15(),
-                  buttons(AppStrings.no, 1, context, isPositive: isPositive),
-                ],
+              TextWidget(
+                text: message,
+                textAlign: TextAlign.center,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppColors.black,
               ),
-            ),
-            SizedBox(height: 18),
-          ],
+              Spacers.sb30(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 15),
+                child: Row(
+                  children: [
+                    buttons(AppStrings.yes, 0, context, isPositive: isPositive),
+                    Spacers.sbw15(),
+                    buttons(AppStrings.no, 1, context, isPositive: isPositive),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
+          ),
         ),
       ),
     );
@@ -218,9 +221,15 @@ class CustomInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      insetPadding: EdgeInsets.symmetric(horizontal: 57),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 57),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-      child: Padding(padding: EdgeInsets.all(12), child: infoWidget(context)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 450),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: infoWidget(context),
+        ),
+      ),
     );
   }
 
