@@ -34,10 +34,13 @@ class ImageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (image.isEmpty) return errorWidget ?? _errorWidget();
-    if (image.startsWith('http')) {
+    final cleanImage = image.trim();
+    if (cleanImage.isEmpty || cleanImage.toLowerCase() == 'null') {
+      return errorWidget ?? _errorWidget();
+    }
+    if (cleanImage.startsWith('http')) {
       return _showNetworkImage();
-    } else if (isFile(image)) {
+    } else if (isFile(cleanImage)) {
       return _fileImage();
     } else if (svgString) {
       return _svgStringImage();
@@ -143,6 +146,7 @@ class ImageWidget extends StatelessWidget {
       width: width,
       alignment: alignment!,
       color: color,
+      errorBuilder: (context, error, st) => errorWidget ?? _errorWidget(),
     );
   }
 

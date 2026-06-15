@@ -88,6 +88,9 @@ class _CustomDrawerState extends State<CustomDrawer> {
     final Color textColor = isBrandMode ? Colors.white : Colors.black;
     final Color iconColor = isBrandMode ? Colors.white : Colors.black;
 
+    final Color logoutBtnBg = isBrandMode ? secondaryColor : Colors.black;
+    final Color logoutBtnTxtColor = ThemeData.estimateBrightnessForColor(logoutBtnBg) == Brightness.light ? Colors.black : Colors.white;
+
     return Container(
       decoration: BoxDecoration(
         color: sidebarColor,
@@ -443,7 +446,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
                     child: Container(
                       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
                       decoration: BoxDecoration(
-                        color: isBrandMode ? secondaryColor : Colors.black,
+                        color: logoutBtnBg,
                         borderRadius: BorderRadius.circular(14.r),
                       ),
                       child: Row(
@@ -452,14 +455,14 @@ class _CustomDrawerState extends State<CustomDrawer> {
                           ImageWidget(
                             image: Paths.login,
                             width: 22,
-                            color: Colors.white,
+                            color: logoutBtnTxtColor,
                           ),
                           Spacers.sbw20(),
                           TextWidget(
                             text: "Logout",
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            color: Colors.white,
+                            color: logoutBtnTxtColor,
                           ),
                         ],
                       ),

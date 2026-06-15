@@ -109,7 +109,13 @@ class AddCustomerState extends State<AddCustomer> {
         allowedExtensions: ['jpg', 'png', 'jpeg'],
       );
       if (result != null && result.files.single.path != null) {
-        selectedImage = File(result.files.single.path!);
+        final file = File(result.files.single.path!);
+        final sizeInBytes = file.lengthSync();
+        if (sizeInBytes > 2 * 1024 * 1024) {
+          showToast(message: "Image size exceeds the 2MB limit. Please select a smaller image.");
+          return;
+        }
+        selectedImage = file;
       }
     } catch (e) {
       printData(title: 'from pickImage', data: '$e', e: true);
@@ -408,8 +414,14 @@ class AddCustomerState extends State<AddCustomer> {
                       allowedExtensions: ['jpg', 'png', 'jpeg'],
                     );
                     if (picked != null && picked.files.single.path != null) {
+                      final file = File(picked.files.single.path!);
+                      final sizeInBytes = file.lengthSync();
+                      if (sizeInBytes > 2 * 1024 * 1024) {
+                        showToast(message: "Image size exceeds the 2MB limit. Please select a smaller image.");
+                        return;
+                      }
                       setState(
-                        () => model.image = File(picked.files.single.path!),
+                        () => model.image = file,
                       );
                     }
                   },
@@ -427,20 +439,24 @@ class AddCustomerState extends State<AddCustomer> {
                 _roundedTextField(
                   controller: model.password,
                   label: "*Password",
-                  obscure: true,
+                  obscure: model.obscurePass,
+                  isPassword: true,
+                  onToggle: () => setState(() => model.obscurePass = !model.obscurePass),
                   hint: "Type Password",
                   errorText: "Required",
-                  regErrorText: "Invalid",
+                  regErrorText: "Password must be at least 8 characters with uppercase, lowercase, digits, and special characters.",
                   regExpCondition: Regx.passwordRegExp,
                 ),
                 Spacers.sb8(),
                 _roundedTextField(
                   controller: model.confirmPassword,
                   label: "*Confirm Password",
-                  obscure: true,
+                  obscure: model.obscureConfirm,
+                  isPassword: true,
+                  onToggle: () => setState(() => model.obscureConfirm = !model.obscureConfirm),
                   hint: "Type Confirm Password",
                   errorText: "Required",
-                  regErrorText: "Invalid",
+                  regErrorText: "Password must be at least 8 characters with uppercase, lowercase, digits, and special characters.",
                   regExpCondition: Regx.passwordRegExp,
                 ),
                 Spacers.sb8(),
@@ -1059,6 +1075,8 @@ class AddCustomerState extends State<AddCustomer> {
     required String label,
     String? hint,
     bool obscure = false,
+    bool isPassword = false,
+    VoidCallback? onToggle,
     String? errorText,
     String? regErrorText,
     required RegExp regExpCondition,
@@ -1084,6 +1102,7 @@ class AddCustomerState extends State<AddCustomer> {
           errorText: errorText,
           controller: controller,
           obscureText: obscure,
+          passField: isPassword,
           hintText: hint ?? '',
           filled: true,
           fillColor: Colors.white,
@@ -1093,6 +1112,18 @@ class AddCustomerState extends State<AddCustomer> {
             fontWeight: FontWeight.w500,
           ),
           padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.w),
+          suffixIcon: isPassword
+              ? GestureDetector(
+                  onTap: onToggle,
+                  child: Icon(
+                    obscure
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 20.sp,
+                    color: Colors.grey,
+                  ),
+                )
+              : null,
         ),
       ],
     );

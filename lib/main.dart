@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -31,9 +32,54 @@ import 'utils/system_chromes.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  // Twilio plugin handles its own background messages via the native service,
-  // but we keep this for Chat notifications.
   printData(title: "Handling a background message:", data: message.messageId);
+  printData(title: "Background message data:", data: message.data);
+
+  if (message.data.isNotEmpty) {
+    try {
+      final data = message.data;
+      final body = data['body'] ?? data['message'];
+      final title = data['title'] ?? data['sender_name'] ?? 'New Message';
+
+      if (body != null && body.isNotEmpty) {
+        String displayBody = body;
+        String displayTitle = title;
+
+        // If body is a JSON system card (like agreement reminder), parse it
+        final trimmed = body.trim();
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+          try {
+            final decoded = jsonDecode(trimmed);
+            if (decoded is Map) {
+              final cardTitle = decoded['title']?.toString().trim() ?? '';
+              final cardDesc = decoded['description']?.toString().trim() ?? '';
+              if (cardTitle.isNotEmpty && cardDesc.isNotEmpty) {
+                displayTitle = cardTitle;
+                displayBody = cardDesc;
+              } else if (cardTitle.isNotEmpty) {
+                displayTitle = cardTitle;
+                displayBody = '';
+              } else if (cardDesc.isNotEmpty) {
+                displayBody = cardDesc;
+              } else if (decoded['event'] != null) {
+                displayBody = decoded['event'].toString();
+              }
+            }
+          } catch (_) {}
+        }
+
+        // Initialize and show local notification
+        await NotificationService.instance.init();
+        await NotificationService.instance.showChatNotification(
+          title: displayTitle,
+          body: displayBody,
+          id: message.messageId?.hashCode ?? 0,
+        );
+      }
+    } catch (e) {
+      printData(title: "Error in background handler:", data: e, e: true);
+    }
+  }
 }
 
 Future<void> main() async {

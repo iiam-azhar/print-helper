@@ -10,6 +10,7 @@ import '../../../../providers/project_pro.dart';
 import '../../tab_widgets/tab_image_widget.dart';
 import '../../tab_widgets/loaders.dart';
 import '../../tab_widgets/tab_toasts.dart';
+import '../../tab_services/helpers.dart';
 import '../../../../admin/projects/widgets/task_label_editor.dart';
 
 class TabletTaskPreviewPopup {
@@ -56,6 +57,7 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
   List<ProjectTaskMember> _availableMembers = [];
   List<TaskDraftLabel> _editableLabels = [];
   Set<int> _selectedLabelIds = {};
+  final Set<int> _removedAttachmentIds = {};
 
   @override
   void initState() {
@@ -141,6 +143,13 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
         for (final item in detail.tasks) {
           if (item.id == _task.id) {
             _task = item;
+            if (_removedAttachmentIds.isNotEmpty) {
+              _task = _task.copyWith(
+                attachments: _task.attachments
+                    .where((a) => !_removedAttachmentIds.contains(a.id))
+                    .toList(),
+              );
+            }
             break;
           }
         }
@@ -305,6 +314,9 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
       'assigned_members': _selectedMemberIds.toList(),
       'label_ids': _selectedLabelIds.toList(),
     };
+    if (_removedAttachmentIds.isNotEmpty) {
+      payload['remove_attachment_ids'] = _removedAttachmentIds.toList();
+    }
 
     final pro = context.read<ProjectPro>();
 
@@ -939,9 +951,9 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
                         color: Colors.white,
                       ),
                     )
-                  : const Text(
-                      'Save',
-                      style: TextStyle(
+                  : Text(
+                      _isCreate ? 'Save' : 'Update',
+                      style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
@@ -1312,6 +1324,39 @@ class _TabletTaskDialogState extends State<_TabletTaskDialog> {
           _AttachmentList(
             attachments: _task.attachments,
             isRefreshing: _isRefreshing,
+            onDeleteAttachment: (attachment) async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: Colors.white,
+                  title: const Text(
+                    'Delete Attachment',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  content: const Text(
+                    'Are you sure you want to delete this attachment?',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed != true) return;
+              setState(() {
+                _removedAttachmentIds.add(attachment.id);
+                _task = _task.copyWith(
+                  attachments: _task.attachments.where((a) => a.id != attachment.id).toList(),
+                );
+              });
+            },
           ),
         ],
       ),
@@ -1577,10 +1622,12 @@ class _LabelChip extends StatelessWidget {
 class _AttachmentList extends StatelessWidget {
   final List<ProjectTaskAttachment> attachments;
   final bool isRefreshing;
+  final void Function(ProjectTaskAttachment) onDeleteAttachment;
 
   const _AttachmentList({
     required this.attachments,
     required this.isRefreshing,
+    required this.onDeleteAttachment,
   });
 
   @override
@@ -1627,11 +1674,11 @@ class _AttachmentList extends StatelessWidget {
     }
 
     return Column(
-      children: attachments.map((item) => _buildItem(item)).toList(),
+      children: attachments.map((item) => _buildItem(context, item)).toList(),
     );
   }
 
-  Widget _buildItem(ProjectTaskAttachment item) {
+  Widget _buildItem(BuildContext context, ProjectTaskAttachment item) {
     final imageUrl = item.previewImageUrl;
     final hasImagePreview = item.hasImagePreview && imageUrl.trim().isNotEmpty;
     final metaLabel = item.displayMeta;
@@ -1706,20 +1753,157 @@ class _AttachmentList extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Container(
-            width: 28,
-            height: 28,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF3F4F6),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.more_vert,
-              size: 16,
-              color: Color(0xFF383C43),
-            ),
+          Builder(
+            builder: (iconCtx) {
+              return GestureDetector(
+                onTap: () {
+                  _showAttachmentActionMenu(
+                    context: context,
+                    iconCtx: iconCtx,
+                    attachment: item,
+                    onDeleteAttachment: () => onDeleteAttachment(item),
+                  );
+                },
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF3F4F6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.more_vert,
+                    size: 16,
+                    color: Color(0xFF383C43),
+                  ),
+                ),
+              );
+            },
           ),
         ],
+      ),
+    );
+  }
+
+  /// Shows an anchored action menu (Download / Delete) for an attachment on tablet.
+  void _showAttachmentActionMenu({
+    required BuildContext context,
+    required BuildContext iconCtx,
+    required ProjectTaskAttachment attachment,
+    required VoidCallback onDeleteAttachment,
+  }) {
+    final RenderBox box = iconCtx.findRenderObject() as RenderBox;
+    final Offset pos = box.localToGlobal(Offset.zero);
+    final Size size = box.size;
+    final screenWidth = MediaQuery.of(context).size.width;
+    const menuWidth = 200.0;
+
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'AttachmentMenu',
+      barrierColor: Colors.black.withValues(alpha: 0.12),
+      transitionDuration: const Duration(milliseconds: 160),
+      transitionBuilder: (_, animation, _, child) {
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.92, end: 1.0).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            ),
+            alignment: Alignment.topRight,
+            child: child,
+          ),
+        );
+      },
+      pageBuilder: (dlgCtx, _, _) {
+        return GestureDetector(
+          onTap: () => Navigator.pop(dlgCtx),
+          behavior: HitTestBehavior.opaque,
+          child: Stack(
+            children: [
+              Positioned(
+                top: pos.dy + size.height + 6,
+                right: (screenWidth - pos.dx - size.width).clamp(8.0, screenWidth - menuWidth - 8),
+                child: GestureDetector(
+                  onTap: () {}, // prevent tap-through
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      width: menuWidth,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.14),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _attachmentMenuItem(
+                            icon: Icons.cloud_download_outlined,
+                            label: 'Download',
+                            onTap: () {
+                              Navigator.pop(dlgCtx);
+                              tryLaunchUrl(
+                                url: attachment.url,
+                                message: 'Could not download attachment',
+                              );
+                            },
+                          ),
+                          const Divider(height: 1, thickness: 0.5, color: Color(0xFFE5E7EB)),
+                          _attachmentMenuItem(
+                            icon: Icons.delete_outline_rounded,
+                            label: 'Delete',
+                            color: const Color(0xFFEF4444),
+                            onTap: () {
+                              Navigator.pop(dlgCtx);
+                              onDeleteAttachment();
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _attachmentMenuItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color color = const Color(0xFF1D1E20),
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: color,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -16,11 +16,21 @@ class ClientInfoTabsModel {
   factory ClientInfoTabsModel.fromJson(Map<String, dynamic> json) {
     // Handle tabs being nested or at root level
     final tabsData = json['tabs'] as Map<String, dynamic>? ?? json;
-    // Debug logging
-    final contactsList =
-        (tabsData['internal_ops'] as Map<String, dynamic>?)?['contacts']
-            as List<dynamic>? ??
-        const [];
+
+
+    final allChecklists = <ClientOnboardingChecklistModel>[];
+    final rawOnboarding = json['onboarding'] as List<dynamic>? ?? const [];
+    for (final e in rawOnboarding) {
+      if (e is Map) {
+        allChecklists.add(ClientOnboardingChecklistModel.fromJson(e.cast<String, dynamic>()));
+      }
+    }
+    final rawTraining = json['training'] as List<dynamic>? ?? const [];
+    for (final e in rawTraining) {
+      if (e is Map) {
+        allChecklists.add(ClientOnboardingChecklistModel.fromJson(e.cast<String, dynamic>()));
+      }
+    }
 
     return ClientInfoTabsModel(
       info: (json['info'] as List<dynamic>? ?? const [])
@@ -36,21 +46,11 @@ class ClientInfoTabsModel {
                 ),
               )
               .toList(),
-      onboarding: (json['onboarding'] as List<dynamic>? ?? const [])
-          .whereType<Map>()
-          .map(
-            (e) => ClientOnboardingChecklistModel.fromJson(
-              e.cast<String, dynamic>(),
-            ),
-          )
+      onboarding: allChecklists
+          .where((e) => e.listType.trim().toLowerCase() != 'training')
           .toList(),
-      training: (json['training'] as List<dynamic>? ?? const [])
-          .whereType<Map>()
-          .map(
-            (e) => ClientOnboardingChecklistModel.fromJson(
-              e.cast<String, dynamic>(),
-            ),
-          )
+      training: allChecklists
+          .where((e) => e.listType.trim().toLowerCase() == 'training')
           .toList(),
       internalOps:
           ((tabsData['internal_ops'] as Map<String, dynamic>?)?['contacts']
@@ -119,6 +119,7 @@ class ClientInfoModel {
   final List<ClientAssignedStaffModel> assignedStaff;
   final List<ClientSupportLineModel> companySupportLines;
   final List<ClientSupportLineModel> supportLines;
+  final List<ClientAssignedSupportUserModel> assignedUsersForSupportLines;
 
   const ClientInfoModel({
     required this.id,
@@ -138,6 +139,7 @@ class ClientInfoModel {
     required this.assignedStaff,
     required this.companySupportLines,
     required this.supportLines,
+    required this.assignedUsersForSupportLines,
   });
 
   factory ClientInfoModel.fromJson(Map<String, dynamic> json) {
@@ -224,7 +226,9 @@ class ClientInfoModel {
             (e) => ClientAssignedStaffModel.fromJson(e.cast<String, dynamic>()),
           )
           .toList(),
-      companySupportLines: (json['company_support_lines'] as List<dynamic>? ?? const [])
+      companySupportLines: (json['companySupportLines'] as List<dynamic>?
+                  ?? json['company_support_lines'] as List<dynamic>?
+                  ?? const [])
           .whereType<Map>()
           .map(
             (e) => ClientSupportLineModel.fromJson(e.cast<String, dynamic>()),
@@ -234,6 +238,15 @@ class ClientInfoModel {
           .whereType<Map>()
           .map(
             (e) => ClientSupportLineModel.fromJson(e.cast<String, dynamic>()),
+          )
+          .toList(),
+      assignedUsersForSupportLines:
+          (json['assignedUsersForSupportLines'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (e) => ClientAssignedSupportUserModel.fromJson(
+              e.cast<String, dynamic>(),
+            ),
           )
           .toList(),
     );
@@ -268,12 +281,17 @@ class ClientBrandingModel {
     }
 
     return ClientBrandingModel(
+      // Branding logo must ONLY come from branding-specific fields.
+      // Never fall back to parent['image'] (the company profile logo) —
+      // that would cause Bug_38: updating the branding logo also changes
+      // the company logo display.
+      // Use parent['info_logo'] which is the dedicated branding logo field.
       logo: firstNonEmpty([
         json['logo'],
         json['branding_logo'],
         json['logo_url'],
         json['branding_logo_url'],
-        parent?['image'],
+        parent?['info_logo'],
         parent?['branding_logo'],
         parent?['logo'],
         parent?['logo_url'],
@@ -676,22 +694,51 @@ class ClientAssignedStaffModel {
   }
 }
 
+/// Represents one entry in `companySupportLines`.
+/// API shape: { id, phone_number, client_name, client_image }
 class ClientSupportLineModel {
-  final String label;
-  final String number;
-  final String image;
+  final int id;
+  final String phoneNumber;
+  final String clientName;
+  final String clientImage;
 
   const ClientSupportLineModel({
-    required this.label,
-    required this.number,
-    required this.image,
+    required this.id,
+    required this.phoneNumber,
+    required this.clientName,
+    required this.clientImage,
   });
 
   factory ClientSupportLineModel.fromJson(Map<String, dynamic> json) {
     return ClientSupportLineModel(
-      label: (json['label'] ?? '').toString(),
-      number: (json['number'] ?? '').toString(),
+      id: (json['id'] is int)
+          ? json['id'] as int
+          : int.tryParse('${json['id'] ?? ''}') ?? 0,
+      phoneNumber: (json['phone_number'] ?? json['number'] ?? '').toString(),
+      clientName: (json['client_name'] ?? json['label'] ?? '').toString(),
+      clientImage: (json['client_image'] ?? json['image'] ?? '').toString(),
+    );
+  }
+}
+
+/// Represents one entry in `assignedUsersForSupportLines`.
+/// API shape: { name, image, phone_number }
+class ClientAssignedSupportUserModel {
+  final String name;
+  final String image;
+  final String phoneNumber;
+
+  const ClientAssignedSupportUserModel({
+    required this.name,
+    required this.image,
+    required this.phoneNumber,
+  });
+
+  factory ClientAssignedSupportUserModel.fromJson(Map<String, dynamic> json) {
+    return ClientAssignedSupportUserModel(
+      name: (json['name'] ?? '').toString(),
       image: (json['image'] ?? '').toString(),
+      phoneNumber: (json['phone_number'] ?? '').toString(),
     );
   }
 }

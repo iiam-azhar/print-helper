@@ -286,7 +286,7 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
         .where((e) => e.isNotEmpty)
         .toList();
 
-    final success = await pro.updateAccount(
+    final errorMsg = await pro.updateAccount(
       id: widget.account.id,
       firstName: _firstNameCtrl.text.trim(),
       lastName: _lastNameCtrl.text.trim(),
@@ -307,12 +307,12 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
     );
 
     if (!mounted) return;
-    if (success) {
+    if (errorMsg == null) {
       showToast(message: "Account Updated Successfully");
       Navigator.pop(context);
       pro.getAccounts(ctx: context);
     } else {
-      showToast(message: "Update Failed");
+      showToast(message: errorMsg);
     }
   }
 

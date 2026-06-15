@@ -474,6 +474,21 @@ class _MyCustomersScreenState extends State<MyCustomersScreen> {
     int index,
     int total,
   ) {
+    final showEmail = contact.emails.any((e) => e.trim().isNotEmpty);
+    final showCall = contact.phones.any((p) => p.trim().isNotEmpty);
+    final showChat = true;
+
+    int visibleIconsCount = 0;
+    if (showEmail) visibleIconsCount++;
+    if (showCall) visibleIconsCount++;
+    if (showChat) visibleIconsCount++;
+
+    final double containerWidth = visibleIconsCount == 1
+        ? 65.w
+        : visibleIconsCount == 2
+            ? 115.w
+            : 170.w;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -554,7 +569,7 @@ class _MyCustomersScreenState extends State<MyCustomersScreen> {
         Spacers.sb15(),
         Center(
           child: Container(
-            width: 200.w,
+            width: containerWidth,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20.r),
               border: Border.all(
@@ -567,31 +582,29 @@ class _MyCustomersScreenState extends State<MyCustomersScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _imageButton(
-                      image: Paths.email,
-                      width: 28,
-                      onPressed: () {
-                        if (contact.emails.isNotEmpty) {
+                    if (contact.emails.any((e) => e.trim().isNotEmpty))
+                      _imageButton(
+                        image: Paths.email,
+                        width: 28,
+                        onPressed: () {
                           tryLaunchUrl(
-                            url: 'mailto:${contact.emails.first}',
+                            url: 'mailto:${contact.emails.firstWhere((e) => e.trim().isNotEmpty)}',
                             message: 'Could not open email app',
                           );
-                        } else {
-                          showToast(message: 'No email address available');
-                        }
-                      },
-                    ),
-                    _imageButton(
-                      image: Paths.call,
-                      width: 21,
-                      onPressed: () {
-                        navTo(
-                          context: context,
-                          page: const ClientBottomBar(pageNum: 2),
-                          removeUntil: true,
-                        );
-                      },
-                    ),
+                        },
+                      ),
+                    if (contact.phones.any((p) => p.trim().isNotEmpty))
+                      _imageButton(
+                        image: Paths.call,
+                        width: 21,
+                        onPressed: () {
+                          navTo(
+                            context: context,
+                            page: const ClientBottomBar(pageNum: 2),
+                            removeUntil: true,
+                          );
+                        },
+                      ),
                     _imageButton(
                       image: Paths.chat,
                       width: 22,
@@ -605,7 +618,7 @@ class _MyCustomersScreenState extends State<MyCustomersScreen> {
                     ),
                   ],
                 ),
-                if (contact.languages.isNotEmpty) ...[
+                if (contact.languages.any((e) => e.trim().isNotEmpty)) ...[
                   Padding(
                     padding: EdgeInsets.only(
                       bottom: 6.h,
@@ -614,7 +627,7 @@ class _MyCustomersScreenState extends State<MyCustomersScreen> {
                     ),
                     child: Center(
                       child: TextWidget(
-                        text: contact.languages.join(" • "),
+                        text: contact.languages.where((e) => e.trim().isNotEmpty).join(" • "),
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),

@@ -926,16 +926,19 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: c.languages.map((lang) {
-                        return TextWidget(
-                          text: lang,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        );
-                      }).toList(),
-                    ),
+                    if (c.languages.any((lang) => lang.trim().isNotEmpty))
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: c.languages
+                            .where((lang) => lang.trim().isNotEmpty)
+                            .map((lang) {
+                          return TextWidget(
+                            text: lang,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          );
+                        }).toList(),
+                      ),
                   ],
                 ),
               ],
@@ -999,25 +1002,23 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 role == "CONTACT" || role == "STAFF"
                     ? SizedBox(width: 59)
                     : Spacers.sbw20(),
-                _imageButton(Paths.email, 20, () {
-                  if (c.emails.isNotEmpty) {
+                if (c.emails.any((e) => e.trim().isNotEmpty))
+                  _imageButton(Paths.email, 20, () {
                     tryLaunchUrl(
-                      url: 'mailto:${c.emails.first}',
+                      url: 'mailto:${c.emails.firstWhere((e) => e.trim().isNotEmpty)}',
                       message: 'Could not open email app',
                     );
-                  } else {
-                    showToast(message: 'No email address available');
-                  }
-                }),
-                _imageButton(
-                  Paths.call,
-                  20,
-                  () => navTo(
-                    context: context,
-                    page: AdminBottomBar(pageNum: 2),
-                    removeUntil: true,
+                  }),
+                if (c.phones.any((p) => p.trim().isNotEmpty))
+                  _imageButton(
+                    Paths.call,
+                    20,
+                    () => navTo(
+                      context: context,
+                      page: AdminBottomBar(pageNum: 2),
+                      removeUntil: true,
+                    ),
                   ),
-                ),
                 _imageButton(
                   Paths.chat,
                   20,

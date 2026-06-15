@@ -731,13 +731,15 @@ class _ClientScreenState extends State<ClientScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
-                          TextWidget(
-                            text: contact.languages.join(" • "),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
-                            color: Colors.black54,
-                          ),
+                          if (contact.languages.any((e) => e.trim().isNotEmpty)) ...[
+                            const SizedBox(height: 2),
+                            TextWidget(
+                              text: contact.languages.where((e) => e.trim().isNotEmpty).join(" • "),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: Colors.black54,
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -820,12 +822,12 @@ class _ClientScreenState extends State<ClientScreen> {
                               },
                             ),
 
-                          if (contact.emails.isNotEmpty)
+                          if (contact.emails.any((e) => e.trim().isNotEmpty))
                             _iconButton(
                               icon: Paths.email,
                               onTap: () {
                                 tryLaunchUrl(
-                                  url: 'mailto:${contact.emails.first}',
+                                  url: 'mailto:${contact.emails.firstWhere((e) => e.trim().isNotEmpty)}',
                                   message: 'Could not open email app',
                                 );
                               },

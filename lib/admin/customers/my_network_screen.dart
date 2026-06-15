@@ -871,12 +871,16 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
             );
           },
         ),
-        SizedBox(height: 12.h),
-        _supportLinesSection(
-          contactNumbers: contactNumbers,
-          assignedStaff: assignedStaff,
-          supportLines: supportLines,
-        ),
+        if (supportLines.isNotEmpty ||
+            contactNumbers.isNotEmpty ||
+            assignedStaff.isNotEmpty) ...[
+          SizedBox(height: 12.h),
+          _supportLinesSection(
+            contactNumbers: contactNumbers,
+            assignedStaff: assignedStaff,
+            supportLines: supportLines,
+          ),
+        ],
       ],
     );
   }
@@ -4327,9 +4331,13 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
         (c) => _asMap(c)['is_primary'] == 1 || _asMap(c)['is_primary'] == true,
         orElse: () => contactsList.first,
       );
-      final pName = _pickString(_asMap(primaryMap), ['name']);
-      if (pName.trim().isNotEmpty) {
-        contactName = pName.trim();
+      // Bug_37: Build full name (first + last) so we never show "N/A" when the
+      // contact has a last name but an empty first name (or vice versa).
+      final pName = _pickString(_asMap(primaryMap), ['name']).trim();
+      final pLast = _pickString(_asMap(primaryMap), ['last_name']).trim();
+      final full = '$pName $pLast'.trim();
+      if (full.isNotEmpty) {
+        contactName = full;
       }
     }
 

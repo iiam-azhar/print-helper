@@ -447,7 +447,7 @@ class AdminPro extends ChangeNotifier {
     }
   }
 
-  Future<bool> storeAccount({
+  Future<String?> storeAccount({
     required String firstName,
     required String lastName,
     required String username,
@@ -514,16 +514,48 @@ class AdminPro extends ChangeNotifier {
       printData(title: "STATUS:", data: response.statusCode);
 
       printData(title: "BODY:", data: response.body);
-      return response.statusCode == 200 || response.statusCode == 201;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return null;
+      } else {
+        try {
+          final res = jsonDecode(response.body);
+          if (res is Map) {
+            if (res.containsKey("errors") && res["errors"] is Map) {
+              final Map errors = res["errors"];
+              List<String> allErrors = [];
+              errors.forEach((key, value) {
+                if (value is List) {
+                  allErrors.addAll(value.map((e) => e.toString()));
+                } else if (value is Map) {
+                  value.forEach((k, v) {
+                    allErrors.add(v.toString());
+                  });
+                } else if (value != null) {
+                  allErrors.add(value.toString());
+                }
+              });
+              if (allErrors.isNotEmpty) {
+                return allErrors.join("\n");
+              }
+            }
+            if (res.containsKey("message") && res["message"] != null) {
+              return res["message"].toString();
+            }
+          }
+        } catch (e) {
+          printData(title: "PARSE ERROR RESPONSE:", data: e, e: true);
+        }
+        return "Failed to create account";
+      }
     } catch (e) {
       printData(title: "API ERROR:", data: e, e: true);
-      return false;
+      return "Failed to create account";
     } finally {
       Loaders.hide();
     }
   }
 
-  Future<bool> updateAccount({
+  Future<String?> updateAccount({
     required int id,
     required String firstName,
     required String lastName,
@@ -604,12 +636,51 @@ class AdminPro extends ChangeNotifier {
       }
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
-      final res = jsonDecode(response.body);
+      printData(title: "UPDATE STATUS:", data: response.statusCode);
       printData(title: "UPDATE RESPONSE:", data: response.body);
-      return res["success"] == true || res["success"] == "true";
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        try {
+          final res = jsonDecode(response.body);
+          if (res["success"] == true || res["success"] == "true") {
+            return null;
+          }
+        } catch (_) {}
+        return null;
+      } else {
+        try {
+          final res = jsonDecode(response.body);
+          if (res is Map) {
+            if (res.containsKey("errors") && res["errors"] is Map) {
+              final Map errors = res["errors"];
+              List<String> allErrors = [];
+              errors.forEach((key, value) {
+                if (value is List) {
+                  allErrors.addAll(value.map((e) => e.toString()));
+                } else if (value is Map) {
+                  value.forEach((k, v) {
+                    allErrors.add(v.toString());
+                  });
+                } else if (value != null) {
+                  allErrors.add(value.toString());
+                }
+              });
+              if (allErrors.isNotEmpty) {
+                return allErrors.join("\n");
+              }
+            }
+            if (res.containsKey("message") && res["message"] != null) {
+              return res["message"].toString();
+            }
+          }
+        } catch (e) {
+          printData(title: "PARSE UPDATE ERROR RESPONSE:", data: e, e: true);
+        }
+        return "Update Failed";
+      }
     } catch (e) {
       printData(title: "UPDATE ERROR:", data: e, e: true);
-      return false;
+      return "Update Failed";
     } finally {
       Loaders.hide();
     }

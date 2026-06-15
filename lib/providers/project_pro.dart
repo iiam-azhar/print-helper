@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 import '../models/projects_models.dart';
+import '../models/client_option.dart';
 import '../services/api_routes.dart';
 import '../services/api_service.dart';
 import '../utils/console_util.dart';
@@ -34,14 +35,21 @@ class ProjectPro extends ChangeNotifier {
   final List<Map<String, String>> _projectSectionFilterOptions = [
     {'value': '', 'label': 'Select'},
   ];
-  final List<Map<String, String>> _projectClientOptions = [
-    {'id': '', 'label': 'Select'},
-  ];
+  final List<Map<String, String>> _projectClientOptions = [];
   final List<Map<String, String>> _projectCustomerOptions = [
     {'id': '', 'client_id': '', 'label': 'Select'},
   ];
   final Map<String, String> _activeProjectFilters = {};
   final Map<String, String> _activeTaskFilters = {};
+  
+  // Paginated client fetch state
+  final List<ClientOption> paginatedClientOptions = [];
+  bool isFetchingPaginatedClients = false;
+  bool isFetchingMorePaginatedClients = false;
+  int paginatedClientsCurrentPage = 1;
+  int paginatedClientsLastPage = 1;
+  bool paginatedClientsHasMore = true;
+
   bool projectFilterProjectAssigneesLoad = false;
   bool projectFilterTaskAssigneesLoad = false;
   bool projectFilterProjectTaskAssigneesLoad = false;
@@ -308,14 +316,17 @@ class ProjectPro extends ChangeNotifier {
     if (_activeProjectDetail != null) {
       final idx = _activeProjectDetail!.tasks.indexWhere((t) => t.id == taskId);
       if (idx != -1) {
-        final newTasks = List<ProjectTaskModel>.from(_activeProjectDetail!.tasks);
+        final newTasks = List<ProjectTaskModel>.from(
+          _activeProjectDetail!.tasks,
+        );
         newTasks[idx] = newTasks[idx].copyWith(
           projectSectionId: newSectionId,
           sectionName: newSectionName,
           status: newSectionName,
         );
         _activeProjectDetail = _activeProjectDetail!.copyWith(tasks: newTasks);
-        _projectDetailsCache[_activeProjectDetail!.project.numericId] = _activeProjectDetail!;
+        _projectDetailsCache[_activeProjectDetail!.project.numericId] =
+            _activeProjectDetail!;
       }
     }
 
@@ -336,10 +347,13 @@ class ProjectPro extends ChangeNotifier {
     if (_activeProjectDetail != null) {
       final idx = _activeProjectDetail!.tasks.indexWhere((t) => t.id == taskId);
       if (idx != -1) {
-        final newTasks = List<ProjectTaskModel>.from(_activeProjectDetail!.tasks);
+        final newTasks = List<ProjectTaskModel>.from(
+          _activeProjectDetail!.tasks,
+        );
         newTasks[idx] = updatedTask;
         _activeProjectDetail = _activeProjectDetail!.copyWith(tasks: newTasks);
-        _projectDetailsCache[_activeProjectDetail!.project.numericId] = _activeProjectDetail!;
+        _projectDetailsCache[_activeProjectDetail!.project.numericId] =
+            _activeProjectDetail!;
       }
     }
 
@@ -727,6 +741,7 @@ class ProjectPro extends ChangeNotifier {
     List<String> filePaths = const [],
     List<String> fileNames = const [],
     List<String> fileKeys = const [],
+    ProjectTaskModel? fallbackTask,
   }) async {
     // Merge existing title/description if missing to satisfy server requirements (422 fixes)
     ProjectTaskModel? existing;
@@ -738,6 +753,19 @@ class ProjectPro extends ChangeNotifier {
       } catch (_) {}
     }
 
+    if (existing == null) {
+      for (final cache in _projectDetailsCache.values) {
+        try {
+          existing = cache.tasks.firstWhere((t) => t.id == taskId);
+          break;
+        } catch (_) {}
+      }
+    }
+
+    if (existing == null) {
+      existing = fallbackTask;
+    }
+
     if (existing != null) {
       if (!payload.containsKey('title')) payload['title'] = existing.title;
       if (!payload.containsKey('description')) {
@@ -746,6 +774,17 @@ class ProjectPro extends ChangeNotifier {
       if (!payload.containsKey('due_date') &&
           existing.dueDate.trim().isNotEmpty) {
         payload['due_date'] = existing.dueDate;
+      }
+      if (!payload.containsKey('assigned_members')) {
+        payload['assigned_members'] =
+            existing.members.map((m) => m.id).toList();
+      }
+      if (!payload.containsKey('label_ids')) {
+        payload['label_ids'] = existing.labels.map((l) => l.id).toList();
+      }
+      if (!payload.containsKey('project_section_id') &&
+          existing.projectSectionId > 0) {
+        payload['project_section_id'] = existing.projectSectionId;
       }
     }
 
@@ -772,6 +811,11 @@ class ProjectPro extends ChangeNotifier {
       }
     }
 
+    printData(
+      title: 'Update Task Payload (Body)',
+      data: payload,
+    );
+
     try {
       final data = await ApiService().postDataToApi(
         api: apiPath,
@@ -793,8 +837,18 @@ class ProjectPro extends ChangeNotifier {
             final options =
                 _activeProjectDetail?.taskCreateContext?.memberOptions ??
                 const <ProjectTaskMember>[];
-            patchedMembers = options
-                .where((member) => ids.contains(member.id))
+            final allMembersSource = <int, ProjectTaskMember>{};
+            for (final m in options) {
+              allMembersSource[m.id] = m;
+            }
+            if (existing != null) {
+              for (final m in existing.members) {
+                allMembersSource[m.id] = m;
+              }
+            }
+            patchedMembers = ids
+                .where((id) => allMembersSource.containsKey(id))
+                .map((id) => allMembersSource[id]!)
                 .toList();
           }
         }
@@ -804,9 +858,18 @@ class ProjectPro extends ChangeNotifier {
           final rawIds = payload['label_ids'];
           if (rawIds is List) {
             final ids = rawIds.map(_toInt).where((id) => id > 0).toSet();
-            patchedLabels = _projectLabels
-                .where((l) => ids.contains(l.id))
-                .map((l) => ProjectTaskLabel(id: l.id, name: l.name, color: l.color))
+            final allLabelsSource = <int, ProjectTaskLabel>{};
+            for (final l in _projectLabels) {
+              allLabelsSource[l.id] = ProjectTaskLabel(id: l.id, name: l.name, color: l.color);
+            }
+            if (existing != null) {
+              for (final l in existing.labels) {
+                allLabelsSource[l.id] = l;
+              }
+            }
+            patchedLabels = ids
+                .where((id) => allLabelsSource.containsKey(id))
+                .map((id) => allLabelsSource[id]!)
                 .toList();
           }
         }
@@ -817,7 +880,12 @@ class ProjectPro extends ChangeNotifier {
           patchedSectionId = _toInt(payload['project_section_id']);
           final section = _activeProjectDetail?.sections.firstWhere(
             (s) => s.id == patchedSectionId,
-            orElse: () => const ProjectSectionModel(id: 0, name: '', sortOrder: 0, status: ''),
+            orElse: () => const ProjectSectionModel(
+              id: 0,
+              name: '',
+              sortOrder: 0,
+              status: '',
+            ),
           );
           if (section != null && section.id > 0) {
             patchedSectionName = section.name;
@@ -831,30 +899,61 @@ class ProjectPro extends ChangeNotifier {
           );
           if (idx >= 0) {
             final existing = _activeProjectDetail!.tasks[idx];
-            final newTasks = List<ProjectTaskModel>.from(_activeProjectDetail!.tasks);
-            
+            final newTasks = List<ProjectTaskModel>.from(
+              _activeProjectDetail!.tasks,
+            );
+
             // If the API returned a full task object, use it to ensure everything is correct
             final taskData = data['data'];
             if (taskData is Map) {
               try {
-                final Map<String, dynamic> taskJson = Map<String, dynamic>.from(taskData);
+                final Map<String, dynamic> taskJson = Map<String, dynamic>.from(
+                  taskData,
+                );
                 final fromServer = ProjectTaskModel.fromJson(taskJson);
-                
+
                 // Merge server response with existing data to prevent partial response data loss
                 final updated = fromServer.copyWith(
-                  members: taskJson.containsKey('members') ? fromServer.members : existing.members,
-                  labels: taskJson.containsKey('labels') ? fromServer.labels : existing.labels,
-                  dueDate: taskJson.containsKey('due_date') ? fromServer.dueDate : existing.dueDate,
-                  description: taskJson.containsKey('description') ? fromServer.description : existing.description,
-                  attachments: taskJson.containsKey('attachments') ? fromServer.attachments : existing.attachments,
-                  activities: taskJson.containsKey('activities') ? fromServer.activities : existing.activities,
+                  title: fromServer.title.trim().isNotEmpty
+                      ? fromServer.title
+                      : existing.title,
+                  status: fromServer.status.trim().isNotEmpty
+                      ? fromServer.status
+                      : existing.status,
+                  sectionName: fromServer.sectionName.trim().isNotEmpty
+                      ? fromServer.sectionName
+                      : existing.sectionName,
+                  projectSectionId: fromServer.projectSectionId > 0
+                      ? fromServer.projectSectionId
+                      : existing.projectSectionId,
+                  dueDate: (fromServer.dueDate.trim().isNotEmpty && fromServer.dueDate != 'null')
+                      ? fromServer.dueDate
+                      : existing.dueDate,
+                  description: fromServer.description.trim().isNotEmpty
+                      ? fromServer.description
+                      : existing.description,
+                  members: taskJson.containsKey('members')
+                      ? fromServer.members
+                      : existing.members,
+                  labels: taskJson.containsKey('labels')
+                      ? fromServer.labels
+                      : existing.labels,
+                  attachments: taskJson.containsKey('attachments')
+                      ? fromServer.attachments
+                      : existing.attachments,
+                  activities: taskJson.containsKey('activities')
+                      ? fromServer.activities
+                      : existing.activities,
                 );
 
                 newTasks[idx] = updated;
-                _activeProjectDetail = _activeProjectDetail!.copyWith(tasks: newTasks);
-                
+                _activeProjectDetail = _activeProjectDetail!.copyWith(
+                  tasks: newTasks,
+                );
+
                 // Update global cache
-                _projectDetailsCache[_activeProjectDetail!.project.numericId] = _activeProjectDetail!;
+                _projectDetailsCache[_activeProjectDetail!.project.numericId] =
+                    _activeProjectDetail!;
                 final globalIdx = _tasks.indexWhere((t) => t.id == taskId);
                 if (globalIdx != -1) {
                   _tasks[globalIdx] = updated;
@@ -863,7 +962,10 @@ class ProjectPro extends ChangeNotifier {
                 notifyListeners();
                 return true;
               } catch (e) {
-                printData(title: 'Parse updated task error', data: e.toString());
+                printData(
+                  title: 'Parse updated task error',
+                  data: e.toString(),
+                );
               }
             }
 
@@ -880,10 +982,13 @@ class ProjectPro extends ChangeNotifier {
               status: patchedSectionName ?? existing.status,
             );
             newTasks[idx] = patched;
-            _activeProjectDetail = _activeProjectDetail!.copyWith(tasks: newTasks);
-            
+            _activeProjectDetail = _activeProjectDetail!.copyWith(
+              tasks: newTasks,
+            );
+
             // Update global cache
-            _projectDetailsCache[_activeProjectDetail!.project.numericId] = _activeProjectDetail!;
+            _projectDetailsCache[_activeProjectDetail!.project.numericId] =
+                _activeProjectDetail!;
             final globalIdx = _tasks.indexWhere((t) => t.id == taskId);
             if (globalIdx != -1) {
               _tasks[globalIdx] = patched;
@@ -1238,16 +1343,46 @@ class ProjectPro extends ChangeNotifier {
   Future<bool> saveTaskAsTemplate({
     required int taskId,
     required String name,
+    int? projectId,
+    bool isPublic = true,
+    String? title,
+    String? description,
+    String? activityComment,
+    int? projectSectionId,
+    String? dueDate,
+    List<int>? memberIds,
+    List<int>? labelIds,
+    List<String>? newLabels,
+    List<String>? newLabelColors,
+    List<int>? templateAttachmentIds,
   }) async {
+    final resolvedProjectId = projectId ?? _activeProjectDetail?.project.numericId;
+    if (resolvedProjectId == null) {
+      printData(title: 'Save Task Template Error', data: 'Project ID is null');
+      return false;
+    }
+
     try {
+      final payload = <String, dynamic>{
+        'name': name,
+        'source_task_id': taskId,
+        'is_public': isPublic,
+        if (title != null) 'title': title,
+        if (description != null) 'description': description,
+        if (activityComment != null) 'activity_comment': activityComment,
+        if (projectSectionId != null) 'project_section_id': projectSectionId,
+        if (dueDate != null) 'due_date': dueDate,
+        if (memberIds != null) 'member_ids': memberIds,
+        if (labelIds != null) 'label_ids': labelIds,
+        if (newLabels != null) 'new_labels': newLabels,
+        if (newLabelColors != null) 'new_label_colors': newLabelColors,
+        if (templateAttachmentIds != null) 'template_attachment_ids': templateAttachmentIds,
+      };
+
       final data = await ApiService().postDataToApi(
-        api: ApiRoutes.projectTaskTemplates,
+        api: 'projects/$resolvedProjectId/task-templates',
         headers: await _headers(),
-        payload: {
-          'name': name,
-          'source_task_id': taskId,
-          'project_id': _activeProjectDetail?.project.numericId,
-        },
+        payload: payload,
         showRes: true,
       );
 
@@ -1618,16 +1753,83 @@ class ProjectPro extends ChangeNotifier {
     }
   }
 
-  Future<void> getProjectCustomerOptions({bool forceRefresh = false}) async {
-    if (!forceRefresh && _hasLoadedProjectCustomerOptions) {
+  Future<void> getPaginatedProjectClientOptions({
+    bool refresh = false,
+    int? conversationId,
+    String? searchQuery,
+  }) async {
+    if (refresh) {
+      paginatedClientsCurrentPage = 1;
+      paginatedClientsHasMore = true;
+      paginatedClientOptions.clear();
+      isFetchingPaginatedClients = true;
+    } else {
+      if (!paginatedClientsHasMore || isFetchingMorePaginatedClients) return;
+      isFetchingMorePaginatedClients = true;
+      paginatedClientsCurrentPage++;
+    }
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    final userToken = prefs.getString('token') ?? '';
+
+    final response = await ApiService().fetchClientOptions(
+      userToken: userToken,
+      conversationId: conversationId,
+      limit: 15,
+      offset: (paginatedClientsCurrentPage - 1) * 15,
+      searchQuery: searchQuery,
+      includeAssignedStaff: true,
+    );
+
+    if (response != null && response.success) {
+      printData(
+        title: 'getPaginatedProjectClientOptions Success',
+        data: 'Fetched ${response.data.length} clients. Clients: '
+            '${response.data.map((c) => {
+                  'id': c.id,
+                  'companyName': c.companyName,
+                  'assignedStaff': c.assignedStaff.map((s) => {'id': s.id, 'name': s.name}).toList()
+                }).toList()}',
+      );
+      if (refresh) {
+        paginatedClientOptions.clear();
+      }
+      paginatedClientOptions.addAll(response.data);
+      paginatedClientsLastPage = response.lastPage;
+      paginatedClientsHasMore = paginatedClientsCurrentPage < response.lastPage;
+    } else {
+      // Revert page increment on failure
+      if (!refresh && paginatedClientsCurrentPage > 1) {
+        paginatedClientsCurrentPage--;
+      }
+    }
+
+    if (refresh) {
+      isFetchingPaginatedClients = false;
+    } else {
+      isFetchingMorePaginatedClients = false;
+    }
+    notifyListeners();
+  }
+
+  Future<void> getProjectCustomerOptions({
+    bool forceRefresh = false,
+    int? clientId,
+  }) async {
+    if (!forceRefresh && clientId == null && _hasLoadedProjectCustomerOptions) {
       return;
     }
 
     projectCustomerOptionsLoad = true;
     notifyListeners();
     try {
+      final apiPath = clientId != null
+          ? '${ApiRoutes.projectsOptionCustomers}?client_id=$clientId'
+          : ApiRoutes.projectsOptionCustomers;
+
       final data = await ApiService().getDataFromApi(
-        api: ApiRoutes.projectsOptionCustomers,
+        api: apiPath,
         headers: await _headers(),
         showRes: false,
       );
@@ -1644,8 +1846,11 @@ class ProjectPro extends ChangeNotifier {
             final map = Map<String, dynamic>.from(item);
             final id = map['id']?.toString().trim() ?? '';
             final clientId = map['client_id']?.toString().trim() ?? '';
-            final label = map['company_name']?.toString().trim() ?? '';
-            if (id.isEmpty || label.isEmpty) continue;
+            var label = map['company_name']?.toString().trim() ?? '';
+            if (label.isEmpty) {
+              label = 'Personal';
+            }
+            if (id.isEmpty) continue;
             options.add({
               'id': id,
               'client_id': clientId,

@@ -51,7 +51,7 @@
     </queries>
 
     <application
-        android:label="Print Helper"
+        android:label="PH Portal"
         android:name="com.printhelper.print_helper.MyApplication"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
@@ -105,7 +105,7 @@
         </receiver>
 
         <service
-            android:name="com.twilio.twilio_voice.fcm.VoiceFirebaseMessagingService"
+            android:name=".MyFirebaseMessagingService"
             android:stopWithTask="false"
             android:exported="false"
             android:foregroundServiceType="shortService">
@@ -113,6 +113,11 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Remove default Twilio Service to prevent conflict -->
+        <service
+            android:name="com.twilio.twilio_voice.fcm.VoiceFirebaseMessagingService"
+            tools:node="remove" />
 
         <service
             android:name="com.twilio.twilio_voice.service.TVConnectionService"

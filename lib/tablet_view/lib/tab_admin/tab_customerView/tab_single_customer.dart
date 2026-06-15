@@ -493,16 +493,19 @@ class _SingleCustomerState extends State<SingleCustomer> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: contact.languages.map((lang) {
-                    return TextWidget(
-                      text: lang,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    );
-                  }).toList(),
-                ),
+                if (contact.languages.any((lang) => lang.trim().isNotEmpty))
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: contact.languages
+                        .where((lang) => lang.trim().isNotEmpty)
+                        .map((lang) {
+                      return TextWidget(
+                        text: lang,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      );
+                    }).toList(),
+                  ),
               ],
             ),
           ),

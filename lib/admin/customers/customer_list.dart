@@ -640,21 +640,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
             ],
           ),
         ),
-        SizedBox(height: 16.h),
-        const TextWidget(
-          text: 'PH PORTAL SUPPORT LINES',
-          fontSize: 18,
-          fontWeight: FontWeight.w800,
-        ),
-        SizedBox(height: 8.h),
-        Divider(color: const Color(0xFFD1D5DB), height: 1.h),
-        SizedBox(height: 10.h),
-        const TextWidget(
-          text: 'Lines assigned to this client. Managed in Settings.',
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          color: Color(0xFF64748B),
-        ),
       ],
     );
   }

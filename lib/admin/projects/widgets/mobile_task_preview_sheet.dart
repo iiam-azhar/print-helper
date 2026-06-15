@@ -13,6 +13,7 @@ import '../../../widgets/image_widget.dart';
 import '../../../widgets/toasts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'task_label_editor.dart';
+import '../../../services/download_service.dart';
 
 enum _TaskPreviewTab { details, comments }
 
@@ -403,110 +404,174 @@ class MobileTaskPreviewSheet {
                                         padding: EdgeInsets.symmetric(
                                           horizontal: 14.w,
                                         ),
-                                        child: Row(
-                                          children: [
-                                            Text(
-                                              'Status:',
-                                              style: TextStyle(
-                                                fontSize: 10.sp,
-                                                fontWeight: FontWeight.w600,
-                                                color: const Color(0xFF2F3138),
-                                              ),
-                                            ),
-                                            SizedBox(width: 8.w),
-                                            GestureDetector(
-                                              onTapDown: (details) async {
-                                                final sections =
-                                                    dialogContext
-                                                        .read<ProjectPro>()
-                                                        .activeProjectDetail
-                                                        ?.sections ??
-                                                    const <
-                                                      ProjectSectionModel
-                                                    >[];
-                                                if (sections.isEmpty) return;
-
-                                                await _showSectionPicker(
-                                                  context,
-                                                  sections,
-                                                  selectedSectionId,
-                                                  details.globalPosition,
-                                                  (section) {
-                                                    if (!dialogContext
-                                                        .mounted) {
-                                                      return;
-                                                    }
-                                                    setSheetState(() {
-                                                      selectedSectionId =
-                                                          section.id;
-                                                      selectedStatus =
-                                                          section.name;
-                                                      // Optimistically update the task model
-                                                      task = task.copyWith(
-                                                        projectSectionId:
-                                                            section.id,
-                                                        sectionName:
-                                                            section.name,
-                                                      );
-                                                    });
-                                                    dialogContext
-                                                        .read<ProjectPro>()
-                                                        .updateProjectTask(
-                                                          projectId:
-                                                              task.projectId,
-                                                          taskId: task.id,
-                                                          payload: {
-                                                            'project_section_id':
-                                                                section.id,
-                                                          },
-                                                        );
-                                                  },
-                                                );
-                                              },
-                                              child: Container(
-                                                height: 24.h,
-                                                padding: EdgeInsets.symmetric(
-                                                  horizontal: 10.w,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        999.w,
-                                                      ),
-                                                  border: Border.all(
-                                                    color: const Color(
-                                                      0xFFE0E2E8,
-                                                    ),
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            child: Row(
+                                              children: [
+                                                Text(
+                                                  'Status:',
+                                                  style: TextStyle(
+                                                    fontSize: 10.sp,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: const Color(0xFF2F3138),
                                                   ),
                                                 ),
-                                                child: Row(
-                                                  children: [
-                                                    Text(
-                                                      selectedStatus,
-                                                      style: TextStyle(
-                                                        fontSize: 11.sp,
-                                                        fontWeight:
-                                                            FontWeight.w700,
+                                                SizedBox(width: 8.w),
+                                                GestureDetector(
+                                                  onTapDown: (details) async {
+                                                    final sections =
+                                                        dialogContext
+                                                            .read<ProjectPro>()
+                                                            .activeProjectDetail
+                                                            ?.sections ??
+                                                        const <
+                                                          ProjectSectionModel
+                                                        >[];
+                                                    if (sections.isEmpty) return;
+
+                                                    await _showSectionPicker(
+                                                      context,
+                                                      sections,
+                                                      selectedSectionId,
+                                                      details.globalPosition,
+                                                      (section) {
+                                                        if (!dialogContext
+                                                            .mounted) {
+                                                          return;
+                                                        }
+                                                        setSheetState(() {
+                                                          selectedSectionId =
+                                                              section.id;
+                                                          selectedStatus =
+                                                              section.name;
+                                                          // Optimistically update the task model
+                                                          task = task.copyWith(
+                                                            projectSectionId:
+                                                                section.id,
+                                                            sectionName:
+                                                                section.name,
+                                                          );
+                                                        });
+                                                        dialogContext
+                                                            .read<ProjectPro>()
+                                                            .updateProjectTask(
+                                                              projectId:
+                                                                  task.projectId,
+                                                              taskId: task.id,
+                                                              payload: {
+                                                                'project_section_id':
+                                                                    section.id,
+                                                              },
+                                                            );
+                                                      },
+                                                    );
+                                                  },
+                                                  child: Container(
+                                                    height: 24.h,
+                                                    padding: EdgeInsets.symmetric(
+                                                      horizontal: 10.w,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            999.w,
+                                                          ),
+                                                      border: Border.all(
                                                         color: const Color(
-                                                          0xFF232731,
+                                                          0xFFE0E2E8,
                                                         ),
                                                       ),
                                                     ),
-                                                    SizedBox(width: 5.w),
-                                                    Icon(
-                                                      CupertinoIcons
-                                                          .chevron_down,
-                                                      size: 10.sp,
-                                                      color: const Color(
-                                                        0xFF737985,
-                                                      ),
+                                                    child: Row(
+                                                      children: [
+                                                        Text(
+                                                          selectedStatus,
+                                                          style: TextStyle(
+                                                            fontSize: 11.sp,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: const Color(
+                                                              0xFF232731,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        SizedBox(width: 5.w),
+                                                        Icon(
+                                                          CupertinoIcons
+                                                              .chevron_down,
+                                                          size: 10.sp,
+                                                          color: const Color(
+                                                            0xFF737985,
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
-                                                  ],
+                                                  ),
                                                 ),
-                                              ),
+                                                Builder(
+                                                  builder: (context) {
+                                                    final pro = context.watch<ProjectPro>();
+                                                    final isAlreadyTemplate = task.isTaskSavedAsTemplate ||
+                                                        pro.taskTemplates.any((t) => t.sourceTaskId == task.id) ||
+                                                    pro.projectBlueprints.any((t) => t.sourceTaskId == task.id);
+                                                    if (task.id > 0 && !isAlreadyTemplate) {
+                                                      return Padding(
+                                                        padding: EdgeInsets.only(left: 8.w),
+                                                        child: InkWell(
+                                                          onTap: () {
+                                                            _showSaveTaskTemplateDialog(
+                                                              context: context,
+                                                              task: task,
+                                                              baseTitle: titleController.text.trim(),
+                                                              onTaskUpdated: (updatedTask) {
+                                                                setSheetState(() {
+                                                                  task = updatedTask;
+                                                                });
+                                                              },
+                                                            );
+                                                          },
+                                                          borderRadius: BorderRadius.circular(8.w),
+                                                          child: Container(
+                                                            padding: EdgeInsets.symmetric(
+                                                              horizontal: 10.w,
+                                                              vertical: 6.h,
+                                                            ),
+                                                            decoration: BoxDecoration(
+                                                              color: const Color(0xFF4C4AE8),
+                                                              borderRadius: BorderRadius.circular(8.w),
+                                                            ),
+                                                            child: Row(
+                                                              mainAxisSize: MainAxisSize.min,
+                                                              children: [
+                                                                Icon(
+                                                                  CupertinoIcons.doc_on_clipboard,
+                                                                  size: 11.sp,
+                                                                  color: Colors.white,
+                                                                ),
+                                                                SizedBox(width: 5.w),
+                                                                Text(
+                                                                  'Save as Template',
+                                                                  style: TextStyle(
+                                                                    fontSize: 10.sp,
+                                                                    fontWeight: FontWeight.w700,
+                                                                    color: Colors.white,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                    return const SizedBox.shrink();
+                                                  },
+                                                ),
+                                              ],
                                             ),
-                                          ],
+                                          ),
                                         ),
                                       ),
 
@@ -526,6 +591,11 @@ class MobileTaskPreviewSheet {
                                                   task,
                                                   dialogContext: dialogContext,
                                                   setSheetState: setSheetState,
+                                                  onTaskUpdated: (updatedTask) {
+                                                    setSheetState(() {
+                                                      task = updatedTask;
+                                                    });
+                                                  },
                                                   onAddAttachment: () async {
                                                     final pickedFiles =
                                                         await _pickAttachmentFiles();
@@ -2021,6 +2091,7 @@ class MobileTaskPreviewSheet {
     required Function(String) onDescriptionChanged,
     required VoidCallback onMembersChanged,
     required Future<void> Function() onLabelsChanged,
+    required void Function(ProjectTaskModel) onTaskUpdated,
   }) {
     final selectedMembers = availableMembers
         .where((member) => selectedMemberIds.contains(member.id))
@@ -2410,7 +2481,13 @@ class MobileTaskPreviewSheet {
               itemCount: task.attachments.length,
               itemBuilder: (_, index) {
                 final attachment = task.attachments[index];
-                return _buildTaskPreviewAttachmentTile(attachment);
+                return _buildTaskPreviewAttachmentTile(
+                  attachment,
+                  dialogContext,
+                  setSheetState,
+                  task,
+                  onTaskUpdated,
+                );
               },
             ),
           ),
@@ -2675,6 +2752,10 @@ class MobileTaskPreviewSheet {
 
   static Widget _buildTaskPreviewAttachmentTile(
     ProjectTaskAttachment attachment,
+    BuildContext dialogContext,
+    void Function(void Function()) setSheetState,
+    ProjectTaskModel task,
+    void Function(ProjectTaskModel) onTaskUpdated,
   ) {
     final imageUrl = attachment.previewImageUrl;
     final hasImagePreview =
@@ -2744,20 +2825,230 @@ class MobileTaskPreviewSheet {
             ),
           ),
           SizedBox(width: 8.w),
-          Container(
-            width: 28.w,
-            height: 28.w,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF3F4F6),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.more_vert,
-              size: 16.sp,
-              color: const Color(0xFF383C43),
-            ),
+          Builder(
+            builder: (iconCtx) {
+              return GestureDetector(
+                onTapDown: (details) {
+                  _showAttachmentActionMenu(
+                    context: dialogContext,
+                    iconCtx: iconCtx,
+                    attachment: attachment,
+                    onDeleteAttachment: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: dialogContext,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: Colors.white,
+                          surfaceTintColor: Colors.transparent,
+                          title: const Text(
+                            'Delete Attachment',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                          content: const Text(
+                            'Are you sure you want to delete this attachment?',
+                            style: TextStyle(fontSize: 14),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed != true) return;
+
+                      Loaders.show();
+                      try {
+                        final didDelete = await dialogContext
+                            .read<ProjectPro>()
+                            .updateProjectTask(
+                              projectId: task.projectId,
+                              taskId: task.id,
+                              fallbackTask: task,
+                              payload: {
+                                'remove_attachment_ids': [attachment.id],
+                              },
+                            );
+                        if (didDelete) {
+                          final detail = await dialogContext
+                              .read<ProjectPro>()
+                              .getProjectDetail(
+                                ctx: dialogContext,
+                                projectId: task.projectId,
+                                forceRefresh: true,
+                              );
+                          if (detail != null) {
+                            final refreshedTask = detail.tasks
+                                .where((item) => item.id == task.id)
+                                .firstOrNull;
+                            if (refreshedTask != null) {
+                              onTaskUpdated(refreshedTask);
+                            }
+                          }
+                        }
+                      } finally {
+                        Loaders.hide();
+                      }
+                    },
+                  );
+                },
+                child: Container(
+                  width: 28.w,
+                  height: 28.w,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF3F4F6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.more_vert,
+                    size: 16.sp,
+                    color: const Color(0xFF383C43),
+                  ),
+                ),
+              );
+            },
           ),
         ],
+      ),
+    );
+  }
+
+  static void _showAttachmentActionMenu({
+    required BuildContext context,
+    required BuildContext iconCtx,
+    required ProjectTaskAttachment attachment,
+    required VoidCallback onDeleteAttachment,
+  }) {
+    final RenderBox box = iconCtx.findRenderObject() as RenderBox;
+    final Offset pos = box.localToGlobal(Offset.zero);
+    final Size size = box.size;
+    final screenWidth = MediaQuery.of(context).size.width;
+    const menuWidth = 160.0;
+
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'AttachmentMenu',
+      barrierColor: Colors.black.withValues(alpha: 0.12),
+      transitionDuration: const Duration(milliseconds: 160),
+      transitionBuilder: (_, animation, _, child) {
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.92, end: 1.0).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            ),
+            alignment: Alignment.topRight,
+            child: child,
+          ),
+        );
+      },
+      pageBuilder: (dlgCtx, _, _) {
+        return GestureDetector(
+          onTap: () => Navigator.pop(dlgCtx),
+          behavior: HitTestBehavior.opaque,
+          child: Stack(
+            children: [
+              Positioned(
+                top: pos.dy + size.height + 6,
+                right: (screenWidth - pos.dx - size.width).clamp(8.0, screenWidth - menuWidth - 8),
+                child: GestureDetector(
+                  onTap: () {}, // prevent tap-through
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      width: menuWidth,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.14),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _attachmentMenuItem(
+                            icon: Icon(
+                              Icons.cloud_download_outlined,
+                              size: 18.sp,
+                              color: const Color(0xFF1D1E20),
+                            ),
+                            label: 'Download',
+                            onTap: () async {
+                              Navigator.pop(dlgCtx);
+                              try {
+                                await DownloadService.instance.downloadFile(
+                                  url: attachment.url,
+                                  fileName: attachment.name,
+                                );
+                              } catch (e) {
+                                showToast(message: 'Could not download attachment');
+                              }
+                            },
+                          ),
+                          const Divider(height: 1, thickness: 0.5, color: Color(0xFFE5E7EB)),
+                          _attachmentMenuItem(
+                            icon: ImageWidget(
+                              image: Paths.delete,
+                              width: 18.w,
+                              height: 18.w,
+                              color: const Color(0xFFEF4444),
+                            ),
+                            label: 'Delete',
+                            color: const Color(0xFFEF4444),
+                            onTap: () {
+                              Navigator.pop(dlgCtx);
+                              onDeleteAttachment();
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static Widget _attachmentMenuItem({
+    required Widget icon,
+    required String label,
+    required VoidCallback onTap,
+    Color color = const Color(0xFF1D1E20),
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        child: Row(
+          children: [
+            icon,
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: color,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2954,6 +3245,22 @@ class MobileTaskPreviewSheet {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  static Future<void> _showSaveTaskTemplateDialog({
+    required BuildContext context,
+    required ProjectTaskModel task,
+    required String baseTitle,
+    required void Function(ProjectTaskModel) onTaskUpdated,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _SaveTaskTemplateDialogContent(
+        task: task,
+        baseTitle: baseTitle,
+        onTaskUpdated: onTaskUpdated,
       ),
     );
   }
@@ -3175,188 +3482,13 @@ class _CreateTaskSheetContentState extends State<_CreateTaskSheetContent> {
 
   Future<void> _showSaveTemplateDialog() async {
     final baseTitle = titleController.text.trim();
-    final nameController = TextEditingController(
-      text: baseTitle.isEmpty
-          ? 'project template'
-          : '${baseTitle.toLowerCase()} template',
-    );
-    bool isPublic = true;
-
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) {
-          return AlertDialog(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.transparent,
-            insetPadding: EdgeInsets.symmetric(horizontal: 20.w),
-            contentPadding: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20.r),
-            ),
-            content: Container(
-              width: 1.sw,
-              padding: EdgeInsets.all(20.w),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        CupertinoIcons.doc_text,
-                        size: 20.sp,
-                        color: const Color(0xFF17181B),
-                      ),
-                      SizedBox(width: 10.w),
-                      Text(
-                        'Save Template',
-                        style: TextStyle(
-                          fontSize: 14.sp,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF101928),
-                        ),
-                      ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () => Navigator.pop(dialogContext),
-                        child: Icon(
-                          CupertinoIcons.xmark,
-                          size: 18.sp,
-                          color: const Color(0xFF98A2B3),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 20.h),
-                  Text(
-                    'Template Name',
-                    style: TextStyle(
-                      color: const Color(0xFF1D2939),
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  SizedBox(height: 6.h),
-                  TextFormField(
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 14.w,
-                        vertical: 12.h,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.r),
-                        borderSide: const BorderSide(color: Color(0xFFD0D5DD)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.r),
-                        borderSide: const BorderSide(color: Color(0xFFD0D5DD)),
-                      ),
-                    ),
-                    style: TextStyle(fontSize: 13.sp),
-                  ),
-                  SizedBox(height: 20.h),
-                  Text(
-                    'Visibility',
-                    style: TextStyle(
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF1D2939),
-                    ),
-                  ),
-                  SizedBox(height: 10.h),
-                  RadioListTile<bool>(
-                    value: true,
-                    groupValue: isPublic,
-                    onChanged: (val) {
-                      if (val == null) return;
-                      setDialogState(() => isPublic = val);
-                    },
-                    activeColor: const Color(0xFF2E6FF1),
-                    visualDensity: VisualDensity.compact,
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: Text(
-                      'Available for all users',
-                      style: TextStyle(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF344054),
-                      ),
-                    ),
-                  ),
-                  RadioListTile<bool>(
-                    value: false,
-                    groupValue: isPublic,
-                    onChanged: (val) {
-                      if (val == null) return;
-                      setDialogState(() => isPublic = val);
-                    },
-                    activeColor: const Color(0xFF2E6FF1),
-                    visualDensity: VisualDensity.compact,
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: Text(
-                      'Only for me',
-                      style: TextStyle(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF344054),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 20.h),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        final name = nameController.text.trim();
-                        if (name.isEmpty) {
-                          showToast(message: 'Please enter a template name');
-                          return;
-                        }
-
-                        Navigator.pop(dialogContext);
-                        Loaders.show();
-                        await context.read<ProjectPro>().saveProjectTemplate(
-                          projectId: widget.projectId,
-                          name: name,
-                          isPublic: isPublic,
-                        );
-                        Loaders.hide();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4C4AE8),
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 16.w,
-                          vertical: 10.h,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10.r),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        'Save as Template',
-                        style: TextStyle(
-                          fontSize: 11.sp,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+      builder: (dialogContext) => _SaveProjectTemplateDialogContent(
+        projectId: widget.projectId,
+        baseTitle: baseTitle,
       ),
     );
-
-    nameController.dispose();
   }
 
   Future<void> _showTemplateDropdown(Offset anchor) async {
@@ -3905,235 +4037,238 @@ class _CreateTaskSheetContentState extends State<_CreateTaskSheetContent> {
 
                             Padding(
                               padding: EdgeInsets.symmetric(horizontal: 14.w),
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: [
-                                    Text(
-                                      'Status:',
-                                      style: TextStyle(
-                                        fontSize: 11.sp,
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF2F3138),
-                                      ),
-                                    ),
-                                    SizedBox(width: 8.w),
-                                    GestureDetector(
-                                      onTapDown: (details) {
-                                        if (availableSections.isEmpty) return;
-                                        MobileTaskPreviewSheet._showSectionPicker(
-                                          context,
-                                          availableSections
-                                              .cast<ProjectSectionModel>(),
-                                          selectedSectionId,
-                                          details.globalPosition,
-                                          (section) {
-                                            setState(() {
-                                              selectedStatus = section.name;
-                                              selectedSectionId = section.id;
-                                            });
-                                          },
-                                        );
-                                      },
-                                      child: Container(
-                                        height: 24.h,
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 10.w,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(
-                                            999.w,
-                                          ),
-                                          border: Border.all(
-                                            color: const Color(0xFFE0E2E8),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Text(
-                                              selectedStatus,
-                                              style: TextStyle(
-                                                fontSize: 11.sp,
-                                                fontWeight: FontWeight.w700,
-                                                color: const Color(0xFF232731),
-                                              ),
-                                            ),
-                                            SizedBox(width: 5.w),
-                                            Icon(
-                                              CupertinoIcons.chevron_down,
-                                              size: 10.sp,
-                                              color: const Color(0xFF737985),
-                                            ),
-                                          ],
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        'Status:',
+                                        style: TextStyle(
+                                          fontSize: 11.sp,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF2F3138),
                                         ),
                                       ),
-                                    ),
-                                    SizedBox(width: 16.w),
-                                    if (_editingTemplateId == null) ...[
-                                      InkWell(
+                                      SizedBox(width: 8.w),
+                                      GestureDetector(
                                         onTapDown: (details) {
-                                          _showTemplateDropdown(
+                                          if (availableSections.isEmpty) return;
+                                          MobileTaskPreviewSheet._showSectionPicker(
+                                            context,
+                                            availableSections
+                                                .cast<ProjectSectionModel>(),
+                                            selectedSectionId,
                                             details.globalPosition,
+                                            (section) {
+                                              setState(() {
+                                                selectedStatus = section.name;
+                                                selectedSectionId = section.id;
+                                              });
+                                            },
                                           );
                                         },
-                                        borderRadius: BorderRadius.circular(
-                                          8.w,
-                                        ),
                                         child: Container(
+                                          height: 24.h,
                                           padding: EdgeInsets.symmetric(
                                             horizontal: 10.w,
-                                            vertical: 6.h,
                                           ),
                                           decoration: BoxDecoration(
                                             color: Colors.white,
                                             borderRadius: BorderRadius.circular(
-                                              8.w,
+                                              999.w,
                                             ),
                                             border: Border.all(
                                               color: const Color(0xFFE0E2E8),
                                             ),
                                           ),
                                           child: Row(
-                                            mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Icon(
-                                                Icons.save_outlined,
-                                                size: 11.sp,
-                                                color: const Color(0xFF6D727C),
-                                              ),
-                                              SizedBox(width: 4.w),
                                               Text(
-                                                'Template',
+                                                selectedStatus,
                                                 style: TextStyle(
-                                                  fontSize: 10.sp,
+                                                  fontSize: 11.sp,
                                                   fontWeight: FontWeight.w700,
-                                                  color: const Color(
-                                                    0xFF3B3F46,
+                                                  color: const Color(0xFF232731),
+                                                ),
+                                              ),
+                                              SizedBox(width: 5.w),
+                                              Icon(
+                                                CupertinoIcons.chevron_down,
+                                                size: 10.sp,
+                                                color: const Color(0xFF737985),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(width: 16.w),
+                                      if (_editingTemplateId == null) ...[
+                                        InkWell(
+                                          onTapDown: (details) {
+                                            _showTemplateDropdown(
+                                              details.globalPosition,
+                                            );
+                                          },
+                                          borderRadius: BorderRadius.circular(
+                                            8.w,
+                                          ),
+                                          child: Container(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: 10.w,
+                                              vertical: 6.h,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(
+                                                8.w,
+                                              ),
+                                              border: Border.all(
+                                                color: const Color(0xFFE0E2E8),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.save_outlined,
+                                                  size: 11.sp,
+                                                  color: const Color(0xFF6D727C),
+                                                ),
+                                                SizedBox(width: 4.w),
+                                                Text(
+                                                  'Template',
+                                                  style: TextStyle(
+                                                    fontSize: 10.sp,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: const Color(
+                                                      0xFF3B3F46,
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      SizedBox(width: 8.w),
-                                      InkWell(
-                                        onTap: _showSaveTemplateDialog,
-                                        borderRadius: BorderRadius.circular(
-                                          8.w,
-                                        ),
-                                        child: Container(
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: 10.w,
-                                            vertical: 6.h,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF4C4AE8),
-                                            borderRadius: BorderRadius.circular(
-                                              8.w,
+                                              ],
                                             ),
                                           ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                CupertinoIcons.doc_on_clipboard,
-                                                size: 11.sp,
-                                                color: Colors.white,
+                                        ),
+                                        SizedBox(width: 8.w),
+                                        InkWell(
+                                          onTap: _showSaveTemplateDialog,
+                                          borderRadius: BorderRadius.circular(
+                                            8.w,
+                                          ),
+                                          child: Container(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: 10.w,
+                                              vertical: 6.h,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF4C4AE8),
+                                              borderRadius: BorderRadius.circular(
+                                                8.w,
                                               ),
-                                              SizedBox(width: 5.w),
-                                              Text(
-                                                'Save as Template',
-                                                style: TextStyle(
-                                                  fontSize: 10.sp,
-                                                  fontWeight: FontWeight.w700,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  CupertinoIcons.doc_on_clipboard,
+                                                  size: 11.sp,
                                                   color: Colors.white,
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ] else ...[
-                                      InkWell(
-                                        onTap: () {
-                                          final label =
-                                              _editingTemplateName
-                                                  .trim()
-                                                  .isEmpty
-                                              ? 'template'
-                                              : _editingTemplateName;
-                                          showToast(
-                                            message:
-                                                'Update Template: $label (coming soon)',
-                                          );
-                                        },
-                                        borderRadius: BorderRadius.circular(
-                                          8.w,
-                                        ),
-                                        child: Container(
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: 12.w,
-                                            vertical: 6.h,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF4C4AE8),
-                                            borderRadius: BorderRadius.circular(
-                                              8.w,
+                                                SizedBox(width: 5.w),
+                                                Text(
+                                                  'Save as Template',
+                                                  style: TextStyle(
+                                                    fontSize: 10.sp,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                CupertinoIcons.doc_on_clipboard,
-                                                size: 11.sp,
-                                                color: Colors.white,
+                                        ),
+                                      ] else ...[
+                                        InkWell(
+                                          onTap: () {
+                                            final label =
+                                                _editingTemplateName
+                                                    .trim()
+                                                    .isEmpty
+                                                ? 'template'
+                                                : _editingTemplateName;
+                                            showToast(
+                                              message:
+                                                  'Update Template: $label (coming soon)',
+                                            );
+                                          },
+                                          borderRadius: BorderRadius.circular(
+                                            8.w,
+                                          ),
+                                          child: Container(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: 12.w,
+                                              vertical: 6.h,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF4C4AE8),
+                                              borderRadius: BorderRadius.circular(
+                                                8.w,
                                               ),
-                                              SizedBox(width: 5.w),
-                                              Text(
-                                                'Update Template',
-                                                style: TextStyle(
-                                                  fontSize: 10.sp,
-                                                  fontWeight: FontWeight.w700,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  CupertinoIcons.doc_on_clipboard,
+                                                  size: 11.sp,
                                                   color: Colors.white,
                                                 ),
-                                              ),
-                                            ],
+                                                SizedBox(width: 5.w),
+                                                Text(
+                                                  'Update Template',
+                                                  style: TextStyle(
+                                                    fontSize: 10.sp,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      SizedBox(width: 8.w),
-                                      GestureDetector(
-                                        onTap: () async {
-                                          final templateId = _editingTemplateId;
-                                          if (templateId == null) return;
+                                        SizedBox(width: 8.w),
+                                        GestureDetector(
+                                          onTap: () async {
+                                            final templateId = _editingTemplateId;
+                                            if (templateId == null) return;
 
-                                          final shouldDelete =
-                                              await _confirmDeleteTemplate(
-                                                _editingTemplateName,
-                                              );
-                                          if (shouldDelete == true) {
-                                            await context
-                                                .read<ProjectPro>()
-                                                .deleteTaskTemplate(
-                                                  templateId: templateId,
+                                            final shouldDelete =
+                                                await _confirmDeleteTemplate(
+                                                  _editingTemplateName,
                                                 );
-                                            setState(() {
-                                              _editingTemplateId = null;
-                                              _editingTemplateName = '';
-                                            });
-                                          }
-                                        },
-                                        child:
-                                            MobileTaskPreviewSheet._buildTaskPreviewSheetIcon(
-                                              CupertinoIcons.trash,
-                                              const Color(0xFFD93025),
-                                            ),
-                                      ),
+                                            if (shouldDelete == true) {
+                                              await context
+                                                  .read<ProjectPro>()
+                                                  .deleteTaskTemplate(
+                                                    templateId: templateId,
+                                                  );
+                                              setState(() {
+                                                _editingTemplateId = null;
+                                                _editingTemplateName = '';
+                                              });
+                                            }
+                                          },
+                                          child:
+                                              MobileTaskPreviewSheet._buildTaskPreviewSheetIcon(
+                                                CupertinoIcons.trash,
+                                                const Color(0xFFD93025),
+                                              ),
+                                        ),
+                                      ],
                                     ],
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -4235,6 +4370,463 @@ class _CreateTaskSheetContentState extends State<_CreateTaskSheetContent> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SaveTaskTemplateDialogContent extends StatefulWidget {
+  final ProjectTaskModel task;
+  final String baseTitle;
+  final void Function(ProjectTaskModel) onTaskUpdated;
+
+  const _SaveTaskTemplateDialogContent({
+    required this.task,
+    required this.baseTitle,
+    required this.onTaskUpdated,
+  });
+
+  @override
+  State<_SaveTaskTemplateDialogContent> createState() =>
+      __SaveTaskTemplateDialogContentState();
+}
+
+class __SaveTaskTemplateDialogContentState
+    extends State<_SaveTaskTemplateDialogContent> {
+  late final TextEditingController nameController;
+  bool isPublic = true;
+
+  @override
+  void initState() {
+    super.initState();
+    nameController = TextEditingController(
+      text: widget.baseTitle.isEmpty
+          ? 'task template'
+          : '${widget.baseTitle.toLowerCase()} template',
+    );
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(horizontal: 20.w),
+      contentPadding: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20.r),
+      ),
+      content: Container(
+        width: 1.sw,
+        padding: EdgeInsets.all(20.w),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  CupertinoIcons.doc_text,
+                  size: 20.sp,
+                  color: const Color(0xFF10A273),
+                ),
+                SizedBox(width: 10.w),
+                Text(
+                  'Save as Template',
+                  style: TextStyle(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF101928),
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Icon(
+                    CupertinoIcons.xmark,
+                    size: 18.sp,
+                    color: const Color(0xFF98A2B3),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 20.h),
+            Row(
+              children: [
+                Text(
+                  '* ',
+                  style: TextStyle(
+                    color: const Color(0xFFF04438),
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'Template Name',
+                  style: TextStyle(
+                    color: const Color(0xFF1D2939),
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 6.h),
+            TextFormField(
+              controller: nameController,
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 14.w,
+                  vertical: 12.h,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                  borderSide: const BorderSide(color: Color(0xFFD0D5DD)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                  borderSide: const BorderSide(color: Color(0xFFD0D5DD)),
+                ),
+              ),
+              style: TextStyle(fontSize: 13.sp),
+            ),
+            SizedBox(height: 20.h),
+            Text(
+              'Visibility',
+              style: TextStyle(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1D2939),
+              ),
+            ),
+            SizedBox(height: 10.h),
+            RadioListTile<bool>(
+              value: true,
+              groupValue: isPublic,
+              onChanged: (val) {
+                if (val == null) return;
+                setState(() => isPublic = val);
+              },
+              activeColor: const Color(0xFF2E6FF1),
+              visualDensity: VisualDensity.compact,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(
+                'Available for all users',
+                style: TextStyle(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF344054),
+                ),
+              ),
+            ),
+            RadioListTile<bool>(
+              value: false,
+              groupValue: isPublic,
+              onChanged: (val) {
+                if (val == null) return;
+                setState(() => isPublic = val);
+              },
+              activeColor: const Color(0xFF2E6FF1),
+              visualDensity: VisualDensity.compact,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(
+                'Only for me',
+                style: TextStyle(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF344054),
+                ),
+              ),
+            ),
+            SizedBox(height: 20.h),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  if (name.isEmpty) {
+                    showToast(message: 'Please enter a template name');
+                    return;
+                  }
+
+                  Navigator.pop(context);
+                  Loaders.show();
+
+                  String? formattedDueDate;
+                  if (widget.task.dueDate.isNotEmpty) {
+                    final parsed = MobileTaskPreviewSheet._parseDueDate(widget.task.dueDate);
+                    if (parsed != null) {
+                      formattedDueDate =
+                          '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
+                    }
+                  }
+
+                  final success = await context.read<ProjectPro>().saveTaskAsTemplate(
+                        projectId: widget.task.projectId,
+                        taskId: widget.task.id,
+                        name: name,
+                        isPublic: isPublic,
+                        title: widget.task.title,
+                        description: widget.task.description,
+                        projectSectionId: widget.task.projectSectionId == 0
+                            ? null
+                            : widget.task.projectSectionId,
+                        dueDate: formattedDueDate,
+                        memberIds: widget.task.members.map((m) => m.id).toList(),
+                        labelIds: widget.task.labels.map((l) => l.id).toList(),
+                        templateAttachmentIds:
+                            widget.task.attachments.map((a) => a.id).toList(),
+                      );
+
+                  Loaders.hide();
+
+                  if (success) {
+                    showToast(message: 'Task saved as template');
+                    widget.onTaskUpdated(
+                      widget.task.copyWith(isTaskSavedAsTemplate: true),
+                    );
+                  } else {
+                    showToast(message: 'Failed to save template');
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4C4AE8),
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16.w,
+                    vertical: 10.h,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10.r),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  'Save Template',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SaveProjectTemplateDialogContent extends StatefulWidget {
+  final int projectId;
+  final String baseTitle;
+
+  const _SaveProjectTemplateDialogContent({
+    required this.projectId,
+    required this.baseTitle,
+  });
+
+  @override
+  State<_SaveProjectTemplateDialogContent> createState() =>
+      __SaveProjectTemplateDialogContentState();
+}
+
+class __SaveProjectTemplateDialogContentState
+    extends State<_SaveProjectTemplateDialogContent> {
+  late final TextEditingController nameController;
+  bool isPublic = true;
+
+  @override
+  void initState() {
+    super.initState();
+    nameController = TextEditingController(
+      text: widget.baseTitle.isEmpty
+          ? 'project template'
+          : '${widget.baseTitle.toLowerCase()} template',
+    );
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(horizontal: 20.w),
+      contentPadding: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20.r),
+      ),
+      content: Container(
+        width: 1.sw,
+        padding: EdgeInsets.all(20.w),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  CupertinoIcons.doc_text,
+                  size: 20.sp,
+                  color: const Color(0xFF17181B),
+                ),
+                SizedBox(width: 10.w),
+                Text(
+                  'Save Template',
+                  style: TextStyle(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF101928),
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Icon(
+                    CupertinoIcons.xmark,
+                    size: 18.sp,
+                    color: const Color(0xFF98A2B3),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 20.h),
+            Text(
+              'Template Name',
+              style: TextStyle(
+                color: const Color(0xFF1D2939),
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: 6.h),
+            TextFormField(
+              controller: nameController,
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 14.w,
+                  vertical: 12.h,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                  borderSide: const BorderSide(color: Color(0xFFD0D5DD)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                  borderSide: const BorderSide(color: Color(0xFFD0D5DD)),
+                ),
+              ),
+              style: TextStyle(fontSize: 13.sp),
+            ),
+            SizedBox(height: 20.h),
+            Text(
+              'Visibility',
+              style: TextStyle(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1D2939),
+              ),
+            ),
+            SizedBox(height: 10.h),
+            RadioListTile<bool>(
+              value: true,
+              groupValue: isPublic,
+              onChanged: (val) {
+                if (val == null) return;
+                setState(() => isPublic = val);
+              },
+              activeColor: const Color(0xFF2E6FF1),
+              visualDensity: VisualDensity.compact,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(
+                'Available for all users',
+                style: TextStyle(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF344054),
+                ),
+              ),
+            ),
+            RadioListTile<bool>(
+              value: false,
+              groupValue: isPublic,
+              onChanged: (val) {
+                if (val == null) return;
+                setState(() => isPublic = val);
+              },
+              activeColor: const Color(0xFF2E6FF1),
+              visualDensity: VisualDensity.compact,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(
+                'Only for me',
+                style: TextStyle(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF344054),
+                ),
+              ),
+            ),
+            SizedBox(height: 20.h),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  if (name.isEmpty) {
+                    showToast(message: 'Please enter a template name');
+                    return;
+                  }
+
+                  Navigator.pop(context);
+                  Loaders.show();
+                  await context.read<ProjectPro>().saveProjectTemplate(
+                        projectId: widget.projectId,
+                        name: name,
+                        isPublic: isPublic,
+                      );
+                  Loaders.hide();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4C4AE8),
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16.w,
+                    vertical: 10.h,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10.r),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  'Save as Template',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

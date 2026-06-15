@@ -16,6 +16,7 @@ import '../utils/console_util.dart';
 import '../utils/custom_exceptions.dart';
 import '../widgets/toasts.dart';
 import 'api_routes.dart';
+import '../models/client_option.dart';
 
 class ApiService {
   ApiService._internal();
@@ -59,6 +60,53 @@ class ApiService {
       throw FetchDataException('No Internet Connection', '$uri');
     } on TimeoutException {
       throw ApiNotRespondingException('API Not Responding', '$uri');
+    }
+  }
+
+  Future<ClientOptionsResponse?> fetchClientOptions({
+    required String userToken,
+    int? conversationId,
+    int limit = 10,
+    int offset = 0,
+    String? searchQuery,
+    bool includeAssignedStaff = true,
+  }) async {
+    final Map<String, String> queryParameters = {
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+      'include_assigned_staff': includeAssignedStaff ? 'true' : 'false',
+    };
+
+    if (conversationId != null && conversationId > 0) {
+      queryParameters['conversation_id'] = conversationId.toString();
+    }
+
+    if (searchQuery != null && searchQuery.isNotEmpty) {
+      queryParameters['search'] = searchQuery;
+    }
+
+    final String queryString = Uri(queryParameters: queryParameters).query;
+    final String apiEndpoint = '${ApiRoutes.projectsOptionClients}?$queryString';
+
+    try {
+      final response = await getDataFromApi(
+        api: apiEndpoint,
+        headers: {
+          'Authorization': 'Bearer $userToken',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        showRes: false,
+      );
+
+      if (response != null && response is Map<String, dynamic> && response['success'] == true) {
+        return ClientOptionsResponse.fromJson(response);
+      } else {
+        return null;
+      }
+    } catch (e) {
+      printData(title: 'fetchClientOptions Error', data: e.toString(), e: true);
+      return null;
     }
   }
 

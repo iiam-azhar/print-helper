@@ -727,6 +727,25 @@ class _ClientScreenState extends State<ClientScreen> {
     int index,
     int total,
   ) {
+    final showEmail = contact.emails.any((e) => e.trim().isNotEmpty);
+    final showCall = contact.phones.any((p) => p.trim().isNotEmpty);
+    final showChat = true;
+    final showLogin = widget.isFromAdmin;
+
+    int visibleIconsCount = 0;
+    if (showEmail) visibleIconsCount++;
+    if (showCall) visibleIconsCount++;
+    if (showChat) visibleIconsCount++;
+    if (showLogin) visibleIconsCount++;
+
+    final double containerWidth = visibleIconsCount == 1
+        ? 65.w
+        : visibleIconsCount == 2
+            ? 115.w
+            : visibleIconsCount == 3
+                ? 160.w
+                : 200.w;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -812,7 +831,7 @@ class _ClientScreenState extends State<ClientScreen> {
         Spacers.sb20(),
         Center(
           child: Container(
-            width: 200.w,
+            width: containerWidth,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20.r),
               border: Border.all(
@@ -825,58 +844,56 @@ class _ClientScreenState extends State<ClientScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _imageButton(
-                      image: Paths.email,
-                      width: 26,
-                      onPressed: () {
-                        if (contact.emails.isNotEmpty) {
+                    if (showEmail)
+                      _imageButton(
+                        image: Paths.email,
+                        width: 26,
+                        onPressed: () {
                           tryLaunchUrl(
-                            url: 'mailto:${contact.emails.first}',
+                            url: 'mailto:${contact.emails.firstWhere((e) => e.trim().isNotEmpty)}',
                             message: 'Could not open email app',
                           );
-                        } else {
-                          showToast(message: 'No email address available');
-                        }
-                      },
-                    ),
-                    _imageButton(
-                      image: Paths.call,
-                      width: 20,
-                      onPressed: () => widget.onChatTap?.call(),
-                    ),
+                        },
+                      ),
+                    if (showCall)
+                      _imageButton(
+                        image: Paths.call,
+                        width: 20,
+                        onPressed: () => widget.onChatTap?.call(),
+                      ),
                     _imageButton(
                       image: Paths.chat,
                       width: 23,
                       onPressed: () => widget.onChatTap?.call(),
                     ),
-                    widget.isFromAdmin
-                        ? _imageButton(
-                            image: Paths.login,
-                            width: 19,
-                            onPressed: () async {
-                              final authPro = Provider.of<AuthPro>(
-                                context,
-                                listen: false,
-                              );
-                              await authPro.switchUser(
-                                userId: contact.contactId,
-                                context: context,
-                              );
-                            },
-                          )
-                        : SizedBox(),
+                    if (showLogin)
+                      _imageButton(
+                        image: Paths.login,
+                        width: 19,
+                        onPressed: () async {
+                          final authPro = Provider.of<AuthPro>(
+                            context,
+                            listen: false,
+                          );
+                          await authPro.switchUser(
+                            userId: contact.contactId,
+                            context: context,
+                          );
+                        },
+                      ),
                   ],
                 ),
-                Padding(
-                  padding: EdgeInsets.only(bottom: 6.h, left: 9.w, right: 9.w),
-                  child: Center(
-                    child: TextWidget(
-                      text: contact.languages.map((e) => e).join(" •  "),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+                if (contact.languages.any((e) => e.trim().isNotEmpty))
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 6.h, left: 9.w, right: 9.w),
+                    child: Center(
+                      child: TextWidget(
+                        text: contact.languages.where((e) => e.trim().isNotEmpty).join(" •  "),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

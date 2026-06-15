@@ -844,157 +844,138 @@ class _ClientInfoScreenState extends State<ClientInfoScreen> {
             Expanded(child: _editableField('Company Phone', _companyPhoneCtrl)),
           ],
         ),
-        SizedBox(height: 10.h),
-        Theme(
-          data: Theme.of(context).copyWith(
-            dividerColor: Colors.transparent,
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-          ),
-          child: ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: EdgeInsets.zero,
-            initiallyExpanded: false,
-            iconColor: const Color(0xFF64748B),
-            collapsedIconColor: const Color(0xFF64748B),
-            title: const TextWidget(
-              text: 'SUPPORT LINES & ASSIGNED USERS',
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 2,
-              color: Color(0xFF64748B),
+        if (info.companySupportLines.isNotEmpty ||
+            info.supportLines.isNotEmpty ||
+            info.assignedUsersForSupportLines.isNotEmpty) ...[
+          SizedBox(height: 10.h),
+          Theme(
+            data: Theme.of(context).copyWith(
+              dividerColor: Colors.transparent,
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
             ),
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(height: 10.h),
-                  const TextWidget(
-                    text: "MY COMPANY'S SUPPORT LINE",
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  SizedBox(height: 10.h),
-                  if (info.companySupportLines.isEmpty)
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              initiallyExpanded: false,
+              iconColor: const Color(0xFF64748B),
+              collapsedIconColor: const Color(0xFF64748B),
+              title: const TextWidget(
+                text: 'SUPPORT LINES & ASSIGNED USERS',
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 2,
+                color: Color(0xFF64748B),
+              ),
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(height: 10.h),
                     const TextWidget(
-                      text: 'No company support lines found.',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF6B7280),
-                    )
-                  else
-                    ...info.companySupportLines.map((line) {
-                      final img = line.image.toString();
-                      final label = line.label.toString();
-                      final number = line.number.toString();
+                      text: "MY COMPANY'S SUPPORT LINE",
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    SizedBox(height: 10.h),
+                    if (info.companySupportLines.isEmpty)
+                      const TextWidget(
+                        text: 'No company support lines found.',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF6B7280),
+                      )
+                    else
+                      ...info.companySupportLines.map((line) {
+                        final img = line.clientImage;
+                        final label = line.clientName;
+                        final number = line.phoneNumber;
 
-                      return Container(
-                        margin: EdgeInsets.only(bottom: 10.h),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 12.w,
-                          vertical: 8.h,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12.r),
-                          border: Border.all(color: const Color(0xFFE5E7EB)),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x08000000),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(6.r),
-                              child:
-                                  img.isNotEmpty && img.toLowerCase() != 'null'
-                                  ? ImageWidget(
-                                      image: img,
-                                      width: 28,
-                                      height: 28,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : Container(
-                                      width: 28.w,
-                                      height: 28.w,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFF1F5F9),
-                                        borderRadius: BorderRadius.circular(
-                                          6.r,
+                        return Container(
+                          margin: EdgeInsets.only(bottom: 10.h),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12.w,
+                            vertical: 8.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12.r),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x08000000),
+                                blurRadius: 8,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6.r),
+                                child:
+                                    img.isNotEmpty && img.toLowerCase() != 'null'
+                                    ? ImageWidget(
+                                        image: img,
+                                        width: 28,
+                                        height: 28,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Container(
+                                        width: 28.w,
+                                        height: 28.w,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF1F5F9),
+                                          borderRadius: BorderRadius.circular(
+                                            6.r,
+                                          ),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: const Icon(
+                                          Icons.business,
+                                          size: 16,
+                                          color: Color(0xFF94A3B8),
                                         ),
                                       ),
-                                      alignment: Alignment.center,
-                                      child: const TextWidget(
-                                        text: 'AVAILABLE\nSOON',
-                                        fontSize: 6,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFF94A3B8),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                            ),
-                            SizedBox(width: 12.w),
-                            TextWidget(
-                              text: "$label • $number",
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF111827),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  SizedBox(height: 16.h),
-                  const TextWidget(
-                    text: 'ASSIGNED USERS TO SUPPORT LINE',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  SizedBox(height: 10.h),
-                  Builder(
-                    builder: (context) {
-                      final supportLineNumber = info.supportLines.isNotEmpty
-                          ? info.supportLines.first.number
-                          : '18182808831';
-
-                      final List<Map<String, dynamic>> assignedUsers = [];
-                      for (final c in info.contacts) {
-                        assignedUsers.add({
-                          'name': '${c.name} ${c.lastName}'.trim(),
-                          'image': c.image,
-                        });
-                      }
-                      for (final s in info.assignedStaff) {
-                        assignedUsers.add({
-                          'name': '${s.name} ${s.lastName}'.trim(),
-                          'image': s.image,
-                        });
-                      }
-
-                      if (assignedUsers.isEmpty) {
-                        return const TextWidget(
-                          text: 'No assigned users found.',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF6B7280),
+                              ),
+                              SizedBox(width: 12.w),
+                              TextWidget(
+                                text: "$label • $number",
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF111827),
+                              ),
+                            ],
+                          ),
                         );
-                      }
-
-                      return Wrap(
+                      }),
+                    SizedBox(height: 16.h),
+                    const TextWidget(
+                      text: 'ASSIGNED USERS TO SUPPORT LINE',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    SizedBox(height: 10.h),
+                    if (info.assignedUsersForSupportLines.isEmpty)
+                      const TextWidget(
+                        text: 'No assigned users found.',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF6B7280),
+                      )
+                    else
+                      Wrap(
                         spacing: 10.w,
                         runSpacing: 10.h,
-                        children: assignedUsers.map((user) {
-                          final img = (user['image'] ?? '').toString();
-                          final name = (user['name'] ?? 'User').toString();
+                        children: info.assignedUsersForSupportLines.map((user) {
+                          final img = user.image;
+                          final name = user.name;
+                          final phone = user.phoneNumber;
 
                           return Container(
                             padding: EdgeInsets.symmetric(
@@ -1040,7 +1021,7 @@ class _ClientInfoScreenState extends State<ClientInfoScreen> {
                                 ),
                                 SizedBox(width: 10.w),
                                 TextWidget(
-                                  text: "$name • $supportLineNumber",
+                                  text: "$name • $phone",
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                   color: const Color(0xFF111827),
@@ -1049,15 +1030,14 @@ class _ClientInfoScreenState extends State<ClientInfoScreen> {
                             ),
                           );
                         }).toList(),
-                      );
-                    },
-                  ),
-                  SizedBox(height: 10.h),
-                ],
-              ),
-            ],
+                      ),
+                    SizedBox(height: 10.h),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
         SizedBox(height: 20.h),
         const TextWidget(
           text: 'ADDRESS',
@@ -1138,11 +1118,13 @@ class _ClientInfoScreenState extends State<ClientInfoScreen> {
             (c) => c.isPrimary,
             orElse: () => info.contacts.first,
           );
-    final contactName = primaryContact == null
-        ? 'N/A'
-        : primaryContact.name.trim().isEmpty
-        ? 'N/A'
-        : primaryContact.name.trim();
+    // Bug_37: Build full name (first + last) so we never show "N/A" when the
+    // contact has a last name but an empty first name (or vice versa).
+    final contactName = () {
+      if (primaryContact == null) return 'N/A';
+      final full = '${primaryContact.name} ${primaryContact.lastName}'.trim();
+      return full.isEmpty ? 'N/A' : full;
+    }();
 
     final statusLabel = hasSigned
         ? 'Signed by ${item.signerName.isNotEmpty ? item.signerName : contactName}'
@@ -1284,16 +1266,24 @@ class _ClientInfoScreenState extends State<ClientInfoScreen> {
                           item.template.name,
                         ),
                       ),
-                  ] else if (canSign) ...[
-                    _agreementActionButton(
-                      icon: Icons.draw_outlined,
-                      label: 'Sign Agreement',
-                      bgColorOverride: const Color(0xFF92400E),
-                      textColorOverride: Colors.white,
-                      borderColorOverride: const Color(0xFF92400E),
-                      onPressed: () =>
-                          _showAgreementBottomSheet(info: info, item: item),
-                    ),
+                  ] else ...[
+                    if (isAdmin)
+                      _agreementActionButton(
+                        icon: Icons.remove_red_eye_outlined,
+                        label: 'View Agreement',
+                        onPressed: () =>
+                            _showAgreementBottomSheet(info: info, item: item),
+                      ),
+                    if (canSign)
+                      _agreementActionButton(
+                        icon: Icons.draw_outlined,
+                        label: 'Sign Agreement',
+                        bgColorOverride: const Color(0xFF92400E),
+                        textColorOverride: Colors.white,
+                        borderColorOverride: const Color(0xFF92400E),
+                        onPressed: () =>
+                            _showAgreementBottomSheet(info: info, item: item),
+                      ),
                   ],
                   if (isAdmin && !hasSigned)
                     _agreementActionButton(
@@ -3797,12 +3787,14 @@ class _ClientInfoScreenState extends State<ClientInfoScreen> {
     );
   }
 
+  // Bug_38: Branding logo must NEVER fall back to info.image (company profile photo).
+  // They are separate assets — keep them independent.
   String _resolvedLogoUrl(ClientInfoModel info) {
     final brandingLogo = info.branding.logo.trim();
     if (brandingLogo.isNotEmpty && brandingLogo.toLowerCase() != 'null') {
       return brandingLogo;
     }
-    return info.image;
+    return '';
   }
 
   String _resolvedFaviconUrl(ClientInfoModel info) {
@@ -3810,11 +3802,12 @@ class _ClientInfoScreenState extends State<ClientInfoScreen> {
     if (favicon.isNotEmpty && favicon.toLowerCase() != 'null') {
       return favicon;
     }
+    // Favicon can fall back to branding logo, but NOT to company image
     final brandingLogo = info.branding.logo.trim();
     if (brandingLogo.isNotEmpty && brandingLogo.toLowerCase() != 'null') {
       return brandingLogo;
     }
-    return info.image;
+    return '';
   }
 
   Widget _chip(String text, Color bg, Color fg) {

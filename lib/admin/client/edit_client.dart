@@ -62,12 +62,39 @@ class EditClientState extends State<EditClient> {
   Map<int, bool> confirmPasswordVisibility =
       {}; // Track visibility for each contact
   bool showStaffDropdown = false;
+  int visibleStaffCount = 5;
+  bool isLoadingMore = false;
+  final ScrollController staffScrollController = ScrollController();
+  final TextEditingController staffSearchCtrl = TextEditingController();
   List<ContactFormModel> contactForms = [];
 
   @override
   void initState() {
     super.initState();
     contactForms.add(ContactFormModel());
+    staffScrollController.addListener(() async {
+      if (staffScrollController.position.pixels >=
+          staffScrollController.position.maxScrollExtent - 50) {
+        if (showStaffDropdown && !isLoadingMore) {
+          final clipro = getClientPro(context);
+          final query = staffSearchCtrl.text.trim().toLowerCase();
+          final totalMatches = clipro.staffList
+              .where((s) => s.name.toLowerCase().contains(query))
+              .length;
+          if (visibleStaffCount < totalMatches) {
+            setState(() {
+              isLoadingMore = true;
+            });
+            await Future.delayed(const Duration(milliseconds: 500));
+            if (!mounted) return;
+            setState(() {
+              visibleStaffCount = (visibleStaffCount + 5).clamp(0, totalMatches);
+              isLoadingMore = false;
+            });
+          }
+        }
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeData();
     });
@@ -201,6 +228,8 @@ class EditClientState extends State<EditClient> {
 
   @override
   void dispose() {
+    staffScrollController.dispose();
+    staffSearchCtrl.dispose();
     addressCtrl.dispose();
     addressTwoCtrl.dispose();
     zipCodeCtrl.dispose();
@@ -1076,7 +1105,14 @@ class EditClientState extends State<EditClient> {
         ),
         Spacers.sb8(),
         GestureDetector(
-          onTap: () => setState(() => showStaffDropdown = !showStaffDropdown),
+          onTap: () => setState(() {
+            showStaffDropdown = !showStaffDropdown;
+            if (showStaffDropdown) {
+              visibleStaffCount = 5;
+              isLoadingMore = false;
+              staffSearchCtrl.clear();
+            }
+          }),
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.w),
             decoration: BoxDecoration(
@@ -1168,63 +1204,120 @@ class EditClientState extends State<EditClient> {
               border: Border.all(color: Colors.grey.shade300),
               color: Colors.white,
             ),
-            child: SizedBox(
-              height: 250.h,
-              child: SingleChildScrollView(
-                physics: BouncingScrollPhysics(),
-                child: Column(
-                  children: clipro.staffList.map((staff) {
-                    final isSelected = selectedStaffIds.contains(staff.id);
-                    return GestureDetector(
-                      onTap: () => setState(() {
-                        isSelected
-                            ? selectedStaffIds.remove(staff.id)
-                            : selectedStaffIds.add(staff.id);
-                      }),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          vertical: 12.w,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: 250.h),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.all(8.w),
+                    child: TextField(
+                      controller: staffSearchCtrl,
+                      decoration: InputDecoration(
+                        hintText: "Search staff...",
+                        prefixIcon: Icon(Icons.search, size: 20.sp),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          vertical: 8.h,
                           horizontal: 10.w,
                         ),
-                        margin: EdgeInsets.symmetric(
-                          vertical: 4.w,
-                          horizontal: 10.w,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? const Color(0xFFE9F5D4)
-                              : Colors.grey.shade200,
+                        border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10.r),
-                          border: Border.all(
-                            color: isSelected
-                                ? Colors.green
-                                : Colors.transparent,
-                            width: 1.4,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextWidget(
-                                text: staff.name,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.w500,
-                                fontSize: 13,
-                              ),
-                            ),
-                            if (isSelected)
-                              Icon(
-                                Icons.check_circle,
-                                size: 24.sp,
-                                color: Colors.green,
-                              ),
-                          ],
+                          borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                       ),
-                    );
-                  }).toList(),
-                ),
+                      onChanged: (val) {
+                        setState(() {
+                          visibleStaffCount = 5;
+                          isLoadingMore = false;
+                        });
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final query = staffSearchCtrl.text.trim().toLowerCase();
+                        final filteredList = clipro.staffList
+                            .where((s) => s.name.toLowerCase().contains(query))
+                            .toList();
+                        final displayList = filteredList.take(visibleStaffCount).toList();
+                        final hasMore = visibleStaffCount < filteredList.length || isLoadingMore;
+
+                        return ListView.builder(
+                          controller: staffScrollController,
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: displayList.length + (hasMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == displayList.length) {
+                              return Padding(
+                                padding: EdgeInsets.symmetric(vertical: 10.h),
+                                child: Center(
+                                  child: isLoadingMore
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        )
+                                      : const SizedBox(height: 20),
+                                ),
+                              );
+                            }
+                            final staff = displayList[index];
+                            final isSelected = selectedStaffIds.contains(staff.id);
+                            return GestureDetector(
+                              onTap: () => setState(() {
+                                isSelected
+                                    ? selectedStaffIds.remove(staff.id)
+                                    : selectedStaffIds.add(staff.id);
+                              }),
+                              child: Container(
+                                padding: EdgeInsets.symmetric(
+                                  vertical: 12.w,
+                                  horizontal: 10.w,
+                                ),
+                                margin: EdgeInsets.symmetric(
+                                  vertical: 4.w,
+                                  horizontal: 10.w,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? const Color(0xFFE9F5D4)
+                                      : Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(10.r),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? Colors.green
+                                        : Colors.transparent,
+                                    width: 1.4,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextWidget(
+                                        text: staff.name,
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.w500,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    if (isSelected)
+                                      Icon(
+                                        Icons.check_circle,
+                                        size: 24.sp,
+                                        color: Colors.green,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1808,8 +1901,8 @@ class EditClientState extends State<EditClient> {
               border: Border.all(color: Colors.grey.shade300),
               color: Colors.white,
             ),
-            child: SizedBox(
-              height: 250.h,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: 250.h),
               child: SingleChildScrollView(
                 physics: BouncingScrollPhysics(),
                 child: Column(

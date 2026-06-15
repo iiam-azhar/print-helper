@@ -28,8 +28,8 @@ class Paths {
   static const String settings = 'assets/images/Settings.png';
   static const String delete = 'assets/images/delete.png';
   static const String backbg = 'assets/images/Background.png';
-  static const String logoBlck = 'assets/images/Logo_Black.png';
-  static const String logoWhite = 'assets/images/Logo_White.png';
+  static const String logoBlck = 'assets/images/ph-portal.png';
+  static const String logoWhite = 'assets/images/ph-white.png';
 
   static const String bgg = 'assets/images/bggg.png';
   static const String whitebg = 'assets/images/bg-white.png';
@@ -55,9 +55,6 @@ class Paths {
   static const String txt = 'assets/images/txt.png';
   static const String zip = 'assets/images/Zip.png';
   static const String pdf = 'assets/images/pdf.png';
-
-
-
 
   // urls
   static const String wtspShare = 'https://wa.me/';

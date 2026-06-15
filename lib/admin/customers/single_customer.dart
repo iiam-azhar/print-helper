@@ -479,6 +479,25 @@ class _SingleCustomerState extends State<SingleCustomer> {
     CustomerModel item,
     int total,
   ) {
+    final showEmail = contact.emails.any((e) => e.trim().isNotEmpty);
+    final showCall = contact.phones.any((p) => p.trim().isNotEmpty);
+    final showChat = true;
+    final showLogin = widget.isFromAdmin;
+
+    int visibleIconsCount = 0;
+    if (showEmail) visibleIconsCount++;
+    if (showCall) visibleIconsCount++;
+    if (showChat) visibleIconsCount++;
+    if (showLogin) visibleIconsCount++;
+
+    final double containerWidth = visibleIconsCount == 1
+        ? 65.w
+        : visibleIconsCount == 2
+            ? 115.w
+            : visibleIconsCount == 3
+                ? 160.w
+                : 200.w;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -553,7 +572,7 @@ class _SingleCustomerState extends State<SingleCustomer> {
         Spacers.sb15(),
         Center(
           child: Container(
-            width: 200.w,
+            width: containerWidth,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20.r),
               border: Border.all(
@@ -564,49 +583,47 @@ class _SingleCustomerState extends State<SingleCustomer> {
             child: Column(
               children: [
                 Row(
-                  mainAxisAlignment: .center,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _imageButton(
-                      image: Paths.email,
-                      width: 28,
-                      onPressed: () {
-                        if (contact.emails.isNotEmpty) {
+                    if (showEmail)
+                      _imageButton(
+                        image: Paths.email,
+                        width: 28,
+                        onPressed: () {
                           tryLaunchUrl(
-                            url: 'mailto:${contact.emails.first}',
+                            url: 'mailto:${contact.emails.firstWhere((e) => e.trim().isNotEmpty)}',
                             message: 'Could not open email app',
                           );
-                        } else {
-                          showToast(message: 'No email address available');
-                        }
-                      },
-                    ),
-                    _imageButton(
-                      image: Paths.call,
-                      width: 22,
-                      onPressed: () {
-                        if (widget.isFromAdmin) {
-                          navTo(
-                            context: context,
-                            page: AdminBottomBar(pageNum: 2),
-                            removeUntil: true,
-                          );
-                        } else if (widget.isFromStaff) {
-                          navTo(
-                            context: context,
-                            page: StaffBottomBar(pageNum: 2),
-                            removeUntil: true,
-                          );
-                        } else if (widget.isFromClient) {
-                          navTo(
-                            context: context,
-                            page: ClientBottomBar(pageNum: 2),
-                            removeUntil: true,
-                          );
-                        } else {
-                          navTo(context: context, page: ChatList());
-                        }
-                      },
-                    ),
+                        },
+                      ),
+                    if (showCall)
+                      _imageButton(
+                        image: Paths.call,
+                        width: 22,
+                        onPressed: () {
+                          if (widget.isFromAdmin) {
+                            navTo(
+                              context: context,
+                              page: AdminBottomBar(pageNum: 2),
+                              removeUntil: true,
+                            );
+                          } else if (widget.isFromStaff) {
+                            navTo(
+                              context: context,
+                              page: StaffBottomBar(pageNum: 2),
+                              removeUntil: true,
+                            );
+                          } else if (widget.isFromClient) {
+                            navTo(
+                              context: context,
+                              page: ClientBottomBar(pageNum: 2),
+                              removeUntil: true,
+                            );
+                          } else {
+                            navTo(context: context, page: ChatList());
+                          }
+                        },
+                      ),
                     _imageButton(
                       image: Paths.chat,
                       width: 22,
@@ -634,34 +651,34 @@ class _SingleCustomerState extends State<SingleCustomer> {
                         }
                       },
                     ),
-                    widget.isFromAdmin
-                        ? _imageButton(
-                            image: Paths.login,
-                            width: 22,
-                            onPressed: () async {
-                              final authPro = Provider.of<AuthPro>(
-                                context,
-                                listen: false,
-                              );
-                              await authPro.switchUser(
-                                userId: item.id,
-                                context: context,
-                              );
-                            },
-                          )
-                        : SizedBox(),
+                    if (showLogin)
+                      _imageButton(
+                        image: Paths.login,
+                        width: 22,
+                        onPressed: () async {
+                          final authPro = Provider.of<AuthPro>(
+                            context,
+                            listen: false,
+                          );
+                          await authPro.switchUser(
+                            userId: item.id,
+                            context: context,
+                          );
+                        },
+                      ),
                   ],
                 ),
-                Padding(
-                  padding: EdgeInsets.only(bottom: 6.h, left: 6.w, right: 6.w),
-                  child: Center(
-                    child: TextWidget(
-                      text: contact.languages.map((e) => e).join(" •  "),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+                if (contact.languages.any((e) => e.trim().isNotEmpty))
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 6.h, left: 6.w, right: 6.w),
+                    child: Center(
+                      child: TextWidget(
+                        text: contact.languages.where((e) => e.trim().isNotEmpty).join(" •  "),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

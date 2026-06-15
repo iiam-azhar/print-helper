@@ -302,34 +302,28 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _imageButton(
-                        image: Paths.email,
-                        width: 26,
-                        onPressed: () {
-                          if (item.emails.isNotEmpty) {
+                      if (item.emails.any((e) => e.trim().isNotEmpty))
+                        _imageButton(
+                          image: Paths.email,
+                          width: 26,
+                          onPressed: () {
                             tryLaunchUrl(
-                              url: 'mailto:${item.emails.first}',
+                              url: 'mailto:${item.emails.firstWhere((e) => e.trim().isNotEmpty)}',
                               message: 'Could not open email app',
                             );
-                          } else {
-                            showToast(message: 'No email address available');
-                          }
-                        },
-                      ),
-                      _imageButton(
-                        image: Paths.call,
-                        width: 20,
-                        onPressed: () {
-                          if (item.phones.isNotEmpty) {
+                          },
+                        ),
+                      if (item.phones.any((p) => p.number.trim().isNotEmpty))
+                        _imageButton(
+                          image: Paths.call,
+                          width: 20,
+                          onPressed: () {
                             tryLaunchUrl(
-                              url: 'tel:${item.phones.first.number}',
+                              url: 'tel:${item.phones.firstWhere((p) => p.number.trim().isNotEmpty).number}',
                               message: 'Could not open dialer',
                             );
-                          } else {
-                            showToast(message: 'No phone number available');
-                          }
-                        },
-                      ),
+                          },
+                        ),
                       _imageButton(
                         image: Paths.chat,
                         width: 23,
@@ -348,10 +342,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     ],
                   ),
                   if (item.staffDetails != null &&
-                      item.staffDetails!.languages.isNotEmpty)
+                      item.staffDetails!.languages.any((e) => e.trim().isNotEmpty))
                     Center(
                       child: TextWidget(
-                        text: item.staffDetails!.languages.join(' • '),
+                        text: item.staffDetails!.languages.where((e) => e.trim().isNotEmpty).join(' • '),
                         fontWeight: FontWeight.w500,
                         fontSize: 11,
                       ),

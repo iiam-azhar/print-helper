@@ -126,7 +126,7 @@ class AccountAddContentState extends State<AccountAddContent> {
           .where((e) => e.isNotEmpty)
           .toList();
       String? imagePath = selectedImage?.path;
-      bool success = await pro.storeAccount(
+      final errorMsg = await pro.storeAccount(
         context: context,
         type: _selectedTypeId ?? 0,
         firstName: _firstNameCtrl.text.trim(),
@@ -139,7 +139,7 @@ class AccountAddContentState extends State<AccountAddContent> {
         skills: selectedSkillIds,
         imagePath: imagePath,
       );
-      if (success) {
+      if (errorMsg == null) {
         Navigator.of(context).pop();
         final parentPro = getAdminPro(context);
         parentPro.getAccounts(ctx: context, page: 1);
@@ -147,9 +147,7 @@ class AccountAddContentState extends State<AccountAddContent> {
           const SnackBar(content: Text("Account Created Successfully")),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to create account")),
-        );
+        showToast(message: errorMsg);
       }
     }
   }

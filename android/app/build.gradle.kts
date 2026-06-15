@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.printhelper.print_helper"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "28.2.13676358"
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -48,4 +48,9 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation(platform("com.google.firebase:firebase-bom:34.9.0"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.twilio:voice-android:6.9.0")
+    
+    implementation(project(":twilio_voice"))
+    implementation(project(":firebase_messaging"))
 }

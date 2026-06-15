@@ -213,11 +213,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                     horizontal: 18.w,
                                     vertical: 12.h,
                                   ),
-                                  regExpCondition: Regx.passwordRegExp,
+                                  regExpCondition: Regx.optionalText,
                                   errorText: AppStrings.passError,
                                   hintText: "Password",
                                   bRadius: 15,
-                                  regErrorText: AppStrings.passRegError,
+                                  regErrorText: AppStrings.passError,
                                   passField: true,
                                   style: GoogleFonts.poppins(
                                     fontSize: 15.sp,

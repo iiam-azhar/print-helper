@@ -27,6 +27,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../../constants/colors.dart';
 import '../../../constants/paths.dart';
 import '../../../services/call_device_service.dart';
+import 'package:print_helper/models/client_option.dart';
+import 'package:print_helper/models/projects_models.dart';
 import '../../../utils/console_util.dart';
 import '../models/chat_models.dart';
 import '../provider/chat_pro.dart';
@@ -86,15 +88,27 @@ class _ChatScreenState extends State<ChatScreen> {
       final convo = chatPro.conversations.firstWhere(
         (c) => c.id == widget.conversationId,
         orElse: () => ChatConversation(
-          id: -1, type: 'private', title: '', participants: [],
-          image: '', unreadCount: 0, updatedAt: DateTime.now(), isDefault: true,
+          id: -1,
+          type: 'private',
+          title: '',
+          participants: [],
+          image: '',
+          unreadCount: 0,
+          updatedAt: DateTime.now(),
+          isDefault: true,
         ),
       );
-      if (convo.id != -1 && convo.type == 'private' && convo.participants.isNotEmpty) {
+      if (convo.id != -1 &&
+          convo.type == 'private' &&
+          convo.participants.isNotEmpty) {
         final peer = convo.participants.firstWhere(
           (p) => p.id == widget.receiverUserId,
           orElse: () => ChatParticipant(
-            name: '', username: '', lastName: '', isOnline: false, phoneNumbers: [],
+            name: '',
+            username: '',
+            lastName: '',
+            isOnline: false,
+            phoneNumbers: [],
           ),
         );
         final pRole = (peer.accountTypeName ?? '').toLowerCase();
@@ -102,7 +116,8 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
     // Fallback: check fetched user profile (role: 1=admin, 2=staff)
-    if (chatPro.userProfile != null && chatPro.userProfile!.id == widget.receiverUserId) {
+    if (chatPro.userProfile != null &&
+        chatPro.userProfile!.id == widget.receiverUserId) {
       return chatPro.userProfile!.role == 1 || chatPro.userProfile!.role == 2;
     }
     return false;
@@ -111,16 +126,26 @@ class _ChatScreenState extends State<ChatScreen> {
   /// Returns true if the current conversation is an external-number group
   /// (a system-created group for SMS / external phone numbers with 0 members).
   bool _isExternalNumberGroup(ChatPro chatPro) {
-    if (widget.conversationId == null || widget.conversationId! <= 0) return false;
+    if (widget.conversationId == null || widget.conversationId! <= 0)
+      return false;
     final convo = chatPro.conversations.firstWhere(
       (c) => c.id == widget.conversationId,
       orElse: () => ChatConversation(
-        id: -1, type: 'private', title: '', participants: [],
-        image: '', unreadCount: 0, updatedAt: DateTime.now(), isDefault: true,
+        id: -1,
+        type: 'private',
+        title: '',
+        participants: [],
+        image: '',
+        unreadCount: 0,
+        updatedAt: DateTime.now(),
+        isDefault: true,
       ),
     );
-    return convo.id != -1 && convo.type == 'group' && convo.participants.isEmpty;
+    return convo.id != -1 &&
+        convo.type == 'group' &&
+        convo.participants.isEmpty;
   }
+
   bool _pendingDuplicateChecked = false;
   int? _pendingDuplicateConversationId;
   ChatDuplicateFileCheckResult? _pendingDuplicateResult;
@@ -1767,6 +1792,7 @@ class _ChatScreenState extends State<ChatScreen> {
     String? autoAssignedClientImage;
     int? selectedCustomerId;
     final excludedStaffIds = <int>[];
+    final autoAssignedStaff = <Map<String, String>>[];
     var isSaving = false;
     var isLoading = true;
 
@@ -1793,18 +1819,6 @@ class _ChatScreenState extends State<ChatScreen> {
       return null;
     }
 
-    Map<String, String>? selectedClientOption(
-      List<Map<String, String>> clients,
-    ) {
-      if (selectedClientId == null) return null;
-      for (final item in clients) {
-        if (int.tryParse((item['id'] ?? '').trim()) == selectedClientId) {
-          return item;
-        }
-      }
-      return null;
-    }
-
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -1814,49 +1828,43 @@ class _ChatScreenState extends State<ChatScreen> {
           if (isLoading) {
             Future.microtask(() async {
               await projectPro.getProjectClientOptions();
-              await projectPro.getProjectCustomerOptions();
               await projectPro.getProjectBlueprintLibrary();
 
-              // ── Auto-detect the assigned client from the conversation ──
-              final chatPro = context.read<ChatPro>();
+              // Fetch client using conversation ID
               if (widget.conversationId != null && widget.conversationId! > 0) {
-                final convo = chatPro.conversations.firstWhere(
-                  (c) => c.id == widget.conversationId,
-                  orElse: () => ChatConversation(
-                    id: -1, type: 'private', title: '', participants: [],
-                    image: '', unreadCount: 0, updatedAt: DateTime.now(), isDefault: true,
-                  ),
+                await projectPro.getPaginatedProjectClientOptions(
+                  refresh: true,
+                  conversationId: widget.conversationId,
                 );
-                if (convo.id != -1 && convo.participants.isNotEmpty) {
-                  final participantsToCheck = convo.type == 'private'
-                      ? [convo.participants.firstWhere(
-                          (p) => p.id == widget.receiverUserId,
-                          orElse: () => ChatParticipant(
-                            name: '', username: '', lastName: '', isOnline: false, phoneNumbers: [],
-                          ),
-                        )]
-                      : convo.participants;
+                final clients = projectPro.paginatedClientOptions;
+                if (clients.isNotEmpty) {
+                  final client = clients.first;
+                  selectedClientId = client.id;
+                  autoAssignedClientLabel = client.companyName;
+                  autoAssignedClientImage = client.image;
 
-                  final clients = projectPro.projectClientOptions
-                      .where((item) => (item['id'] ?? '').trim().isNotEmpty)
-                      .toList();
-
-                  for (final p in participantsToCheck) {
-                    final company = p.clientCompanyName ?? p.customerClientCompanyName;
-                    if (company == null || company.trim().isEmpty) continue;
-                    for (final client in clients) {
-                      if ((client['label'] ?? '').trim().toLowerCase() ==
-                          company.trim().toLowerCase()) {
-                        selectedClientId = int.tryParse((client['id'] ?? '').trim());
-                        autoAssignedClientLabel = client['label'];
-                        autoAssignedClientImage = client['image'];
-                        break;
-                      }
-                    }
-                    if (selectedClientId != null) break;
+                  autoAssignedStaff.clear();
+                  for (var staff in client.assignedStaff) {
+                    autoAssignedStaff.add({
+                      'id': staff.id?.toString() ?? '',
+                      'name': staff.name,
+                      'image': staff.image ?? '',
+                    });
                   }
+                  printData(
+                    title: 'ChatScreen _showCreateProjectPopup Loaded Client',
+                    data: 'Client: $autoAssignedClientLabel (ID: $selectedClientId), '
+                        'Staff assigned count: ${autoAssignedStaff.length}, '
+                        'Staff details: $autoAssignedStaff',
+                  );
                 }
               }
+
+              // Fetch customer options for the selected client if available
+              await projectPro.getProjectCustomerOptions(
+                forceRefresh: true,
+                clientId: selectedClientId,
+              );
 
               if (dialogContext.mounted) {
                 setDialogState(() => isLoading = false);
@@ -1864,9 +1872,6 @@ class _ChatScreenState extends State<ChatScreen> {
             });
           }
 
-          final clients = projectPro.projectClientOptions
-              .where((item) => (item['id'] ?? '').trim().isNotEmpty)
-              .toList();
           final customers = projectPro.projectCustomerOptions
               .where((item) => (item['id'] ?? '').trim().isNotEmpty)
               .toList();
@@ -1879,8 +1884,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   final id = int.tryParse((item['client_id'] ?? '').trim());
                   return id == selectedClientId;
                 }).toList();
-          final assignedStaff =
-              _extractAssignedStaffFromClient(selectedClientOption(clients))
+          final assignedStaff = autoAssignedStaff
                   .where(
                     (s) =>
                         !excludedStaffIds.contains(int.tryParse(s['id'] ?? '')),
@@ -1903,9 +1907,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     padding: EdgeInsets.fromLTRB(20.w, 18.h, 18.w, 14.h),
                     child: Row(
                       children: [
-                        Icon(
-                          CupertinoIcons.doc_plaintext,
-                          size: 21.sp,
+                        ImageWidget(
+                          image: Paths.task,
+                          width: 21.w,
+                          height: 21.h,
                           color: const Color(0xFF1E232B),
                         ),
                         SizedBox(width: 10.w),
@@ -1945,194 +1950,272 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: SingleChildScrollView(
                               physics: const BouncingScrollPhysics(),
                               child: Padding(
-                                padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 18.h),
+                                padding: EdgeInsets.fromLTRB(
+                                  20.w,
+                                  16.h,
+                                  20.w,
+                                  18.h,
+                                ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     _buildPopupFieldLabel('* Project Name'),
-                            SizedBox(height: 7.h),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 12.w,
-                                vertical: 9.h,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F2F5),
-                                borderRadius: BorderRadius.circular(14.r),
-                                border: Border.all(
-                                  color: const Color(0xFFD8DAE0),
-                                ),
-                              ),
-                              child: TextField(
-                                controller: nameController,
-                                decoration: InputDecoration(
-                                  hintText: 'Type Project Name',
-                                  hintStyle: TextStyle(
-                                    fontSize: 12.sp,
-                                    color: const Color(0xFF9BA1AC),
-                                  ),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                ),
-                                style: TextStyle(
-                                  fontSize: 12.5.sp,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF242A34),
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 14.h),
-                            _buildPopupFieldLabel('Template (optional)'),
-                            SizedBox(height: 7.h),
-                            _buildProjectPopupDropdownField(
-                              selectedText: selectedTemplateLabel(),
-                              placeholder: 'Select project template',
-                              options: templateOptions,
-                              onPick: (value) => setDialogState(() {
-                                selectedTemplateId = int.tryParse(
-                                  (value['id'] ?? '').trim(),
-                                );
-                              }),
-                            ),
-                            SizedBox(height: 14.h),
-                            _buildPopupFieldLabel('Assigned Client'),
-                            SizedBox(height: 7.h),
-                            _buildAssignedClientPill(
-                              label: autoAssignedClientLabel,
-                              image: autoAssignedClientImage,
-                            ),
-                            SizedBox(height: 14.h),
-                            _buildPopupFieldLabel('Assigned Staff (auto)'),
-                            SizedBox(height: 7.h),
-                            _buildAssignedStaffAutoField(
-                              assignedStaff,
-                              onRemove: (id) => setDialogState(() {
-                                if (!excludedStaffIds.contains(id)) {
-                                  excludedStaffIds.add(id);
-                                }
-                              }),
-                            ),
-                            SizedBox(height: 14.h),
-                            _buildPopupFieldLabel('Assign Customer'),
-                            SizedBox(height: 7.h),
-                            _buildProjectPopupDropdownField(
-                              selectedText: selectedLabelFrom(
-                                filteredCustomers,
-                                selectedCustomerId,
-                              ),
-                              placeholder: 'Select customer',
-                              options: filteredCustomers,
-                              onPick: (value) => setDialogState(() {
-                                selectedCustomerId = int.tryParse(
-                                  (value['id'] ?? '').trim(),
-                                );
-                              }),
-                            ),
-                            SizedBox(height: 18.h),
-                            Center(
-                              child: InkWell(
-                                onTap: isSaving
-                                    ? null
-                                    : () async {
-                                        final projectName = nameController.text
-                                            .trim();
-                                        if (projectName.isEmpty) {
-                                          showToast(
-                                            message: 'Project name is required',
-                                          );
-                                          return;
-                                        }
-                                        if (selectedClientId == null) {
-                                          showToast(
-                                            message: 'No client detected for this chat',
-                                          );
-                                          return;
-                                        }
-                                        if (selectedCustomerId == null) {
-                                          showToast(
-                                            message: 'Please select a customer',
-                                          );
-                                          return;
-                                        }
+                                    SizedBox(height: 7.h),
+                                    Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 12.w,
+                                        vertical: 9.h,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F2F5),
+                                        borderRadius: BorderRadius.circular(
+                                          14.r,
+                                        ),
+                                        border: Border.all(
+                                          color: const Color(0xFFD8DAE0),
+                                        ),
+                                      ),
+                                      child: TextField(
+                                        controller: nameController,
+                                        decoration: InputDecoration(
+                                          hintText: 'Type Project Name',
+                                          hintStyle: TextStyle(
+                                            fontSize: 12.sp,
+                                            color: const Color(0xFF9BA1AC),
+                                          ),
+                                          border: InputBorder.none,
+                                          isDense: true,
+                                        ),
+                                        style: TextStyle(
+                                          fontSize: 12.5.sp,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF242A34),
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(height: 14.h),
+                                    _buildPopupFieldLabel(
+                                      'Template (optional)',
+                                    ),
+                                    SizedBox(height: 7.h),
+                                    _buildProjectPopupDropdownField(
+                                      selectedText: selectedTemplateLabel(),
+                                      placeholder: 'Select project template',
+                                      options: templateOptions,
+                                      onPick: (value) => setDialogState(() {
+                                        selectedTemplateId = int.tryParse(
+                                          (value['id'] ?? '').trim(),
+                                        );
+                                      }),
+                                    ),
+                                    SizedBox(height: 14.h),
+                                    _buildPopupFieldLabel('Assigned Client'),
+                                    SizedBox(height: 7.h),
+                                    _buildAssignedClientPicker(
+                                      context: context,
+                                      projectPro: projectPro,
+                                      conversationId: widget.conversationId,
+                                      selectedClientId: selectedClientId,
+                                      label: autoAssignedClientLabel,
+                                      image: autoAssignedClientImage,
+                                      onPick: (client) {
+                                        setDialogState(() {
+                                          selectedClientId = client.id;
+                                          autoAssignedClientLabel = client.companyName;
+                                          autoAssignedClientImage = client.image;
 
-                                        setDialogState(() => isSaving = true);
-                                        Loaders.show();
-                                        final chatPro = context.read<ChatPro>();
-                                        final conversationId =
-                                            _resolveConversationForDuplicateCheck(
-                                              chatPro,
-                                            );
-
-                                        final created = await projectPro
-                                            .createProjectCoreFields(
-                                              name: projectName,
-                                              clientId: selectedClientId!,
-                                              customerId: selectedCustomerId!,
-                                              projectBlueprintId:
-                                                  selectedTemplateId,
-                                              conversationId: conversationId,
-                                              excludedStaffIds:
-                                                  excludedStaffIds,
-                                            );
-                                        Loaders.hide();
-
-                                        if (!dialogContext.mounted) return;
-                                        setDialogState(() => isSaving = false);
-                                        if (created) {
-                                          // Close dialog immediately
-                                          if (dialogContext.mounted) {
-                                            Navigator.of(dialogContext).pop();
+                                          // Assign staff automatically
+                                          autoAssignedStaff.clear();
+                                          for (var staff in client.assignedStaff) {
+                                            autoAssignedStaff.add({
+                                              'id': staff.id?.toString() ?? '',
+                                              'name': staff.name,
+                                              'image': staff.image ?? '',
+                                            });
                                           }
+                                        });
 
-                                          // Clear fields
-                                          nameController.clear();
-                                          selectedClientId = null;
-                                          selectedCustomerId = null;
-                                          selectedTemplateId = null;
-                                          excludedStaffIds.clear();
-
-                                          // Refresh projects in the background
-                                          projectPro.getProjects(ctx: context);
+                                        if (client.id != null) {
+                                          projectPro.getProjectCustomerOptions(
+                                            forceRefresh: true,
+                                            clientId: client.id,
+                                          ).then((_) {
+                                            if (dialogContext.mounted) {
+                                              setDialogState(() {});
+                                            }
+                                          });
                                         }
                                       },
-                                borderRadius: BorderRadius.circular(999.r),
-                                child: Container(
-                                  width: 180.w,
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 24.w,
-                                    vertical: 9.h,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF27C25A),
-                                    borderRadius: BorderRadius.circular(999.r),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    isSaving ? 'Creating...' : 'Create New',
-                                    style: TextStyle(
-                                      fontSize: 13.sp,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
                                     ),
-                                  ),
+                                    SizedBox(height: 14.h),
+                                    _buildPopupFieldLabel(
+                                      'Assigned Staff (auto)',
+                                    ),
+                                    SizedBox(height: 7.h),
+                                    _buildAssignedStaffAutoField(
+                                      assignedStaff,
+                                      onRemove: (id) => setDialogState(() {
+                                        if (!excludedStaffIds.contains(id)) {
+                                          excludedStaffIds.add(id);
+                                        }
+                                      }),
+                                    ),
+                                    SizedBox(height: 14.h),
+                                    _buildPopupFieldLabel('Assign Customer'),
+                                    SizedBox(height: 7.h),
+                                    _buildProjectPopupDropdownField(
+                                      selectedText: selectedLabelFrom(
+                                        filteredCustomers,
+                                        selectedCustomerId,
+                                      ),
+                                      placeholder: 'Select customer',
+                                      options: filteredCustomers,
+                                      onPick: (value) => setDialogState(() {
+                                        selectedCustomerId = int.tryParse(
+                                          (value['id'] ?? '').trim(),
+                                        );
+                                      }),
+                                    ),
+                                    SizedBox(height: 18.h),
+                                    Center(
+                                      child: InkWell(
+                                        onTap: isSaving
+                                            ? null
+                                            : () async {
+                                                final projectName =
+                                                    nameController.text.trim();
+                                                if (projectName.isEmpty) {
+                                                  showToast(
+                                                    message:
+                                                        'Project name is required',
+                                                  );
+                                                  return;
+                                                }
+                                                if (selectedClientId == null) {
+                                                  showToast(
+                                                    message:
+                                                        'No client detected for this chat',
+                                                  );
+                                                  return;
+                                                }
+                                                if (selectedCustomerId ==
+                                                    null) {
+                                                  showToast(
+                                                    message:
+                                                        'Please select a customer',
+                                                  );
+                                                  return;
+                                                }
+
+                                                setDialogState(
+                                                  () => isSaving = true,
+                                                );
+                                                Loaders.show();
+                                                final chatPro = context
+                                                    .read<ChatPro>();
+                                                final conversationId =
+                                                    _resolveConversationForDuplicateCheck(
+                                                      chatPro,
+                                                    );
+
+                                                final created = await projectPro
+                                                    .createProjectCoreFields(
+                                                      name: projectName,
+                                                      clientId:
+                                                          selectedClientId!,
+                                                      customerId:
+                                                          selectedCustomerId!,
+                                                      projectBlueprintId:
+                                                          selectedTemplateId,
+                                                      conversationId:
+                                                          conversationId,
+                                                      excludedStaffIds:
+                                                          excludedStaffIds,
+                                                    );
+                                                Loaders.hide();
+
+                                                if (!dialogContext.mounted)
+                                                  return;
+                                                setDialogState(
+                                                  () => isSaving = false,
+                                                );
+                                                if (created) {
+                                                  // Close dialog immediately
+                                                  if (dialogContext.mounted) {
+                                                    Navigator.of(
+                                                      dialogContext,
+                                                    ).pop();
+                                                  }
+
+                                                  // Clear fields
+                                                  nameController.clear();
+                                                  selectedClientId = null;
+                                                  selectedCustomerId = null;
+                                                  selectedTemplateId = null;
+                                                  excludedStaffIds.clear();
+
+                                                  // Refresh projects in the background
+                                                  projectPro.getProjects(
+                                                    ctx: context,
+                                                  );
+
+                                                  // Also refresh messages of this conversation in real-time
+                                                  if (widget.conversationId !=
+                                                      null) {
+                                                    final auth = context
+                                                        .read<AuthPro>();
+                                                    if (auth.user != null) {
+                                                      chatPro.fetchMessages(
+                                                        conversationId: widget
+                                                            .conversationId
+                                                            .toString(),
+                                                        currentUserId:
+                                                            auth.user!.id,
+                                                      );
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                        borderRadius: BorderRadius.circular(
+                                          999.r,
+                                        ),
+                                        child: Container(
+                                          width: 180.w,
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: 24.w,
+                                            vertical: 9.h,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF27C25A),
+                                            borderRadius: BorderRadius.circular(
+                                              999.r,
+                                            ),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            isSaving
+                                                ? 'Creating...'
+                                                : 'Create New',
+                                            style: TextStyle(
+                                              fontSize: 13.sp,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+                        if (isLoading)
+                          Positioned.fill(child: Center(child: showLoader())),
+                      ],
                     ),
                   ),
-                ),
-                if (isLoading)
-                  Positioned.fill(
-                    child: Center(
-                      child: showLoader(),
-                    ),
-                  ),
-              ],
-            ),
-          ),
                 ],
               ),
             ),
@@ -2144,101 +2227,51 @@ class _ChatScreenState extends State<ChatScreen> {
     // nameController.dispose(); // Removed to fix 'used after disposed' crash during pop animation
   }
 
-  List<Map<String, String>> _extractAssignedStaffFromClient(
-    Map<String, String>? client,
-  ) {
-    final encoded = client?['assigned_staff']?.trim() ?? '';
-    if (encoded.isEmpty) return const <Map<String, String>>[];
 
-    try {
-      final decoded = jsonDecode(encoded);
-      if (decoded is! List) return const <Map<String, String>>[];
 
-      final items = <Map<String, String>>[];
-      for (final member in decoded) {
-        if (member is! Map) continue;
-        final map = Map<String, dynamic>.from(member);
-        final id = map['id']?.toString() ?? '';
-        final name = map['name']?.toString().trim() ?? '';
-        final image = map['image']?.toString().trim() ?? '';
-        if (name.isEmpty) continue;
-        items.add({'id': id, 'name': name, 'image': image});
-      }
-      return items;
-    } catch (_) {
-      return const <Map<String, String>>[];
-    }
-  }
-
-  Widget _buildAssignedClientPill({
+  Widget _buildAssignedClientPicker({
+    required BuildContext context,
+    required ProjectPro projectPro,
+    required int? conversationId,
+    required int? selectedClientId,
     required String? label,
-    String? image,
+    required String? image,
+    required void Function(ClientOption) onPick,
   }) {
-    if (label == null || label.trim().isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF1F2F5),
-          borderRadius: BorderRadius.circular(14.r),
-          border: Border.all(color: const Color(0xFFD8DAE0)),
-        ),
-        child: Text(
-          'No client assigned',
-          style: TextStyle(
-            fontSize: 12.sp,
-            color: const Color(0xFF9BA1AC),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      );
-    }
-
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(10.w),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
       decoration: BoxDecoration(
         color: const Color(0xFFF1F2F5),
         borderRadius: BorderRadius.circular(14.r),
         border: Border.all(color: const Color(0xFFD8DAE0)),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE8F5E9),
-              borderRadius: BorderRadius.circular(99.r),
-              border: Border.all(color: const Color(0xFFA5D6A7)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (image != null && image.trim().isNotEmpty) ...[
-                  ClipOval(
-                    child: ImageWidget(
-                      image: image,
-                      width: 20,
-                      height: 20,
-                      fit: BoxFit.cover,
-                      errorWidget: ImageWidget(
-                        image: Paths.user,
-                        width: 20,
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 8.w),
-                ],
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11.5.sp,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF2E7D32),
-                  ),
+          if (image != null && image.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(right: 8.w),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20.r),
+                child: ImageWidget(
+                  image: image,
+                  width: 20,
+                  height: 20,
+                  fit: BoxFit.cover,
+                  errorWidget: ImageWidget(image: Paths.user, width: 20),
                 ),
-              ],
+              ),
+            ),
+          Expanded(
+            child: Text(
+              label ?? 'Select client',
+              style: TextStyle(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w500,
+                color: label == null ? const Color(0xFF9BA1AC) : const Color(0xFF191D23),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

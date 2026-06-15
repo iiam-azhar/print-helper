@@ -1018,11 +1018,13 @@ class _TabClientInfoScreenState extends State<TabClientInfoScreen> {
             (c) => c.isPrimary,
             orElse: () => info.contacts.first,
           );
-    final contactName = primaryContact == null
-        ? 'N/A'
-        : primaryContact.name.trim().isEmpty
-        ? 'N/A'
-        : primaryContact.name.trim();
+    // Bug_37: Build full name (first + last) so we never show "N/A" when the
+    // contact has a last name but an empty first name (or vice versa).
+    final contactName = () {
+      if (primaryContact == null) return 'N/A';
+      final full = '${primaryContact.name} ${primaryContact.lastName}'.trim();
+      return full.isEmpty ? 'N/A' : full;
+    }();
 
     final statusLabel = hasSigned
         ? 'Signed by ${item.signerName.isNotEmpty ? item.signerName : contactName}'
@@ -2138,12 +2140,14 @@ class _TabClientInfoScreenState extends State<TabClientInfoScreen> {
     return '$origin/$value';
   }
 
+  // Bug_38: Branding logo must NEVER fall back to info.image (company profile photo).
+  // They are separate assets — keep them independent.
   String _resolvedLogoUrl(ClientInfoModel info) {
     final brandingLogo = info.branding.logo.trim();
     if (brandingLogo.isNotEmpty && brandingLogo.toLowerCase() != 'null') {
       return brandingLogo;
     }
-    return info.image;
+    return '';
   }
 
   String _resolvedFaviconUrl(ClientInfoModel info) {
@@ -2151,11 +2155,12 @@ class _TabClientInfoScreenState extends State<TabClientInfoScreen> {
     if (favicon.isNotEmpty && favicon.toLowerCase() != 'null') {
       return favicon;
     }
+    // Favicon can fall back to branding logo, but NOT to company image
     final brandingLogo = info.branding.logo.trim();
     if (brandingLogo.isNotEmpty && brandingLogo.toLowerCase() != 'null') {
       return brandingLogo;
     }
-    return info.image;
+    return '';
   }
 
   String _companyPhone(ClientInfoModel info) {

@@ -249,7 +249,7 @@ class _TabAccountInfoTabletScreenState
         .where((e) => e.isNotEmpty)
         .toList();
 
-    final success = await pro.updateAccount(
+    final errorMsg = await pro.updateAccount(
       id: widget.account.id,
       firstName: _firstNameCtrl.text.trim(),
       lastName: _lastNameCtrl.text.trim(),
@@ -270,12 +270,12 @@ class _TabAccountInfoTabletScreenState
     );
 
     if (!mounted) return;
-    if (success) {
+    if (errorMsg == null) {
       showToast(message: "Account Updated Successfully");
       _handleBack(context);
       pro.getAccounts(ctx: context);
     } else {
-      showToast(message: "Update Failed");
+      showToast(message: errorMsg);
     }
   }
 
@@ -1597,11 +1597,11 @@ class _TabAccountInfoTabletScreenState
       alignment: Alignment.center,
       child: hasImage
           ? Image.network(
-              imageUrl!,
+              imageUrl,
               width: 54,
               height: 54,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => TextWidget(
+              errorBuilder: (_, _, _) => TextWidget(
                 text: initials,
                 color: const Color(0xFF0A8C42),
                 fontWeight: FontWeight.bold,

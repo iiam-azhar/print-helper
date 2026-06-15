@@ -196,17 +196,22 @@ class ChatLatestMessage {
     String message = (json['message'] ?? '').toString();
 
     // If message is a JSON string (reminder or system card), extract a human-readable title/text
-    if (message.trim().startsWith('{')) {
+    if (message.trim().startsWith('{') && message.trim().endsWith('}')) {
       try {
         final decoded = jsonDecode(message);
         if (decoded is Map) {
-          if (type == 'reminder' && decoded['title'] != null) {
-            message = decoded['title'].toString();
-          } else if (decoded['text'] != null &&
-              decoded['text'].toString().isNotEmpty) {
-            message = decoded['text'].toString();
+          final title = decoded['title']?.toString().trim() ?? '';
+          final description = decoded['description']?.toString().trim() ?? '';
+          if (title.isNotEmpty && description.isNotEmpty) {
+            message = '$title - $description';
+          } else if (title.isNotEmpty) {
+            message = title;
+          } else if (description.isNotEmpty) {
+            message = description;
           } else if (decoded['event'] != null) {
             message = decoded['event'].toString();
+          } else if (decoded['text'] != null) {
+            message = decoded['text'].toString();
           }
         }
       } catch (_) {}
@@ -603,24 +608,72 @@ class ChatMessage {
 
   static String _extractMessageText(dynamic raw, ChatSystemCard? card) {
     if (raw == null) return '';
-    if (raw is String) return raw;
+
+    // First try to format the system card if we have one
+    if (card != null) {
+      final title = card.title?.trim() ?? '';
+      final description = card.description?.trim() ?? '';
+      if (title.isNotEmpty && description.isNotEmpty) {
+        return '$title - $description';
+      }
+      if (title.isNotEmpty) return title;
+      if (description.isNotEmpty) return description;
+
+      final event = card.event.trim();
+      final project = card.project?.trim() ?? '';
+      if (event.isNotEmpty && project.isNotEmpty) {
+        return '$event: $project';
+      }
+      if (event.isNotEmpty) return event;
+      if (card.text.isNotEmpty) return card.text;
+    }
+
+    // If raw is a Map, try to extract the text or format system card fields
     if (raw is Map) {
       final map = Map<String, dynamic>.from(raw);
       final text = map['text']?.toString().trim() ?? '';
       if (text.isNotEmpty) return text;
-      if (card != null) {
-        final title = card.title?.trim() ?? '';
-        if (title.isNotEmpty) return title;
 
-        final event = card.event.trim();
-        final project = card.project?.trim() ?? '';
-        if (event.isNotEmpty && project.isNotEmpty) {
-          return '$event: $project';
-        }
-        if (event.isNotEmpty) return event;
+      final title = map['title']?.toString().trim() ?? '';
+      final description = map['description']?.toString().trim() ?? '';
+      if (title.isNotEmpty && description.isNotEmpty) {
+        return '$title - $description';
       }
+      if (title.isNotEmpty) return title;
+      if (description.isNotEmpty) return description;
+
+      final event = map['event']?.toString().trim() ?? '';
+      if (event.isNotEmpty) return event;
+
       return jsonEncode(map);
     }
+
+    // If raw is a String, check if it is JSON representing a system card
+    if (raw is String) {
+      final trimmed = raw.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          final decoded = jsonDecode(trimmed);
+          if (decoded is Map) {
+            final title = decoded['title']?.toString().trim() ?? '';
+            final description = decoded['description']?.toString().trim() ?? '';
+            if (title.isNotEmpty && description.isNotEmpty) {
+              return '$title - $description';
+            }
+            if (title.isNotEmpty) return title;
+            if (description.isNotEmpty) return description;
+
+            final event = decoded['event']?.toString().trim() ?? '';
+            if (event.isNotEmpty) return event;
+
+            final text = decoded['text']?.toString().trim() ?? '';
+            if (text.isNotEmpty) return text;
+          }
+        } catch (_) {}
+      }
+      return raw;
+    }
+
     return raw.toString();
   }
 

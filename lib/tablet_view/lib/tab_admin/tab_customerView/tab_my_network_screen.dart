@@ -872,12 +872,16 @@ class _TabMyNetworkScreenState extends State<TabMyNetworkScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 22),
-        _supportLinesSection(
-          contactNumbers: _asList(contactData['contact_numbers']),
-          assignedStaff: _asList(contactData['assigned_staff']),
-          supportLines: _asList(contactData['support_lines']),
-        ),
+        if (_asList(contactData['support_lines']).isNotEmpty ||
+            _asList(contactData['contact_numbers']).isNotEmpty ||
+            _asList(contactData['assigned_staff']).isNotEmpty) ...[
+          const SizedBox(height: 22),
+          _supportLinesSection(
+            contactNumbers: _asList(contactData['contact_numbers']),
+            assignedStaff: _asList(contactData['assigned_staff']),
+            supportLines: _asList(contactData['support_lines']),
+          ),
+        ],
       ],
     );
   }

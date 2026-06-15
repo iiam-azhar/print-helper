@@ -264,6 +264,30 @@ class CustomerPro extends ChangeNotifier {
       if (res.statusCode == 200 || res.statusCode == 201) {
         await getCustomers(ctx: context, clientId: clientId);
         return true;
+      } else {
+        String errorMessage = "Failed to create customer";
+        try {
+          final decoded = jsonDecode(res.body);
+          if (decoded is Map<String, dynamic>) {
+            if (decoded['message'] != null) {
+              errorMessage = decoded['message'].toString();
+            }
+            if (decoded['errors'] != null && decoded['errors'] is Map) {
+              final errorsMap = decoded['errors'] as Map;
+              final firstErrorList = errorsMap.values.firstOrNull;
+              if (firstErrorList is List && firstErrorList.isNotEmpty) {
+                errorMessage = firstErrorList.first.toString();
+              }
+            }
+          }
+        } catch (_) {
+          if (res.statusCode == 413) {
+            errorMessage = "The uploaded file is too large. Please upload an image smaller than 2MB.";
+          } else {
+            errorMessage = "Server error (${res.statusCode}): Failed to create customer";
+          }
+        }
+        showToast(message: errorMessage);
       }
       return false;
     } catch (e) {
@@ -370,6 +394,30 @@ class CustomerPro extends ChangeNotifier {
       if (res.statusCode == 200 || res.statusCode == 201) {
         await getCustomers(ctx: context, clientId: clientId);
         return true;
+      } else {
+        String errorMessage = "Failed to update customer";
+        try {
+          final decoded = jsonDecode(res.body);
+          if (decoded is Map<String, dynamic>) {
+            if (decoded['message'] != null) {
+              errorMessage = decoded['message'].toString();
+            }
+            if (decoded['errors'] != null && decoded['errors'] is Map) {
+              final errorsMap = decoded['errors'] as Map;
+              final firstErrorList = errorsMap.values.firstOrNull;
+              if (firstErrorList is List && firstErrorList.isNotEmpty) {
+                errorMessage = firstErrorList.first.toString();
+              }
+            }
+          }
+        } catch (_) {
+          if (res.statusCode == 413) {
+            errorMessage = "The uploaded file is too large. Please upload an image smaller than 2MB.";
+          } else {
+            errorMessage = "Server error (${res.statusCode}): Failed to update customer";
+          }
+        }
+        showToast(message: errorMessage);
       }
       return false;
     } catch (e) {

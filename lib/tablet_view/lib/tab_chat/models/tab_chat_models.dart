@@ -13,6 +13,54 @@ DateTime parseDateLocal(String? dateString) {
   return DateTime.parse(dateStr).toLocal();
 }
 
+String _formatJsonMessage(dynamic raw) {
+  if (raw == null) return '';
+  if (raw is Map) {
+    final map = Map<String, dynamic>.from(raw);
+    final title = map['title']?.toString().trim() ?? '';
+    final description = map['description']?.toString().trim() ?? '';
+    if (title.isNotEmpty && description.isNotEmpty) {
+      return '$title - $description';
+    }
+    if (title.isNotEmpty) return title;
+    if (description.isNotEmpty) return description;
+    
+    final event = map['event']?.toString().trim() ?? '';
+    if (event.isNotEmpty) return event;
+    
+    final text = map['text']?.toString().trim() ?? '';
+    if (text.isNotEmpty) return text;
+    
+    return jsonEncode(map);
+  }
+  
+  if (raw is String) {
+    final trimmed = raw.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is Map) {
+          final title = decoded['title']?.toString().trim() ?? '';
+          final description = decoded['description']?.toString().trim() ?? '';
+          if (title.isNotEmpty && description.isNotEmpty) {
+            return '$title - $description';
+          }
+          if (title.isNotEmpty) return title;
+          if (description.isNotEmpty) return description;
+          
+          final event = decoded['event']?.toString().trim() ?? '';
+          if (event.isNotEmpty) return event;
+          
+          final text = decoded['text']?.toString().trim() ?? '';
+          if (text.isNotEmpty) return text;
+        }
+      } catch (_) {}
+    }
+    return raw;
+  }
+  return raw.toString();
+}
+
 class ChatConversation {
   final int id;
   final String type; // private | group
@@ -157,7 +205,7 @@ class ChatLatestMessage {
 
     return ChatLatestMessage(
       id: json['id'] is int ? json['id'] : int.parse(json['id'].toString()),
-      message: json['message'] ?? '',
+      message: _formatJsonMessage(json['message']),
       type: json['type'] ?? 'text',
       createdAt: parseDateLocal(json['created_at']),
       userId: user != null && user['id'] != null ? user['id'] as int : null,
@@ -233,7 +281,7 @@ class ChatMessage {
           ? json['conversation_id']
           : int.tryParse(json['conversation_id'].toString()) ?? 0,
       senderId: userId is int ? userId : int.tryParse(userId.toString()),
-      message: json['message'] ?? '',
+      message: _formatJsonMessage(json['message']),
       createdAt: parseDateLocal(json['created_at']),
       isMe: userId != null && userId == currentUserId,
       senderName: user != null

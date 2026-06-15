@@ -866,13 +866,13 @@ class ProjectTaskModel {
             project['project_name'] ??
             project['title'],
       ),
-      title: _asString(json['title']),
+      title: _asString(json['title'] ?? json['name']),
       description: _asString(json['description']),
-      status: _asString(json['status']),
-      sectionName: _asString(section['name']),
+      status: _asString(json['status'] ?? json['status_name'] ?? section['name'] ?? section['status']),
+      sectionName: _asString(section['name'] ?? json['section_name'] ?? json['sectionName']),
       statusKey: _asString(json['status_key']),
       projectSectionId: _asInt(json['project_section_id']),
-      dueDate: _asString(json['due_date']),
+      dueDate: _asString(json['due_date'] ?? json['dueDate']),
       apiCommentsCount: _asInt(json['comments_count']),
       apiAttachmentsCount: _asInt(json['attachments_count']),
       members: _listFromJson(

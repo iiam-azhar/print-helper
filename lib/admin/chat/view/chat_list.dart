@@ -105,6 +105,9 @@ class _ChatListState extends State<ChatList> {
 
   Widget _chatList(ChatPro pro) {
     if (pro.conversations.isEmpty) {
+      if (pro.isLoadingConversationList) {
+        return Center(child: showLoader());
+      }
       return Center(
         child: Padding(
           padding: EdgeInsets.all(18.0.w),

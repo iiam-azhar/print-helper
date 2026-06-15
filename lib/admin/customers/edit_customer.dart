@@ -688,8 +688,8 @@ class EditCustomerState extends State<EditCustomer> {
               border: Border.all(color: Colors.grey.shade300),
               color: Colors.white,
             ),
-            child: SizedBox(
-              height: 250.h,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: 250.h),
               child: SingleChildScrollView(
                 physics: BouncingScrollPhysics(),
                 child: Column(

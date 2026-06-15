@@ -189,6 +189,24 @@ class _MobileProjectTasksPageState extends State<MobileProjectTasksPage> {
     return null;
   }
 
+  String _formatTaskDueDate(String rawDate) {
+    if (rawDate.trim().isEmpty) return '';
+    final parsed = _parseTaskDate(rawDate);
+    if (parsed == null) return rawDate;
+
+    const monthAbbr = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final month = monthAbbr[parsed.month - 1];
+    final day = parsed.day.toString().padLeft(2, '0');
+    final minute = parsed.minute.toString().padLeft(2, '0');
+    final suffix = parsed.hour >= 12 ? 'pm' : 'am';
+    final hour = parsed.hour % 12 == 0 ? 12 : parsed.hour % 12;
+    final formatted = '$month $day, ${parsed.year} $hour:$minute$suffix';
+    return formatted.replaceFirst(' ', ' | ');
+  }
+
   @override
   void dispose() {
     _projectNameController?.dispose();
@@ -1043,7 +1061,16 @@ class _MobileProjectTasksPageState extends State<MobileProjectTasksPage> {
         : const Color(0xFF8B8F97);
 
     return InkWell(
-      onTap: () => MobileTaskPreviewSheet.show(context, task),
+      onTap: () async {
+        await MobileTaskPreviewSheet.show(context, task);
+        if (context.mounted) {
+          await context.read<ProjectPro>().getProjectDetail(
+                ctx: context,
+                projectId: widget.projectId,
+                forceRefresh: true,
+              );
+        }
+      },
       borderRadius: BorderRadius.circular(16.w),
       child: Container(
         padding: EdgeInsets.fromLTRB(14.w, 15.h, 14.w, 14.h),
@@ -1094,7 +1121,7 @@ class _MobileProjectTasksPageState extends State<MobileProjectTasksPage> {
                 SizedBox(width: 5.w),
                 Expanded(
                   child: Text(
-                    task.dueDate.replaceFirst(' ', ' | '),
+                    _formatTaskDueDate(task.dueDate),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -1239,7 +1266,8 @@ class _MobileProjectTasksPageState extends State<MobileProjectTasksPage> {
                 child: _TaskActionRow(
                   label: 'Project Info',
                   foregroundColor: Color(0xFF191B20),
-                  icon: CupertinoIcons.info,
+                  icon: CupertinoIcons.info_circle,
+                  iconColor: Color(0xFF7C8088),
                 ),
               ),
               PopupMenuItem<_TaskAction>(
@@ -1249,7 +1277,8 @@ class _MobileProjectTasksPageState extends State<MobileProjectTasksPage> {
                 child: _TaskActionRow(
                   label: 'Delete Task',
                   foregroundColor: Color(0xFFE45B45),
-                  icon: CupertinoIcons.delete,
+                  icon: CupertinoIcons.trash,
+                  iconColor: Color(0xFF7C8088),
                 ),
               ),
             ]
@@ -1260,18 +1289,9 @@ class _MobileProjectTasksPageState extends State<MobileProjectTasksPage> {
                 padding: EdgeInsets.zero,
                 child: _TaskActionRow(
                   label: 'Automation',
-                  foregroundColor: Color(0xFF4D515A),
-                  icon: CupertinoIcons.gear_alt_fill,
-                ),
-              ),
-              PopupMenuItem<_TaskAction>(
-                value: _TaskAction.deleteStatus,
-                height: 42,
-                padding: EdgeInsets.zero,
-                child: _TaskActionRow(
-                  label: 'Delete Status',
-                  foregroundColor: Color(0xFFE45B45),
-                  icon: CupertinoIcons.delete,
+                  foregroundColor: Color(0xFF191B20),
+                  icon: CupertinoIcons.info_circle_fill,
+                  iconColor: Color(0xFF5A606E),
                 ),
               ),
             ],
@@ -1573,7 +1593,14 @@ class _MobileProjectTasksPageState extends State<MobileProjectTasksPage> {
   }
 
   Future<void> _showTaskDetailsSheet(ProjectTaskModel task) async {
-    return MobileTaskPreviewSheet.show(context, task);
+    await MobileTaskPreviewSheet.show(context, task);
+    if (mounted) {
+      await context.read<ProjectPro>().getProjectDetail(
+            ctx: context,
+            projectId: widget.projectId,
+            forceRefresh: true,
+          );
+    }
   }
 
   Widget _buildMetric(IconData icon, int count) {
@@ -1662,13 +1689,20 @@ class _MobileProjectTasksPageState extends State<MobileProjectTasksPage> {
           Expanded(
             flex: 8,
             child: ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final detail = context.read<ProjectPro>().activeProjectDetail;
-                MobileTaskPreviewSheet.showCreate(
+                await MobileTaskPreviewSheet.showCreate(
                   context,
                   projectId: widget.projectId,
                   sections: detail?.sections ?? const [],
                 );
+                if (context.mounted) {
+                  await context.read<ProjectPro>().getProjectDetail(
+                        ctx: context,
+                        projectId: widget.projectId,
+                        forceRefresh: true,
+                      );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFCB04),
@@ -1782,11 +1816,13 @@ class _TaskActionRow extends StatelessWidget {
   final String label;
   final Color foregroundColor;
   final IconData icon;
+  final Color? iconColor;
 
   const _TaskActionRow({
     required this.label,
     required this.foregroundColor,
     required this.icon,
+    this.iconColor,
   });
 
   @override
@@ -1797,7 +1833,7 @@ class _TaskActionRow extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 6.h),
         child: Row(
           children: [
-            Icon(icon, size: 18.sp, color: foregroundColor),
+            Icon(icon, size: 18.sp, color: iconColor ?? foregroundColor),
             SizedBox(width: 14.w),
             Text(
               label,

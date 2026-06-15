@@ -81,7 +81,9 @@ class _EditAccountState extends State<EditAccount> {
         ),
       );
     }
-    emailCtrls = acc.emails.map((e) => TextEditingController(text: e)).toList();
+    emailCtrls = acc.emails
+        .map((e) => TextEditingController(text: (e == null || e == "null") ? "" : e))
+        .toList();
     if (emailCtrls.isEmpty) {
       emailCtrls.add(TextEditingController());
     }
@@ -152,7 +154,7 @@ class _EditAccountState extends State<EditAccount> {
         .where((e) => e.isNotEmpty)
         .toList();
     debugPrint('2222');
-    bool success = await pro.updateAccount(
+    final errorMsg = await pro.updateAccount(
       id: widget.account.id,
       firstName: _firstNameCtrl.text.trim(),
       lastName: _lastNameCtrl.text.trim(),
@@ -166,14 +168,14 @@ class _EditAccountState extends State<EditAccount> {
       context: context,
     );
     debugPrint('3333');
-    debugPrint("Update API result: $success");
+    debugPrint("Update API result: ${errorMsg == null}");
 
-    if (success) {
+    if (errorMsg == null) {
       Navigator.pop(context);
       showToast(message: "Account Updated Successfully");
       pro.getAccounts(ctx: context);
     } else {
-      showToast(message: "Update Failed");
+      showToast(message: errorMsg);
     }
   }
 
@@ -626,7 +628,7 @@ class _EditAccountState extends State<EditAccount> {
           child: Padding(
             padding: EdgeInsets.only(left: 18),
             child: TextWidget(
-              text: hasPhoneField ? "Phone(s) with Country Code" : "Phone(s)",
+              text: "Email(s)",
               fontWeight: FontWeight.bold,
               fontSize: 13,
               color: AppColors.black,

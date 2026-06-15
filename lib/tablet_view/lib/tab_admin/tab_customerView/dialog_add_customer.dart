@@ -99,7 +99,13 @@ class _DialogAddCustomerState extends State<DialogAddCustomer> {
         allowedExtensions: ['jpg', 'png', 'jpeg'],
       );
       if (result != null && result.files.single.path != null) {
-        selectedImage = File(result.files.single.path!);
+        final file = File(result.files.single.path!);
+        final sizeInBytes = file.lengthSync();
+        if (sizeInBytes > 2 * 1024 * 1024) {
+          showToast(message: "Image size exceeds the 2MB limit. Please select a smaller image.");
+          return;
+        }
+        selectedImage = file;
       }
     } catch (e) {
       printData(title: 'from pickImage', data: '$e', e: true);
@@ -401,8 +407,14 @@ class _DialogAddCustomerState extends State<DialogAddCustomer> {
                       allowedExtensions: ['jpg', 'png', 'jpeg'],
                     );
                     if (picked != null && picked.files.single.path != null) {
+                      final file = File(picked.files.single.path!);
+                      final sizeInBytes = file.lengthSync();
+                      if (sizeInBytes > 2 * 1024 * 1024) {
+                        showToast(message: "Image size exceeds the 2MB limit. Please select a smaller image.");
+                        return;
+                      }
                       setState(
-                        () => model.image = File(picked.files.single.path!),
+                        () => model.image = file,
                       );
                     }
                   },
@@ -428,7 +440,7 @@ class _DialogAddCustomerState extends State<DialogAddCustomer> {
                         isPassword: true,
                         onToggle: () => setState(() => model.obscurePass = !model.obscurePass),
                         hint: "Type Password",
-                        regErrorText: "Invalid",
+                        regErrorText: "Password must be at least 8 characters with uppercase, lowercase, digits, and special characters.",
                         regExpCondition: Regx.optionalPasswordRegExp,
                       ),
                     ),
@@ -441,7 +453,7 @@ class _DialogAddCustomerState extends State<DialogAddCustomer> {
                         isPassword: true,
                         onToggle: () => setState(() => model.obscureConfirm = !model.obscureConfirm),
                         hint: "Type Confirm Password",
-                        regErrorText: "Invalid",
+                        regErrorText: "Password must be at least 8 characters with uppercase, lowercase, digits, and special characters.",
                         regExpCondition: Regx.optionalPasswordRegExp,
                       ),
                     ),

@@ -441,11 +441,21 @@ class _MobileProjectsSectionState extends State<MobileProjectsSection> {
                       fontWeight: FontWeight.w700,
                       color: const Color(0xFF6F737C),
                     ),
-                  ),
                 ),
-                SizedBox(width: 8.w),
-                _buildTaskMiniMoreButton(),
-              ],
+              ),
+              SizedBox(width: 8.w),
+              Builder(
+                builder: (buttonContext) => InkWell(
+                  onTap: () => _showTaskActions(
+                    buttonContext,
+                    task,
+                    menuType: _TaskMenuType.primary,
+                  ),
+                  borderRadius: BorderRadius.circular(10.r),
+                  child: _buildTaskMiniMoreButton(),
+                ),
+              ),
+            ],
             ),
             SizedBox(height: 4.h),
             Row(
@@ -486,7 +496,17 @@ class _MobileProjectsSectionState extends State<MobileProjectsSection> {
                         ),
                       ),
                       SizedBox(width: 8.w),
-                      _buildTaskMiniMoreButton(),
+                      Builder(
+                        builder: (buttonContext) => InkWell(
+                          onTap: () => _showTaskActions(
+                            buttonContext,
+                            task,
+                            menuType: _TaskMenuType.secondary,
+                          ),
+                          borderRadius: BorderRadius.circular(10.r),
+                          child: _buildTaskMiniMoreButton(),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -512,12 +532,6 @@ class _MobileProjectsSectionState extends State<MobileProjectsSection> {
                           label.name,
                           _colorFromHex(label.color).withValues(alpha: 0.14),
                           _colorFromHex(label.color),
-                        ),
-                      if (task.labels.isEmpty)
-                        _buildTaskPill(
-                          statusText,
-                          _taskStatusPillBg(task),
-                          _taskStatusPillFg(task),
                         ),
                     ],
                   ),
@@ -546,7 +560,14 @@ class _MobileProjectsSectionState extends State<MobileProjectsSection> {
   }
 
   Future<void> _showTaskPreviewModal(ProjectTaskModel task) async {
-    return MobileTaskPreviewSheet.show(context, task);
+    await MobileTaskPreviewSheet.show(context, task);
+    if (mounted) {
+      await context.read<ProjectPro>().getProjectDetail(
+            ctx: context,
+            projectId: task.projectId,
+            forceRefresh: true,
+          );
+    }
   }
 
   // Legacy helper methods below are left to avoid accidental deletions of shared code.
@@ -1467,9 +1488,12 @@ class _MobileProjectsSectionState extends State<MobileProjectsSection> {
   }
 
   String _taskDueText(ProjectTaskModel task) {
-    final parsed = DateTime.tryParse(task.dueDate);
-    if (parsed == null) return task.dueDate.trim().isEmpty ? '-' : task.dueDate;
-    final date = parsed.toLocal();
+    final parsed = _parseDueDate(task.dueDate);
+    if (parsed == null) {
+      if (task.dueDate.trim().isEmpty) return '-';
+      return task.dueDate.contains('|') ? task.dueDate : task.dueDate.replaceFirst(' ', ' | ');
+    }
+    final date = parsed;
     const monthAbbr = [
       'Jan',
       'Feb',
@@ -1489,7 +1513,8 @@ class _MobileProjectsSectionState extends State<MobileProjectsSection> {
     final minute = date.minute.toString().padLeft(2, '0');
     final suffix = date.hour >= 12 ? 'pm' : 'am';
     final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
-    return '$month $day, ${date.year} $hour:$minute$suffix';
+    final formatted = '$month $day, ${date.year} $hour:$minute$suffix';
+    return formatted.replaceFirst(' ', ' | ');
   }
 
   DateTime? _parseDueDate(String raw) {
@@ -2026,9 +2051,10 @@ class _MobileProjectsSectionState extends State<MobileProjectsSection> {
                   padding: EdgeInsets.fromLTRB(20.w, 18.h, 18.w, 14.h),
                   child: Row(
                     children: [
-                      Icon(
-                        CupertinoIcons.doc_plaintext,
-                        size: 21.sp,
+                      ImageWidget(
+                        image: Paths.task,
+                        width: 21.w,
+                        height: 21.h,
                         color: const Color(0xFF1E232B),
                       ),
                       SizedBox(width: 10.w),
@@ -2534,6 +2560,429 @@ class _MobileProjectsSectionState extends State<MobileProjectsSection> {
       }
     }
   }
+
+  Future<void> _showTaskActions(
+    BuildContext buttonContext,
+    ProjectTaskModel task, {
+    required _TaskMenuType menuType,
+  }) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final button = buttonContext.findRenderObject() as RenderBox;
+    final buttonTopRight = button.localToGlobal(
+      Offset(button.size.width, 0),
+      ancestor: overlay,
+    );
+    final buttonBottomRight = button.localToGlobal(
+      Offset(button.size.width, button.size.height),
+      ancestor: overlay,
+    );
+
+    final project = context.read<ProjectPro>().projects.where((p) => p.numericId == task.projectId).firstOrNull;
+
+    final selected = await showMenu<_TaskAction>(
+      context: context,
+      color: Colors.white,
+      elevation: 10,
+      position: RelativeRect.fromLTRB(
+        buttonTopRight.dx - 152.w,
+        buttonBottomRight.dy + 6.h,
+        overlay.size.width - buttonTopRight.dx,
+        overlay.size.height - buttonBottomRight.dy,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18.w)),
+      items: menuType == _TaskMenuType.primary
+          ? [
+              if (project != null)
+                const PopupMenuItem<_TaskAction>(
+                  value: _TaskAction.projectInfo,
+                  height: 42,
+                  padding: EdgeInsets.zero,
+                  child: _TaskActionRow(
+                    label: 'Project Info',
+                    foregroundColor: Color(0xFF191B20),
+                    icon: CupertinoIcons.info_circle,
+                    iconColor: Color(0xFF7C8088),
+                  ),
+                ),
+              const PopupMenuItem<_TaskAction>(
+                value: _TaskAction.deleteTask,
+                height: 42,
+                padding: EdgeInsets.zero,
+                child: _TaskActionRow(
+                  label: 'Delete Task',
+                  foregroundColor: Color(0xFFE45B45),
+                  icon: CupertinoIcons.trash,
+                  iconColor: Color(0xFF7C8088),
+                ),
+              ),
+            ]
+          : const [
+              PopupMenuItem<_TaskAction>(
+                value: _TaskAction.automation,
+                height: 42,
+                padding: EdgeInsets.zero,
+                child: _TaskActionRow(
+                  label: 'Automation',
+                  foregroundColor: Color(0xFF191B20),
+                  icon: CupertinoIcons.info_circle_fill,
+                  iconColor: Color(0xFF5A606E),
+                ),
+              ),
+            ],
+    );
+
+    if (!mounted || selected == null) return;
+
+    switch (selected) {
+      case _TaskAction.projectInfo:
+        if (project != null) {
+          _showProjectInfoPopup(
+            project,
+            buttonRect: Rect.fromLTWH(
+              buttonTopRight.dx - button.size.width,
+              buttonTopRight.dy,
+              button.size.width,
+              button.size.height,
+            ),
+            overlaySize: overlay.size,
+          );
+        }
+      case _TaskAction.deleteTask:
+        final shouldDelete = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            title: const Text('Delete task'),
+            content: const Text(
+              'Are you sure you want to delete this task? This action cannot be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Color(0xFFE45B45)),
+                ),
+              ),
+            ],
+          ),
+        );
+
+        if (shouldDelete == true && mounted) {
+          Loaders.show();
+          await context.read<ProjectPro>().deleteProjectTask(
+            projectId: task.projectId,
+            taskId: task.id,
+          );
+          Loaders.hide();
+        }
+      case _TaskAction.automation:
+        showToast(message: 'Automation coming soon');
+    }
+  }
+
+  Future<void> _showProjectInfoPopup(
+    ProjectModel project, {
+    required Rect buttonRect,
+    required Size overlaySize,
+  }) async {
+    final horizontalMargin = 12.w;
+    final popupWidth = (overlaySize.width - horizontalMargin * 2).clamp(
+      280.w,
+      400.w,
+    );
+    final calculatedLeft = buttonRect.right - popupWidth;
+    final left = calculatedLeft.clamp(
+      horizontalMargin,
+      overlaySize.width - popupWidth - horizontalMargin,
+    );
+    final top = (buttonRect.bottom + 8.h).clamp(
+      12.h,
+      overlaySize.height - 220.h,
+    );
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierLabel: 'Project info',
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.10),
+      transitionDuration: const Duration(milliseconds: 160),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        final progressPercent = project.displayProgressPercent;
+        final progressValue = (progressPercent.clamp(0, 100)) / 100;
+        final progressState = project.displayStatus.toUpperCase();
+        return Material(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(dialogContext).pop(),
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
+              Positioned(
+                left: left,
+                top: top,
+                child: SizedBox(
+                  width: popupWidth,
+                  child: _buildProjectInfoPopupCard(
+                    dialogContext,
+                    project,
+                    progressPercent: progressPercent,
+                    progressValue: progressValue.toDouble(),
+                    progressState: progressState,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildProjectInfoPopupCard(
+    BuildContext dialogContext,
+    ProjectModel project, {
+    required int progressPercent,
+    required double progressValue,
+    required String progressState,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18.w),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 24.w,
+            offset: Offset(0, 8.h),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(18.w, 16.h, 18.w, 14.h),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            project.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14.5.sp,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF202226),
+                            ),
+                          ),
+                          SizedBox(height: 4.h),
+                          Text(
+                            project.popupMetaText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10.5.sp,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF8A8D95),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 10.w),
+                    InkWell(
+                      onTap: () => Navigator.of(dialogContext).pop(),
+                      borderRadius: BorderRadius.circular(999.w),
+                      child: Padding(
+                        padding: EdgeInsets.all(2.w),
+                        child: Icon(
+                          Icons.close,
+                          size: 24.sp,
+                          color: const Color(0xFF2C2D30),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFE7E7EB)),
+          Padding(
+            padding: EdgeInsets.fromLTRB(18.w, 14.h, 18.w, 16.h),
+            child: Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildProjectInfoPill(
+                            label: 'Customer: ${project.customerDisplayName}',
+                            backgroundColor: const Color(0xFFFFF3CC),
+                            foregroundColor: const Color(0xFFC28A00),
+                          ),
+                          SizedBox(height: 10.h),
+                          _buildProjectInfoPill(
+                            label: 'Client: ${project.clientDisplayName}',
+                            backgroundColor: const Color(0xFFE9F1FF),
+                            foregroundColor: const Color(0xFF0C58D6),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 14.w),
+                    _buildProjectInfoAvatarStrip(project.avatars),
+                  ],
+                ),
+                SizedBox(height: 16.h),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999.w),
+                  child: LinearProgressIndicator(
+                    value: progressValue,
+                    minHeight: 5.h,
+                    backgroundColor: const Color(0xFFE9E9ED),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFFF28A2E),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 14.h),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8.w,
+                        runSpacing: 6.h,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            '$progressPercent% $progressState',
+                            style: TextStyle(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFFF28A2E),
+                            ),
+                          ),
+                          Text(
+                            '|',
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFFD2D3D8),
+                            ),
+                          ),
+                          Text(
+                            'Late tasks ${project.lateTasksCount}',
+                            style: TextStyle(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFFE45843),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 10.w),
+                    _buildProjectInfoMetric(
+                      Icons.checklist_rounded,
+                      project.tasksCount,
+                    ),
+                    SizedBox(width: 12.w),
+                    _buildProjectInfoMetric(
+                      CupertinoIcons.chat_bubble_text,
+                      project.commentsCount,
+                    ),
+                    SizedBox(width: 12.w),
+                    _buildProjectInfoMetric(
+                      CupertinoIcons.paperclip,
+                      project.attachmentsCount,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProjectInfoMetric(IconData icon, int count) {
+    return _buildCounterItem(icon, count);
+  }
+
+  Widget _buildProjectInfoPill({
+    required String label,
+    required Color backgroundColor,
+    required Color foregroundColor,
+  }) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999.w),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 10.5.sp,
+          fontWeight: FontWeight.w700,
+          color: foregroundColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProjectInfoAvatarStrip(List<String> avatars) {
+    final items = avatars;
+    if (items.isEmpty) return const SizedBox.shrink();
+    final shown = items.take(4).toList();
+    return SizedBox(
+      width: shown.length * 14.w + 26.w,
+      height: 26.h,
+      child: Stack(
+        children: [
+          for (int index = 0; index < shown.length; index++)
+            Positioned(
+              left: index * 14.w,
+              child: Container(
+                width: 26.w,
+                height: 26.h,
+                padding: EdgeInsets.all(1.3.w),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: ClipOval(
+                  child: ImageWidget(image: shown[index], fit: BoxFit.cover),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 enum _ProjectAction { edit, delete }
@@ -2578,6 +3027,47 @@ class _ProjectActionMenuRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+enum _TaskMenuType { primary, secondary }
+enum _TaskAction { projectInfo, deleteTask, automation }
+
+class _TaskActionRow extends StatelessWidget {
+  final String label;
+  final Color foregroundColor;
+  final IconData icon;
+  final Color? iconColor;
+
+  const _TaskActionRow({
+    required this.label,
+    required this.foregroundColor,
+    required this.icon,
+    this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 164.w,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 6.h),
+        child: Row(
+          children: [
+            Icon(icon, size: 18.sp, color: iconColor ?? foregroundColor),
+            SizedBox(width: 14.w),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5.sp,
+                fontWeight: FontWeight.w500,
+                color: foregroundColor,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

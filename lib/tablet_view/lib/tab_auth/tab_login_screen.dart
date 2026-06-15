@@ -212,11 +212,11 @@ class _TabLoginScreenState extends State<TabLoginScreen> {
                             _title("Password"),
                             WebTextField(
                               controller: _passCtrl,
-                              regExpCondition: Regx.passwordRegExp,
+                              regExpCondition: Regx.optionalText,
                               errorText: AppStrings.passError,
                               hintText: "Password",
                               bRadius: 15,
-                              regErrorText: AppStrings.passRegError,
+                              regErrorText: AppStrings.passError,
                               passField: true,
                               style: GoogleFonts.poppins(
                                 fontSize: 15,

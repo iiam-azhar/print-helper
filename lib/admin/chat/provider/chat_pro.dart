@@ -115,6 +115,7 @@ class ChatPro extends ChangeNotifier {
 
   bool get isLoadingMore => _isLoadingMore;
   bool get hasMore => _hasMore;
+  bool get isLoadingConversationList => _isLoadingConversationList;
 
   // Message search-related state
   List<ChatMessage> messageSearchResults = [];
@@ -143,6 +144,10 @@ class ChatPro extends ChangeNotifier {
   List<TwilioClient> twilioClients = [];
   bool isTwilioClientsLoading = false;
   bool twilioClientsHasError = false;
+  int twilioClientsCurrentPage = 1;
+  int twilioClientsLastPage = 1;
+  bool twilioClientsHasMore = true;
+  bool isTwilioClientsLoadingMore = false;
   // Twilio Pagination
   int twilioCurrentPage = 1;
   int twilioLastPage = 1;
@@ -168,6 +173,10 @@ class ChatPro extends ChangeNotifier {
   List<AssignedAccount> twilioStaff = [];
   bool isTwilioStaffLoading = false;
   bool twilioStaffHasError = false;
+  int twilioStaffCurrentPage = 1;
+  int twilioStaffLastPage = 1;
+  bool twilioStaffHasMore = true;
+  bool isTwilioStaffLoadingMore = false;
   int twilioNumbersRevision = 0;
   int twilioClientsRevision = 0;
   int twilioStaffRevision = 0;
@@ -1812,7 +1821,7 @@ class ChatPro extends ChangeNotifier {
   }
 
   /// ---------------- LOAD CONVERSATIONS ----------------
-  Future<void> loadConversations({bool showLoading = true}) async {
+  Future<void> loadConversations({bool showLoading = false}) async {
     if (_isLoadingConversationList) return;
     _isLoadingConversationList = true;
     if (showLoading) {
@@ -4076,14 +4085,41 @@ class ChatPro extends ChangeNotifier {
   }
 
   /// ---------------- FETCH TWILIO CLIENTS WITH CONTACTS ----------------
-  Future<void> fetchTwilioClientsWithContacts() async {
-    isTwilioClientsLoading = true;
+  Future<void> fetchTwilioClientsWithContacts({
+    int page = 1,
+    bool isLoadMore = false,
+    String? search,
+  }) async {
+    if (isLoadMore) {
+      isTwilioClientsLoadingMore = true;
+    } else {
+      isTwilioClientsLoading = true;
+      twilioClientsCurrentPage = 1;
+      twilioClientsLastPage = 1;
+      twilioClientsHasMore = true;
+    }
     twilioClientsHasError = false;
     notifyListeners();
 
     try {
+      Uri uri;
+      if (search != null && search.trim().isNotEmpty) {
+        uri = Uri.parse(
+          "${ApiRoutes.baseUrl}${ApiRoutes.twilioClientsWithContacts}/search",
+        ).replace(queryParameters: {
+          'q': search.trim(),
+          'page': page.toString(),
+        });
+      } else {
+        uri = Uri.parse(
+          "${ApiRoutes.baseUrl}${ApiRoutes.twilioClientsWithContacts}",
+        ).replace(queryParameters: {
+          'page': page.toString(),
+        });
+      }
+
       final res = await http.get(
-        Uri.parse("${ApiRoutes.baseUrl}${ApiRoutes.twilioClientsWithContacts}"),
+        uri,
         headers: await apiHeaders(),
       );
 
@@ -4091,39 +4127,85 @@ class ChatPro extends ChangeNotifier {
         final data = jsonDecode(res.body);
         if (data['success'] == true && data['data'] != null) {
           final List<dynamic> clientsData = data['data']['clients'] ?? [];
-          twilioClients = clientsData
+          final newClients = clientsData
               .map((json) => TwilioClient.fromJson(json))
               .toList();
+
+          if (isLoadMore) {
+            twilioClients.addAll(newClients);
+          } else {
+            twilioClients = newClients;
+          }
+
+          if (data['meta'] != null) {
+            twilioClientsCurrentPage = data['meta']['current_page'] ?? page;
+            twilioClientsLastPage = data['meta']['last_page'] ?? 1;
+            twilioClientsHasMore =
+                data['meta']['has_more'] ??
+                (twilioClientsCurrentPage < twilioClientsLastPage);
+          } else if (data['data']['pagination'] != null) {
+            final pag = data['data']['pagination'];
+            twilioClientsCurrentPage = pag['current_page'] ?? page;
+            twilioClientsLastPage = pag['last_page'] ?? 1;
+            twilioClientsHasMore = pag['has_more'] ?? (twilioClientsCurrentPage < twilioClientsLastPage);
+          } else {
+            twilioClientsCurrentPage = page;
+            twilioClientsHasMore = false;
+          }
           twilioClientsRevision++;
-          isTwilioClientsLoading = false;
           twilioClientsHasError = false;
         } else {
           twilioClientsHasError = true;
-          isTwilioClientsLoading = false;
           showToast(message: data['message'] ?? 'Failed to load clients');
         }
       } else {
         twilioClientsHasError = true;
-        isTwilioClientsLoading = false;
         showToast(message: 'Error: ${res.statusCode}');
       }
     } catch (e) {
       twilioClientsHasError = true;
-      isTwilioClientsLoading = false;
       showToast(message: 'Failed to fetch clients');
       printData(title: "Error fetching Twilio clients", data: e, e: true);
+    } finally {
+      isTwilioClientsLoading = false;
+      isTwilioClientsLoadingMore = false;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   /// ---------------- FETCH TWILIO STAFF (ASSIGNED ACCOUNTS) ----------------
-  Future<void> fetchTwilioStaff() async {
-    isTwilioStaffLoading = true;
+  Future<void> fetchTwilioStaff({
+    int page = 1,
+    bool isLoadMore = false,
+    String? search,
+  }) async {
+    if (isLoadMore) {
+      isTwilioStaffLoadingMore = true;
+    } else {
+      isTwilioStaffLoading = true;
+      twilioStaffCurrentPage = 1;
+      twilioStaffLastPage = 1;
+      twilioStaffHasMore = true;
+    }
     twilioStaffHasError = false;
     notifyListeners();
     try {
+      Uri uri;
+      if (search != null && search.trim().isNotEmpty) {
+        uri = Uri.parse("${ApiRoutes.baseUrl}${ApiRoutes.twilioStaff}/search")
+            .replace(queryParameters: {
+          'q': search.trim(),
+          'page': page.toString(),
+        });
+      } else {
+        uri = Uri.parse("${ApiRoutes.baseUrl}${ApiRoutes.twilioStaff}")
+            .replace(queryParameters: {
+          'page': page.toString(),
+        });
+      }
+
       final res = await http.get(
-        Uri.parse("${ApiRoutes.baseUrl}${ApiRoutes.twilioStaff}"),
+        uri,
         headers: await apiHeaders(),
       );
       if (res.statusCode == 200) {
@@ -4131,30 +4213,48 @@ class ChatPro extends ChangeNotifier {
         printData(title: "data", data: data);
         if (data['success'] == true && data['data'] != null) {
           final List<dynamic> staffData = data['data']['staff'] ?? [];
-          twilioStaff = staffData
+          final newStaff = staffData
               .map((json) => AssignedAccount.fromJson(json))
               .toList();
+
+          if (isLoadMore) {
+            twilioStaff.addAll(newStaff);
+          } else {
+            twilioStaff = newStaff;
+          }
+
+          if (data['data']['pagination'] != null) {
+            twilioStaffCurrentPage =
+                data['data']['pagination']['current_page'] ?? page;
+            twilioStaffLastPage = data['data']['pagination']['last_page'] ?? 1;
+            twilioStaffHasMore =
+                data['data']['pagination']['has_more'] ??
+                (twilioStaffCurrentPage < twilioStaffLastPage);
+          } else {
+            twilioStaffCurrentPage = page;
+            twilioStaffHasMore = false;
+          }
+
           twilioStaffRevision++;
           printData(title: "twilioStaff", data: twilioStaff);
-          isTwilioStaffLoading = false;
           twilioStaffHasError = false;
         } else {
           twilioStaffHasError = true;
-          isTwilioStaffLoading = false;
           showToast(message: data['message'] ?? 'Failed to load staff');
         }
       } else {
         twilioStaffHasError = true;
-        isTwilioStaffLoading = false;
         showToast(message: 'Error: ${res.statusCode}');
       }
     } catch (e) {
       twilioStaffHasError = true;
-      isTwilioStaffLoading = false;
       showToast(message: 'Failed to fetch staff');
       printData(title: "Error fetching twilio staff", data: e, e: true);
+    } finally {
+      isTwilioStaffLoading = false;
+      isTwilioStaffLoadingMore = false;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   Future<List<AssignedAccount>> fetchStaffByClient({int? clientId}) async {

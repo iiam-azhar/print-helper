@@ -65,16 +65,18 @@ class _ChatListState extends State<ChatList> {
               const Divider(height: 1, color: Color(0xffe6e7e6)),
               Expanded(
                 child: displayList.isEmpty
-                    ? Center(
-                        child: TextWidget(
-                          text: chatPro.searchResults.isNotEmpty
-                              ? "No users found"
-                              : "No conversations yet",
-                          fontSize: 14,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      )
+                    ? (chatPro.isLoadingConversationList
+                        ? Center(child: showLoader())
+                        : Center(
+                            child: TextWidget(
+                              text: chatPro.searchResults.isNotEmpty
+                                  ? "No users found"
+                                  : "No conversations yet",
+                              fontSize: 14,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ))
                     : RefreshIndicator(
                         onRefresh: () async {
                           await chatPro.loadConversations();
